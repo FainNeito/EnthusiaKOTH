@@ -1,4 +1,4 @@
-config-version: 6
+config-version: 7
 
 general:
   timezone: "America/New_York"
@@ -71,6 +71,7 @@ arenas:
     enabled: true
     family: "capture"
     world: "world"
+    worldguard-region: ""
     center: { x: 0.5, y: 80.0, z: 0.5 }
     protected-region:
       corner-1: { x: -32.0, y: -64.0, z: -32.0 }
@@ -92,6 +93,7 @@ arenas:
     enabled: true
     family: "moving"
     world: "world"
+    worldguard-region: ""
     center: { x: 40.5, y: 80.0, z: 40.5 }
     protected-region:
       corner-1: { x: 8.5, y: -64.0, z: 8.5 }
@@ -108,6 +110,7 @@ arenas:
     enabled: false
     family: "conquest"
     world: "world"
+    worldguard-region: ""
     center: { x: 0.0, y: 80.0, z: 0.0 }
     protected-region:
       corner-1: { x: -48.0, y: -64.0, z: -48.0 }
