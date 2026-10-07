@@ -29,6 +29,7 @@ class FullFeatureCoverageContractTest {
         "capture takeover and event modes" to listOf(
             "src/test/kotlin/net/badgersmc/ek/application/CaptureTakeoverTest.kt",
             "src/test/kotlin/net/badgersmc/ek/application/KothEventModeTest.kt",
+            "src/test/kotlin/net/badgersmc/ek/domain/CaptureZoneGeometryTest.kt",
         ),
         "queue lifecycle" to listOf(
             "src/test/kotlin/net/badgersmc/ek/application/KothQueueTest.kt",
@@ -58,6 +59,7 @@ class FullFeatureCoverageContractTest {
             "src/test/kotlin/net/badgersmc/ek/infrastructure/restriction/RestrictionServiceTest.kt",
             "src/test/kotlin/net/badgersmc/ek/infrastructure/restriction/RestrictionListenerTest.kt",
             "src/test/kotlin/net/badgersmc/ek/infrastructure/protection/RegionProtectionListenerTest.kt",
+            "src/test/kotlin/net/badgersmc/ek/infrastructure/protection/RegionProtectionServiceTest.kt",
         ),
         "durable payment journal and operational recovery" to listOf(
             "src/test/kotlin/net/badgersmc/ek/infrastructure/persistence/FilePaymentJournalTest.kt",
