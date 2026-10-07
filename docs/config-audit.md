@@ -23,6 +23,7 @@
 | `display.zone-border` | display lifecycle | Consumed |
 | `rules.defaults.*` | restriction service | Consumed |
 | `arenas.*` | `ConfigLoader`, scheduling, capture, rewards | Consumed |
+| `arenas.*.worldguard-region` | `WorldGuardRegionService` / arena protection | Optional named WorldGuard region; when set, WorldGuard geometry is authoritative for arena protection |
 | `arenas.*.capture-speed-bonuses` | Conquest capture logic | Consumed and preserved |
 | `rewards.*` | completion reward logic | Consumed |
 
