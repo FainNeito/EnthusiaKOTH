@@ -35,6 +35,7 @@ import net.badgersmc.ek.infrastructure.persistence.FilePaymentJournal
 import net.badgersmc.ek.infrastructure.persistence.SqlStatsRepository
 import net.badgersmc.ek.infrastructure.protection.RegionProtectionListener
 import net.badgersmc.ek.infrastructure.protection.RegionProtectionService
+import net.badgersmc.ek.infrastructure.protection.WorldGuardRegionService
 import net.badgersmc.ek.infrastructure.restriction.RestrictionListener
 import net.badgersmc.ek.infrastructure.restriction.RestrictionService
 import net.badgersmc.ek.infrastructure.restriction.RuleSet
@@ -42,6 +43,7 @@ import net.badgersmc.ek.infrastructure.vault.VaultEconomyAdapter
 import net.badgersmc.nexus.i18n.LangService
 import net.badgersmc.nexus.i18n.Locale as NexusLocale
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import java.io.File
 import java.time.Clock
 import javax.sql.DataSource
@@ -59,6 +61,41 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         plugin.config.set("locks.state", state.name)
         plugin.saveConfig()
         _config = _config.copy(locks = LockConfig(state))
+    }
+
+    fun bindArenaRegion(arenaId: String, worldName: String, regionId: String): String {
+        if (arenaId !in config().arenas) return "Unknown KOTH arena '$arenaId'."
+        if (!worldGuardRegionService.exists(worldName, regionId)) {
+            return "WorldGuard region '$regionId' does not exist in world '$worldName'."
+        }
+        plugin.config.set("arenas.$arenaId.world", worldName)
+        plugin.config.set("arenas.$arenaId.worldguard-region", regionId)
+        plugin.saveConfig()
+        reload()
+        return "Bound KOTH arena '$arenaId' to WorldGuard region '$regionId' in '$worldName'."
+    }
+
+    fun setArenaCenter(arenaId: String, location: Location): String {
+        if (arenaId !in config().arenas) return "Unknown KOTH arena '$arenaId'."
+        val world = location.world ?: return "Unable to resolve your current world."
+        val x = location.blockX + 0.5
+        val y = location.y
+        val z = location.blockZ + 0.5
+        plugin.config.set("arenas.$arenaId.world", world.name)
+        plugin.config.set("arenas.$arenaId.center.x", x)
+        plugin.config.set("arenas.$arenaId.center.y", y)
+        plugin.config.set("arenas.$arenaId.center.z", z)
+        plugin.saveConfig()
+        reload()
+        return "Set KOTH arena '$arenaId' capture center to $x, ${"%.2f".format(y)}, $z in '${world.name}'."
+    }
+
+    fun setArenaEnabled(arenaId: String, enabled: Boolean): String {
+        if (arenaId !in config().arenas) return "Unknown KOTH arena '$arenaId'."
+        plugin.config.set("arenas.$arenaId.enabled", enabled)
+        plugin.saveConfig()
+        reload()
+        return "KOTH arena '$arenaId' is now ${if (enabled) "enabled" else "disabled"}."
     }
 
     fun reload() {
@@ -224,6 +261,8 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
         discordWarningSink = discordWebhook::sendPreStart,
     )
+    val worldGuardRegionService = WorldGuardRegionService()
+
     val flareService = FlareService(
         cfgLoader = { config() },
         startService = startService,
@@ -243,6 +282,10 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         arenas = { arenas() },
         reloadAction = { reload() },
         lockAction = { setLockState(it) },
+        arenaRegionAction = { arenaId, worldName, regionId -> bindArenaRegion(arenaId, worldName, regionId) },
+        arenaCenterAction = { arenaId, location -> setArenaCenter(arenaId, location) },
+        arenaEnabledAction = { arenaId, enabled -> setArenaEnabled(arenaId, enabled) },
+        arenaRegionSuggestions = worldGuardRegionService::regionIds,
     ).also(::registerCommand)
     val kothListeners = KothListeners(
         cfgLoader = { config() },
@@ -255,7 +298,10 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     val restrictionListener = RestrictionListener(kothService, restrictionService).also {
         plugin.server.pluginManager.registerEvents(it, plugin)
     }
-    val regionProtectionService = RegionProtectionService { arenas() }
+    val regionProtectionService = RegionProtectionService(
+        arenas = { arenas() },
+        worldGuardContains = worldGuardRegionService::contains,
+    )
     val regionProtectionListener = RegionProtectionListener(regionProtectionService, langService).also {
         plugin.server.pluginManager.registerEvents(it, plugin)
     }

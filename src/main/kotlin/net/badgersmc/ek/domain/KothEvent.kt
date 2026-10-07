@@ -65,6 +65,7 @@ data class KothArena(
     val family: String,
     val zone: CaptureZone,
     val protectedRegion: CaptureZone? = null,
+    val worldGuardRegion: String? = null,
     val durationSeconds: Int,
     val captureSeconds: Int,
     val leaveBehavior: CaptureLeaveBehavior = CaptureLeaveBehavior.RESET,

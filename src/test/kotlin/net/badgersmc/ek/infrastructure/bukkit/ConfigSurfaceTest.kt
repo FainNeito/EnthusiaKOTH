@@ -35,9 +35,10 @@ class ConfigSurfaceTest {
             "general.timezone",
             "discord.pre-start-ping-minutes",
             "rewards.capture.solo-vault-money",
+            "arenas.capture.worldguard-region",
             "arenas.conquest.capture-speed-bonuses",
         ).forEach { assertTrue(config.contains(it), "Required key missing: $it") }
-        assertEquals(6, config.getInt("config-version"))
+        assertEquals(7, config.getInt("config-version"))
     }
 
     @Test

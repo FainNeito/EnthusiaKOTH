@@ -11,6 +11,7 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     maven("https://jitpack.io")
+    maven("https://maven.enginehub.org/repo/")
 }
 
 dependencies {
@@ -26,6 +27,7 @@ dependencies {
         exclude(group = "org.bukkit", module = "bukkit")
     }
     compileOnly("me.clip:placeholderapi:2.11.6")
+    compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.14")
 
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.xerial:sqlite-jdbc:3.45.1.0")

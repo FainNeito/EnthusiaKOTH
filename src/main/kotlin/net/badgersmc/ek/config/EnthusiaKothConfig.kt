@@ -5,7 +5,7 @@ import net.badgersmc.ek.infrastructure.restriction.RuleSet
 import java.time.ZoneId
 
 data class EnthusiaKothConfig(
-    val configVersion: Int = 6,
+    val configVersion: Int = 7,
     val timezone: ZoneId = ZoneId.of("America/New_York"),
     val manualStart: ManualStartConfig = ManualStartConfig(),
     val schedule: ScheduleConfig = ScheduleConfig(),
@@ -34,6 +34,7 @@ data class ArenaConfig(
     val world: String = "world",
     val center: PositionConfig = PositionConfig(),
     val protectedRegion: ProtectedRegionConfig = ProtectedRegionConfig(),
+    val worldGuardRegion: String? = null,
     val radius: Double = 5.0,
     val durationSeconds: Int = 900,
     val captureSeconds: Int = 120,

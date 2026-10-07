@@ -8,6 +8,7 @@ import org.bukkit.Location
  */
 class RegionProtectionService(
     private val arenas: () -> Map<String, KothArena>,
+    private val worldGuardContains: (String, String, Location) -> Boolean = { _, _, _ -> false },
 ) {
     /**
      * Returns true if the given location falls within any arena's protected region.
@@ -17,8 +18,12 @@ class RegionProtectionService(
      */
     fun isProtected(location: Location): Boolean {
         return arenas().values.any { arena ->
-            arena.zone.contains(location)
-                    || arena.protectedRegion?.contains(location) == true
+            val worldGuardRegion = arena.worldGuardRegion
+            if (worldGuardRegion != null) {
+                worldGuardContains(arena.zone.worldName, worldGuardRegion, location)
+            } else {
+                arena.zone.contains(location) || arena.protectedRegion?.contains(location) == true
+            }
         }
     }
 }

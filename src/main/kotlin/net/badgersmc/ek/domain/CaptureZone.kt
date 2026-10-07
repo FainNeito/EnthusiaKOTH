@@ -29,6 +29,20 @@ data class CaptureZone(
                 && loc.z in minZ..maxZ
     }
 
+    /**
+     * Circular horizontal objective check with the zone's configured vertical bounds.
+     * Static capture KOTHs use this instead of the cuboid bounding box so radius is
+     * a true radius rather than half the side length of a square.
+     */
+    fun containsCircular(loc: Location): Boolean {
+        if (loc.world?.name != worldName || loc.y !in minY..maxY) return false
+        val centerX = (minX + maxX) / 2.0
+        val centerZ = (minZ + maxZ) / 2.0
+        val dx = loc.x - centerX
+        val dz = loc.z - centerZ
+        return dx * dx + dz * dz <= radiusSq
+    }
+
     fun verticalBounds(): Pair<Double, Double> =
         minOf(corner1.y, corner2.y) to maxOf(corner1.y, corner2.y)
 

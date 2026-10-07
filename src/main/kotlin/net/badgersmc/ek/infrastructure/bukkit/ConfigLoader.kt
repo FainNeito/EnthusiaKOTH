@@ -29,8 +29,8 @@ class ConfigLoader(private val plugin: JavaPlugin) {
         val config = plugin.config
         val zone = parseZoneId(config.getString("general.timezone"), plugin.logger::warning)
         val configVersion = config.getInt("config-version", 0)
-        if (configVersion != 6) {
-            plugin.logger.warning("EnthusiaKOTH: config-version is $configVersion; current version is 6. Review config.yml before production use.")
+        if (configVersion != 7) {
+            plugin.logger.warning("EnthusiaKOTH: config-version is $configVersion; current version is 7. Review config.yml before production use.")
         }
         return EnthusiaKothConfig(
             configVersion = configVersion,
@@ -76,6 +76,7 @@ class ConfigLoader(private val plugin: JavaPlugin) {
                 family = arenaConfig.family,
                 zone = captureZone,
                 protectedRegion = protectedRegion,
+                worldGuardRegion = arenaConfig.worldGuardRegion,
                 durationSeconds = arenaConfig.durationSeconds.coerceAtLeast(1),
                 captureSeconds = arenaConfig.captureSeconds.coerceAtLeast(1),
                 leaveBehavior = runCatching { CaptureLeaveBehavior.valueOf(arenaConfig.leaveBehavior.uppercase()) }
@@ -170,6 +171,7 @@ private object ArenaConfigLoader {
                     corner1 = position(arena, "protected-region.corner-1", -32.0, -64.0, -32.0),
                     corner2 = position(arena, "protected-region.corner-2", 32.0, 320.0, 32.0),
                 ),
+                worldGuardRegion = arena.getString("worldguard-region")?.trim()?.takeIf { it.isNotEmpty() },
                 radius = decimal(arena, "radius", 5.0).coerceAtLeast(0.1),
                 durationSeconds = integer(arena, "duration-seconds", 900).coerceAtLeast(1),
                 captureSeconds = integer(arena, "capture-seconds", 120).coerceAtLeast(1),

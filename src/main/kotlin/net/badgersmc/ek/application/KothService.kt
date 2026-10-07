@@ -242,7 +242,7 @@ class KothService(
             finishEvent(event, resolveWinner(event))
             return
         }
-        val playersInZone = if (arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInCuboid(event)
+        val playersInZone = if (arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInStaticCaptureZone(event)
 
         if (cfg.progressBar.enabled && event.currentController != null) {
             val progress = progressBar(event, cfg.progressBar)
@@ -363,10 +363,10 @@ class KothService(
         if (next >= arena.captureSeconds) finishEvent(event, controller)
     }
 
-    private fun playersInCuboid(event: KothEvent): List<Player> =
+    private fun playersInStaticCaptureZone(event: KothEvent): List<Player> =
         Bukkit.getOnlinePlayers().filter { player ->
             player.isValid && !player.isDead && player.gameMode != GameMode.SPECTATOR &&
-                event.isParticipant(player.uniqueId) && event.arena.zone.contains(player.location)
+                event.isParticipant(player.uniqueId) && event.arena.zone.containsCircular(player.location)
         }
 
     private fun playersNearMovingPoint(event: KothEvent): List<Player> {

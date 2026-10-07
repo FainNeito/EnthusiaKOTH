@@ -122,9 +122,26 @@ Maces support a configurable mace policy rather than only a simple boolean. The 
 
 ## Region protection
 
-Each KOTH arena has a protected region separate from the capture radius. The plugin protects KOTH infrastructure/space and provides an explicit staff bypass permission for intentional maintenance.
+Each KOTH arena can bind directly to a named WorldGuard region with `worldguard-region`. When a binding is present, the WorldGuard region geometry is authoritative for permanent KOTH arena protection; the legacy `protected-region` cuboid remains as a backward-compatible fallback for arenas that are not yet bound.
 
-The display system can also render KOTH objective/zone-border visuals so players can identify the active objective area.
+The capture objective is independent of the arena boundary. `center` selects the objective center and `radius` is a true horizontal circular radius.
+
+Staff can configure an arena entirely in game:
+
+```text
+//wand
+# select the arena, then:
+/rg define koth
+
+/ekoth arena region capture koth
+/ekoth arena center capture
+/ekoth arena enable capture
+/ekoth test start capture solo self quick
+```
+
+`/ekoth arena region` resolves the WorldGuard region in the staff member's current world, and `/ekoth arena center` stores the center at the middle of the block under the player's X/Z position. Region names are tab-completed from WorldGuard.
+
+The plugin also provides an explicit staff bypass permission for intentional maintenance. The display system can render KOTH objective/zone-border visuals so players can identify the active objective area.
 
 ## Rewards and economy safety
 
