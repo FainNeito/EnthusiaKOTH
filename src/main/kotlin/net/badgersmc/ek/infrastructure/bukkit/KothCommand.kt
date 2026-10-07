@@ -23,6 +23,7 @@ import net.badgersmc.nexus.i18n.LangService
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.Location
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -57,6 +58,10 @@ class KothCommand(
     private val arenas: () -> Map<String, KothArena>,
     private val reloadAction: () -> Unit,
     private val lockAction: (LockState) -> Unit,
+    private val arenaRegionAction: (String, String, String) -> String,
+    private val arenaCenterAction: (String, Location) -> String,
+    private val arenaEnabledAction: (String, Boolean) -> String,
+    private val arenaRegionSuggestions: (String) -> List<String>,
 ) : CommandExecutor, TabCompleter {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
@@ -76,6 +81,7 @@ class KothCommand(
             "private", "test" -> privateTest(sender, args)
             "status" -> status(sender)
             "lock" -> lock(sender, args.getOrNull(1) ?: "")
+            "arena" -> arena(sender, args)
             else -> sendHelp(sender)
         }
         return true
@@ -89,7 +95,7 @@ class KothCommand(
             }
             if (canStartPrivate(sender) || canJoinPrivate(sender)) options += "test"
             if (sender.hasPermission("enthusiakoth.admin")) {
-                options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock")
+                options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock", "arena")
             }
             return options.distinct().filter { it.startsWith(args[0], ignoreCase = true) }.toMutableList()
         }
@@ -98,7 +104,16 @@ class KothCommand(
                 "start" -> return arenas().keys.filter { it.startsWith(args[1], true) }.toMutableList()
                 "private", "test" -> return listOf("start", "join", "leave", "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
                 "lock" -> return LockState.entries.map { it.name.lowercase() }.filter { it.startsWith(args[1], true) }.toMutableList()
+                "arena" -> if (sender.hasPermission("enthusiakoth.admin")) {
+                    return listOf("region", "center", "enable", "disable").filter { it.startsWith(args[1], true) }.toMutableList()
+                }
             }
+        }
+        if (args.size == 3 && args[0].equals("arena", true) && sender.hasPermission("enthusiakoth.admin")) {
+            return cfgLoader().arenas.keys.filter { it.startsWith(args[2], true) }.toMutableList()
+        }
+        if (args.size == 4 && args[0].equals("arena", true) && args[1].equals("region", true) && sender is Player) {
+            return arenaRegionSuggestions(sender.world.name).filter { it.startsWith(args[3], true) }.toMutableList()
         }
         if (args.size == 3 && args[0].equals("start", true)) {
             return listOf("solo", "guild", "basic", "advanced").filter { it.startsWith(args[2], true) }.toMutableList()
@@ -132,6 +147,7 @@ class KothCommand(
             listOf("stop", "cancel", "giveflare", "reload", "status", "lock").forEach {
                 sender.sendMessage(lang.msg("command.help.$it"))
             }
+            sender.sendMessage(Component.text("/ekoth arena region <arena> <worldguard-region> | center <arena> | enable <arena> | disable <arena>"))
         }
     }
 
@@ -402,6 +418,48 @@ class KothCommand(
         }
         lockAction(state)
         sender.sendMessage(lang.msg("command.error.lock_set", "state" to state.name.lowercase()))
+    }
+
+    private fun arena(sender: CommandSender, args: Array<out String>) {
+        if (!sender.hasPermission("enthusiakoth.admin")) {
+            sender.sendMessage(lang.msg("command.error.no_permission"))
+            return
+        }
+        if (sender !is Player) {
+            sender.sendMessage(lang.msg("command.error.not_a_player"))
+            return
+        }
+        val action = args.getOrNull(1)?.lowercase()
+        val arenaId = args.getOrNull(2)
+        if (action == null || arenaId == null || arenaId !in cfgLoader().arenas) {
+            sendArenaUsage(sender)
+            return
+        }
+        val message = when (action) {
+            "region" -> {
+                val regionId = args.getOrNull(3)
+                if (regionId == null) {
+                    sendArenaUsage(sender)
+                    return
+                }
+                arenaRegionAction(arenaId, sender.world.name, regionId)
+            }
+            "center" -> arenaCenterAction(arenaId, sender.location)
+            "enable" -> arenaEnabledAction(arenaId, true)
+            "disable" -> arenaEnabledAction(arenaId, false)
+            else -> {
+                sendArenaUsage(sender)
+                return
+            }
+        }
+        sender.sendMessage(Component.text(message))
+    }
+
+    private fun sendArenaUsage(sender: CommandSender) {
+        sender.sendMessage(Component.text("/ekoth arena region <arena> <worldguard-region>"))
+        sender.sendMessage(Component.text("/ekoth arena center <arena>"))
+        sender.sendMessage(Component.text("/ekoth arena enable <arena>"))
+        sender.sendMessage(Component.text("/ekoth arena disable <arena>"))
     }
 
     private fun privateTest(sender: CommandSender, args: Array<out String>) {
