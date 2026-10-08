@@ -22,9 +22,9 @@ class StartFairnessTest {
         every { it.withdraw(any(), any()) } returns true
         every { it.deposit(any(), any()) } returns true
     }
-    private fun service(store: StartCooldownStore = InMemoryStartCooldownStore(), teams: Int = 2, success: Boolean = true, at: Instant = now) = StartService(
+    private fun service(store: StartCooldownStore = InMemoryStartCooldownStore(), teams: Int = 2, success: Boolean = true, at: Instant = now, conflict: Boolean = false) = StartService(
         config = { EnthusiaKothConfig(manualStart = ManualStartConfig(basicCost = 5.0), fairness = FairnessConfig(starterCooldownSeconds = 60, minimumOnlineTeams = 2)) },
-        pluginReady = { true }, hasConflictingEvent = { false }, economy = economy,
+        pluginReady = { true }, hasConflictingEvent = { conflict }, economy = economy,
         starter = EventStarter { _, _, _, _ -> success }, logError = { _, _ -> },
         clock = Clock.fixed(at, ZoneOffset.UTC), cooldowns = store, onlineTeamCount = { teams },
     )
@@ -58,6 +58,25 @@ class StartFairnessTest {
     @Test fun `administrative start bypasses player gates`() {
         assertInstanceOf(StartResult.Started::class.java, service(teams = 0).start(
             StartRequest(StartActor(player, isAdmin = true), arena, StartSource.ADMIN_COMMAND)))
+        verify(exactly = 0) { economy.withdraw(any(), any()) }
+    }
+    @Test fun `busy event does not touch cooldown state even when releasing it would fail`() {
+        val store = mockk<StartCooldownStore>(relaxed = true)
+        every { store.until(player) } returns null
+        every { store.set(player, any()) } returnsMany listOf(true, false)
+        val result = service(store, conflict = true).start(request()) as StartResult.Rejected
+        assertEquals(StartFailure.ALREADY_ACTIVE, result.failure)
+        verify { store wasNot Called }
+        verify(exactly = 0) { economy.withdraw(any(), any()) }
+    }
+    @Test fun `permission rejection does not touch cooldown state`() {
+        val store = mockk<StartCooldownStore>(relaxed = true)
+        every { store.set(any(), any()) } returns true
+        listOf(StartSource.PLAYER_COMMAND, StartSource.GUI, StartSource.FLARE).forEach { source ->
+            val denied = request(source).copy(actor = StartActor(player))
+            assertEquals(StartFailure.NO_PERMISSION, (service(store).start(denied) as StartResult.Rejected).failure)
+        }
+        verify { store wasNot Called }
         verify(exactly = 0) { economy.withdraw(any(), any()) }
     }
     @Test fun `throwing cooldown persistence is controlled without payment`() {

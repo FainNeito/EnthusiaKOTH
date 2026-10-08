@@ -116,6 +116,19 @@ class KothFairnessIntegrationTest {
         verify(exactly = 0) { capper.sendMessage(Component.text("koth.capping")) }
         verify(exactly = 0) { idle.sendMessage(Component.text("koth.capping")) }
     }
+    @Test fun `one contributor command exception does not deny other eligible rewards`() {
+        val service = service()
+        assertTrue(service.startEvent(arena().copy(durationSeconds = 0), durationOverride = 0, teamMode = TeamMode.GUILD))
+        val event = service.activeEvent!!
+        val winning = TeamId(TeamMode.GUILD, guild)
+        event.scores[winning] = 1.0
+        event.scoringParticipation.record(winning, linkedSetOf(capper.uniqueId, idle.uniqueId))
+        every { Bukkit.dispatchCommand(any(), "give Capper diamond 1") } throws IllegalStateException("recipient command failed")
+        service.tick()
+        assertNull(service.activeEvent)
+        verify(exactly = 1) { Bukkit.dispatchCommand(any(), "give Capper diamond 1") }
+        verify(exactly = 1) { Bukkit.dispatchCommand(any(), "give Idle diamond 1") }
+    }
     @Test fun `guild switch cannot redeem contributions earned for old guild`() {
         val service = service()
         assertTrue(service.startEvent(arena().copy(durationSeconds = 0), durationOverride = 0, teamMode = TeamMode.GUILD))

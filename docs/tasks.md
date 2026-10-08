@@ -11,7 +11,8 @@ Requirements and verification: [priorities-verification.md](priorities-verificat
 - [x] KOTH-103: configurable durable starter cooldown and online-team gate before payment/flare consumption; disabled by default.
 - [x] KOTH-104: arena-scoped active-event inventory/XP preservation; separately selectable money reward family.
 - [x] KOTH-105: optional minimum hill-participating teams before wins/rewards; disabled by default.
-- [ ] Exact-head hosted checks and review; merge through the normal process.
+- [x] Manual review of bank and priority PRs; REV-001/REV-002 fixed with local regressions.
+- [ ] Exact-head hosted build checks and independent review; merge through the normal process.
 - [ ] Configure risk-specific commands/money, gates, permissions, schedules and arenas; review old live config migration.
 - [ ] Stage two-team Paper/client checks: capture/contest/death/respawn, drops/XP, notifications/rejoin, guild change, exact balances, restart/payment failures and companion restrictions.
 - [ ] Verify merged source, owning network pin/build and live acceptance before activation.

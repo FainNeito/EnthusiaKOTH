@@ -29,8 +29,8 @@ class StartService(
             val arena = request.arena ?: return StartResult.Rejected(StartFailure.INVALID_ARENA)
             return when (request.source) {
                 StartSource.ADMIN_COMMAND, StartSource.CONSOLE -> startAdministrative(request, arena, cfg)
-                StartSource.FLARE -> guardedPlayerStart(request, cfg) { startFlare(request, arena, cfg) }
-                StartSource.PLAYER_COMMAND, StartSource.GUI -> guardedPlayerStart(request, cfg) { startPaid(request, arena, cfg) }
+                StartSource.FLARE -> startFlare(request, arena, cfg)
+                StartSource.PLAYER_COMMAND, StartSource.GUI -> startPaid(request, arena, cfg)
             }
         } finally {
             gate.unlock()
@@ -87,7 +87,7 @@ class StartService(
         if (!request.actor.canUseFlare) return StartResult.Rejected(StartFailure.NO_PERMISSION)
         if (!cfg.locks.state.allows(EventKind.FLARE)) return StartResult.Rejected(StartFailure.LOCKED)
         if (hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
-        return attemptStart(arena, EventKind.FLARE, 0, null, request.teamMode)
+        return guardedPlayerStart(request, cfg) { attemptStart(arena, EventKind.FLARE, 0, null, request.teamMode) }
     }
 
     private fun startPaid(request: StartRequest, arena: KothArena, cfg: EnthusiaKothConfig): StartResult {
@@ -107,6 +107,18 @@ class StartService(
         if (!cfg.locks.state.allows(kind)) return StartResult.Rejected(StartFailure.LOCKED)
         if (hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
 
+        return guardedPlayerStart(request, cfg) { chargeAndStart(request, arena, cfg, playerId, tier, kind) }
+    }
+
+    private fun chargeAndStart(
+        request: StartRequest,
+        arena: KothArena,
+        cfg: EnthusiaKothConfig,
+        playerId: UUID,
+        tier: StartTier,
+        kind: EventKind,
+    ): StartResult {
+        val manual = cfg.manualStart
         val cost = when (tier) {
             StartTier.BASIC -> manual.basicCost
             StartTier.ADVANCED -> manual.advancedCost

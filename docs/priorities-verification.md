@@ -115,3 +115,14 @@ Updated unmerged local 0.3.0-SNAPSHOT test artifact SHA-256: `5594afb9cb0c2e0177
 KOTH-106 market extension: user requested Market in the local capture audience. Default config and missing-key fallback include `market`; explicitly configured lists remain authoritative. This is a region-list extension with unchanged routing engine; no new behavioral red/green claim or project-local SPEAR tooling pass.
 
 Market extension validation: Java 21 `test build` passed 182 tests with zero failures/errors/skips. The updated simulation routes Market capture notifications, suppresses outside capture updates and retains global winner announcements. Updated unmerged local test JAR SHA-256: `fc824ed98c1d7c68c728b6cb2586197f21ff8ddc993d6de8933b85386242a2d8`. Production and real WorldGuard/client acceptance remain pending.
+
+## Manual code review follow-up
+
+Review scope: PR #1 at 65ed709c8b7800300ca5955d079cdeb2d13ce6c2 and PR #2 at 4805ec6acddc759244792c2e1a2dc8fd8a4e1173 against fetched main f80adeb. User defers TEST-server work.
+
+REV-001 (P2): One contributor reward dispatch exception aborts the recipient loop and denies remaining eligible contributors. WHEN one recipient's reward command throws THE SYSTEM SHALL log that failure, continue other eligible recipients, and avoid retrying the ambiguous failed operation.
+REV-002 (P2): Cooldown reservation currently precedes permissions, disabled-feature, lock and active-event validation, causing synchronous writes for ineligible starts and avoidable cooldown consumption if reservation release fails. WHEN a start fails these preflight checks THE SYSTEM SHALL reject without reading/writing cooldown state or checking optional opponent counts. Payment/start failure after valid preflight still releases the durable reservation conservatively.
+
+Bank API review: fetched BadgersMC/enthusia-network main 559bfabc2187ab796a3be889f032383a8041f819 pins LumaGuilds a15b244e8a294bf18e6dedf722462edf9faa40ae. Inspected real systemBankDeposit/Withdraw delegation and Int amount bound at that pin. The older local submodule checkout is not the current network source. No runtime transaction is claimed.
+
+Review fixes verified: three focused regressions failed behaviorally before the fixes. Contributor dispatch failure is isolated per recipient without retry; preflight now runs before optional opponent counts and durable cooldown reservations for paid/GUI and flare requests. Permissions, locks and active-event precedence remain explicit. Java 21 clean test build passed 185 tests, zero failures/errors/skips. Feature unmerged local test JAR SHA-256: `4fec8eec90911cbb4ff716e620324c2bbf5e965f45974524d8f53ef01fd8ef2f`. No GUI or visual behavior changed in this review follow-up.

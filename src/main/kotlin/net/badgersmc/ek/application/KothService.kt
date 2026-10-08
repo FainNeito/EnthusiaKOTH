@@ -531,7 +531,11 @@ class KothService(
                 .mapNotNull { Bukkit.getPlayer(it) }.filter { teamFor(it, event) == winner }
                 .forEach { player ->
                     val rewardCommand = resolved.replace("{CONTRIBUTORS}", player.name).replace("{ALL_ONLINE}", player.name)
-                    if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), rewardCommand)) logger("KOTH reward command was rejected: $rewardCommand", null)
+                    runCatching {
+                        if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), rewardCommand)) {
+                            logger("KOTH reward command was rejected: $rewardCommand", null)
+                        }
+                    }.onFailure { logger("KOTH contributor reward command failed for ${player.uniqueId}: $rewardCommand", it) }
                 }
             return
         }
