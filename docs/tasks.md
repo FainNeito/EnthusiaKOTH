@@ -31,3 +31,21 @@ command/API, economy discount, loot table or alliance policy is assumed here.
 
 See [arena setup evidence](arena-setup-verification.md) and
 [AxKoth comparison](axkoth-comparison.md). This request does not deploy or merge.
+
+## Approved AxKoth-inspired expansion
+
+- [x] EXP-001: staged schedules editor and actual upcoming-occurrence preview.
+- [x] EXP-002: staged fixed/chance/money reward editor and payout preview.
+- [x] EXP-003: arena information and safe, cancellable staff teleport.
+- [x] EXP-004: display editor and optional hologram/sidebar with ownership guards.
+- [x] EXP-005: timestamped daily, weekly and season standings.
+- [x] EXP-006: SCORE accumulation, pause, expiry and tie behavior.
+- [x] EXP-007: immutable informational Bukkit lifecycle API.
+- [x] EXP-008: bounded simultaneous public events and isolated cleanup/listeners.
+- [x] Local review, 265-test clean build, JAR inspection and responsive simulation.
+- [ ] Exact-head hosted checks and PR review/merge (stacked on setup PR #3).
+- [ ] Deferred TEST/client acceptance and clean merged-source deployment gates.
+
+Details and limits: [expansion-verification.md](expansion-verification.md).
+Score and concurrency are now approved by the expansion request; alliance policy,
+database replacement and arbitrary leaderboard resets remain undecided.

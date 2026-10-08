@@ -261,3 +261,32 @@ For implementation behavior, use:
 For **current Enthusia SMP availability and values**, use the latest `enthusia-server-state` snapshot instead of repository defaults.
 
 Public start and winner announcements are global and respect `/ekoth notifications`. Capture entry/leave/countdown/reminders, boss bars and progress action bars are limited to players currently inside WorldGuard regions from `notifications.capture-regions` (default `spawn`, `warzone`, `market`) in the event world. Missing regions or an empty list suppress these local updates; no global fallback. Private test messages remain participant-only.
+
+## Staff management and expanded events
+
+`/ekoth manage [arena]` opens management; `/ekoth schedules [arena]`,
+`/ekoth rewards <arena>` and `/ekoth displays` open the individual editors.
+Changes stay in a private draft until Save. Closing preserves the draft;
+cancel/quit discards it. Save refuses active/queued events and stale file revisions.
+Reward preview never pays or runs commands. Money edits create an arena-specific
+family so shared legacy rewards are preserved. Existing contributor eligibility
+remains 10% of the winning guild's scoring time by default.
+
+`/ekoth info <arena>` includes geometry, schedules, rules, rewards and state.
+`/ekoth tp <arena>` checks for a safe surface near its objective, respects other
+plugins' teleport cancellation, and fails when no safe spot exists. These
+management commands require the existing admin permission.
+
+SCORE arenas accumulate points while one team controls the hill; contesting or
+leaving pauses accumulation. At expiry, a unique positive leader wins; ties and
+zero scores produce no winner. `events.max-concurrent` defaults to 1 (maximum 16).
+Increasing it allows separate nonoverlapping public arenas; private tests remain
+exclusive. Unresolvable WorldGuard geometry blocks concurrency. With multiple
+events, `/ekoth stop <arena>` must identify the event.
+
+`/ekoth top [lifetime|daily|weekly|season] [page]` uses timestamped wins for new
+period views, in the configured schedule timezone. Weeks start Monday. Set
+`leaderboards.season-start` to an ISO date to enable season results. Legacy wins
+remain lifetime-only. Optional `display.hologram` and `display.sidebar` default
+off; sidebars yield to existing owners. See the [lifecycle API](docs/lifecycle-api.md)
+and [verification and acceptance limits](docs/expansion-verification.md).

@@ -42,7 +42,9 @@ class RestrictionListener(
     /** Deny damage using the launch-time projectile item rather than the shooter's current hand. */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onDamage(event: EntityDamageByEntityEvent) {
-        val active = kothService.activeEvent ?: return
+        val active = events().firstOrNull { candidate ->
+            candidate.arena.zone.contains(event.entity.location) || candidate.arena.zone.contains(event.damager.location) || candidate.isPrivateTest
+        } ?: return
         val attackerId = damagingPlayerId(event, active)
 
         if (active.isPrivateTest && event.entity is Player) {
@@ -68,7 +70,9 @@ class RestrictionListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onAcceptedDamage(event: EntityDamageByEntityEvent) {
         if (event.isCancelled) return
-        val active = kothService.activeEvent ?: return
+        val active = events().firstOrNull { candidate ->
+            candidate.arena.zone.contains(event.entity.location) || candidate.arena.zone.contains(event.damager.location) || candidate.isPrivateTest
+        } ?: return
         val attacker = damagingPlayer(event) ?: return
         if (!active.isParticipant(attacker.uniqueId)) return
         val use = damageUse(event, active, attacker) ?: return
@@ -96,7 +100,7 @@ class RestrictionListener(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onMove(event: PlayerMoveEvent) {
         val to = event.to ?: return
-        val active = relevantEvent(event.player) ?: return
+        val active = relevantEvent(event.player, to) ?: return
         if (!event.player.isGliding) return
         if (active.arena.zone.contains(event.from) || !active.arena.zone.contains(to)) return
         val decision = restrictions.canUseElytra(event.player, active)
@@ -130,7 +134,9 @@ class RestrictionListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onEntityPlaced(event: EntityPlaceEvent) {
         if (event.isCancelled) return
-        val active = kothService.activeEvent ?: return
+        val active = events().firstOrNull { candidate ->
+            candidate.arena.zone.contains(event.entity.location) || candidate.isPrivateTest
+        } ?: return
         if (!active.isPrivateTest) return
         val player = event.player ?: return
         restrictions.recordIndirectSource(active, event.entity.uniqueId, player.uniqueId)
@@ -141,7 +147,7 @@ class RestrictionListener(
     fun onProjectileAccepted(event: ProjectileLaunchEvent) {
         if (event.isCancelled) return
         val player = event.entity.shooter as? Player ?: return
-        val active = relevantEvent(player) ?: return
+        events().filter { it.isParticipant(player.uniqueId) }.forEach { active ->
         val launchedInside = active.arena.zone.contains(player.location)
         val item = launchItem(event.entity)
         restrictions.recordProjectile(
@@ -160,13 +166,16 @@ class RestrictionListener(
                 restrictions.applyCooldown(player, active, RestrictedItemType.WIND_CHARGE)
             }
         }
+        }
     }
 
     /** Outside-launched wind charges are evaluated when their effect reaches the zone. */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onWindChargePrime(event: ExplosionPrimeEvent) {
         if (event.entity !is AbstractWindCharge) return
-        val active = kothService.activeEvent ?: return
+        val active = events().firstOrNull { candidate ->
+            candidate.arena.zone.contains(event.entity.location) || candidate.isPrivateTest
+        } ?: return
         if (!active.arena.zone.contains(event.entity.location)) return
         val snapshot = restrictions.projectileSnapshot(active, event.entity.uniqueId) ?: return
         val player = org.bukkit.Bukkit.getPlayer(snapshot.shooterId) ?: return
@@ -181,7 +190,9 @@ class RestrictionListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onAcceptedWindChargePrime(event: ExplosionPrimeEvent) {
         if (event.isCancelled || event.entity !is AbstractWindCharge) return
-        val active = kothService.activeEvent ?: return
+        val active = events().firstOrNull { candidate ->
+            candidate.arena.zone.contains(event.entity.location) || candidate.isPrivateTest
+        } ?: return
         if (!active.arena.zone.contains(event.entity.location)) return
         val snapshot = restrictions.projectileSnapshot(active, event.entity.uniqueId) ?: return
         if (snapshot.launchedInsideZone) return
@@ -197,7 +208,7 @@ class RestrictionListener(
     fun onPearlTeleport(event: PlayerTeleportEvent) {
         if (event.cause != PlayerTeleportEvent.TeleportCause.ENDER_PEARL) return
         val to = event.to ?: return
-        val active = relevantEvent(event.player) ?: return
+        val active = relevantEvent(event.player, to) ?: return
         if (!active.arena.zone.contains(to)) return
         denyIfNeeded(event.player, restrictions.canUseType(event.player, active, RestrictedItemType.ENDER_PEARL)) {
             event.isCancelled = true
@@ -208,7 +219,7 @@ class RestrictionListener(
     fun onAcceptedPearlTeleport(event: PlayerTeleportEvent) {
         if (event.isCancelled || event.cause != PlayerTeleportEvent.TeleportCause.ENDER_PEARL) return
         val to = event.to ?: return
-        val active = relevantEvent(event.player) ?: return
+        val active = relevantEvent(event.player, to) ?: return
         if (!active.arena.zone.contains(to)) return
         val decision = restrictions.canUseType(event.player, active, RestrictedItemType.ENDER_PEARL)
         if (decision.allowed && decision.cooldownSeconds > 0) {
@@ -216,8 +227,10 @@ class RestrictionListener(
         }
     }
 
-    private fun relevantEvent(player: Player): KothEvent? =
-        kothService.activeEvent?.takeIf { it.isParticipant(player.uniqueId) }
+    private fun events(): List<KothEvent> = kothService.allEvents()
+    private fun relevantEvent(player: Player, location: org.bukkit.Location = player.location): KothEvent? =
+        events().firstOrNull { it.isParticipant(player.uniqueId) && (it.isPrivateTest || it.arena.zone.contains(location)) }
+            ?: events().singleOrNull()?.takeIf { it.isParticipant(player.uniqueId) }
 
     private fun damageUse(event: EntityDamageByEntityEvent, active: KothEvent, attacker: Player): DamageUse? {
         val victimInside = active.arena.zone.contains(event.entity.location)

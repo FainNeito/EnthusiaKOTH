@@ -75,6 +75,8 @@ class KothService(
     private val eventTerminated: (UUID) -> Unit = {},
     private val notificationsEnabled: (Player) -> Boolean = { true },
     private val toggleNotifications: (Player) -> Boolean = { true },
+    private val lifecycleSink: (net.badgersmc.ek.api.KothLifecycleEvent) -> Unit = {},
+    private val arenasOverlap: (KothArena, KothArena) -> Boolean = EventConcurrency::overlaps,
     private val captureAudience: (KothEvent, Player) -> Boolean = { _, _ -> false },
 ) {
     fun notificationEnabled(player: Player): Boolean = notificationsEnabled(player)
@@ -103,7 +105,7 @@ class KothService(
 
         internal fun displayProgress(event: KothEvent, now: Instant): Float {
             if (event.arena.family.equals("conquest", ignoreCase = true) ||
-                event.arena.family.equals("moving", ignoreCase = true)
+                event.arena.family.equals("moving", ignoreCase = true) || event.arena.family.equals("score", true)
             ) {
                 val duration = event.arena.durationSeconds.coerceAtLeast(1).toDouble()
                 val remaining = Duration.between(now, event.endsAt).seconds.coerceAtLeast(0).toDouble()
@@ -164,54 +166,78 @@ class KothService(
         }
     }
 
-    @Volatile var activeEvent: KothEvent? = null
+    private val events = linkedMapOf<UUID, KothEvent>()
+    /** Compatibility primary view. Use allEvents/eventForArena for multiple events. */
+    var activeEvent: KothEvent?
+        get() = synchronized(this) { events.values.firstOrNull() }
+        private set(value) { if (value != null) events[value.id] = value }
+    @Synchronized fun allEvents(): List<KothEvent> = events.values.toList()
+    fun eventForArena(id: String): KothEvent? = allEvents().firstOrNull { it.arena.id == id }
+    fun conflicts(arena: KothArena): Boolean {
+        val current = allEvents()
+        return current.isNotEmpty() && EventConcurrency.conflicts(arena, current, cfgLoader().maxConcurrentEvents, arenasOverlap)
+    }
+    fun eventAt(location: org.bukkit.Location, playerId: UUID? = null): KothEvent? = allEvents().firstOrNull {
+        (playerId == null || it.isParticipant(playerId)) && (it.arena.zone.contains(location) || it.arena.protectedRegion?.contains(location) == true)
+    }
+    fun privateEvent(playerId: UUID? = null): KothEvent? = allEvents().firstOrNull {
+        it.isPrivateTest && (playerId == null || it.isParticipant(playerId))
+    }
+    private var processingQueue = false
+    private fun lifecycle(event: KothEvent, kind: net.badgersmc.ek.api.KothLifecycle, winner: TeamId? = null, reason: String? = null) {
+        fun snapshot(team: TeamId?) = team?.let { net.badgersmc.ek.api.KothTeamSnapshot(it.mode.name, it.id) }
+        runCatching { lifecycleSink(net.badgersmc.ek.api.KothLifecycleEvent(kind, net.badgersmc.ek.api.KothLifecycleSnapshot(
+            event.id, event.arena.id, event.arena.family, event.isPrivateTest, event.startsAt, event.endsAt,
+            snapshot(event.currentController), snapshot(winner), java.util.Collections.unmodifiableMap(event.scores.mapKeys { snapshot(it.key)!! }), reason,
+        ))) }.onFailure { logger("KOTH lifecycle observer failed for " + event.id, it) }
+    }
     private val reminderCounters = mutableMapOf<String, Int>()
     private val eventQueue = queueStore.load().toMutableList()
     private var queueDirty = false
     private var suppressNextQueueProcess = false
-    private var discordLastUpdate: Long? = null
+    private val discordLastUpdates = mutableMapOf<UUID, Long>()
     @Volatile var lastCancellationRefundPending: Boolean = false
         private set
 
     fun tick() {
         if (queueDirty) persistQueue()
-        val event = activeEvent
-        if (event == null) {
-            processQueue()
-            return
-        }
         val now = clock.instant()
         val cfg = cfgLoader()
-        when (event.state) {
-            EventState.STARTING -> if (!now.isBefore(event.startsAt)) {
-                try {
-                    activateEvent(event, cfg)
-                } catch (error: Throwable) {
-                    logger("KOTH '${event.arena.id}' failed during delayed activation", error)
-                    cancelEvent(event, CancellationReason.ACTIVATION_FAILURE, announce = false)
+        allEvents().forEach { event ->
+            when (event.state) {
+                EventState.STARTING -> if (!now.isBefore(event.startsAt)) {
+                    try { activateEvent(event, cfg) } catch (error: Throwable) {
+                        logger("KOTH delayed activation failed for " + event.arena.id, error)
+                        cancelEvent(event, CancellationReason.ACTIVATION_FAILURE, announce = false)
+                    }
                 }
+                EventState.ACTIVE -> tickActive(event, cfg)
+                else -> Unit
             }
-            EventState.ACTIVE -> tickActive(event, cfg)
-            else -> Unit
         }
+        processQueue()
     }
 
     private fun activateEvent(event: KothEvent, cfg: EnthusiaKothConfig) {
         event.state = EventState.ACTIVE
-        discordLastUpdate = null
+        lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
+        if (events[event.id] !== event || event.state != EventState.ACTIVE) return
+        discordLastUpdates.remove(event.id)
         sendEventMessage(
             event,
             lang.msg("koth.begin", "koth_name" to event.arena.id, "location" to locString(event.arena.zone)),
         )
         if (!event.isPrivateTest) {
             discordWebhook.sendStart(event.arena.id, locString(event.arena.zone))
-            if (cfg.display.zoneBorder) zoneBorderService.show(event.arena.zone)
+            if (cfg.display.zoneBorder) zoneBorderService.show(event.arena.zone, event.id.toString())
         }
     }
 
     private fun activateQueuedEvent(event: KothEvent, cfg: EnthusiaKothConfig, recovered: Boolean) {
         event.state = EventState.ACTIVE
-        discordLastUpdate = null
+        lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
+        if (events[event.id] !== event || event.state != EventState.ACTIVE) return
+        discordLastUpdates.remove(event.id)
         runActivationStep(event, if (recovered) "recovery start announcement" else "start announcement") {
             sendEventMessage(
                 event,
@@ -230,7 +256,7 @@ class KothService(
             )
         }
         if (!event.isPrivateTest && cfg.display.zoneBorder) {
-            runActivationStep(event, "zone border display") { zoneBorderService.show(event.arena.zone) }
+            runActivationStep(event, "zone border display") { zoneBorderService.show(event.arena.zone, event.id.toString()) }
         }
     }
 
@@ -249,7 +275,7 @@ class KothService(
         }
         val playersInZone = if (arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInStaticCaptureZone(event)
 
-        if (cfg.progressBar.enabled && event.currentController != null) {
+        if (cfg.display.actionbar && cfg.progressBar.enabled && event.currentController != null) {
             val progress = progressBar(event, cfg.progressBar)
             playersInZone.filter { event.isPrivateTest || (notificationsEnabled(it) && captureAudience(event, it)) }.forEach { it.sendActionBar(progress) }
         }
@@ -275,16 +301,20 @@ class KothService(
         val teamsInZone = resolveTeams(playersInZone, event)
         event.scoringParticipation.observe(teamsInZone)
         val previousScores = event.scores.toMap()
+        val previousController = event.currentController
         when {
+            arena.family.equals("score", true) -> applyMovingScore(event, teamsInZone)
             arena.family.equals("moving", true) -> applyMovingScore(event, teamsInZone)
             arena.family.equals("conquest", true) -> tickConquest(event, arena, teamsInZone, playersInZone)
             else -> tickCaptureFamily(event, arena, teamsInZone)
         }
+        if (previousController != event.currentController) lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CONTROL_CHANGED)
+        if (events[event.id] !== event || event.state != EventState.ACTIVE) return
         val controller = event.currentController
         if (controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0)) {
             event.scoringParticipation.record(controller, playersInZone.filter { teamFor(it, event) == controller }.map { it.uniqueId }.toSet())
         }
-        if (!arena.family.equals("moving", true) && !arena.family.equals("conquest", true) &&
+        if (!arena.family.equals("score", true) && !arena.family.equals("moving", true) && !arena.family.equals("conquest", true) &&
             controller != null && (event.scores[controller] ?: 0.0) >= arena.captureSeconds) {
             finishEvent(event, controller)
             return
@@ -306,12 +336,14 @@ class KothService(
             displayProgress(event, now),
             recipients,
             !event.isPrivateTest,
+            cfg.display,
+            event,
         )
 
         if (!event.isPrivateTest && cfg.discord.enabled && cfg.discord.liveUpdateSeconds > 0) {
-            val last = discordLastUpdate
+            val last = discordLastUpdates[event.id]
             if (last == null || now.epochSecond - last >= cfg.discord.liveUpdateSeconds) {
-                discordLastUpdate = now.epochSecond
+                discordLastUpdates[event.id] = now.epochSecond
                 discordWebhook.sendLiveUpdate(event.arena.id, event.currentController, contested, timeLeft)
             }
         }
@@ -423,10 +455,11 @@ class KothService(
     }
 
     private fun finishEvent(event: KothEvent, candidate: TeamId?) {
-        if (activeEvent !== event) return
+        if (events[event.id] !== event) return
         val winner = candidate.takeIf { event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams }
         event.state = EventState.COMPLETED
         val wasContested = event.scores.size > 1
+        lifecycle(event, net.badgersmc.ek.api.KothLifecycle.COMPLETED, winner)
         try {
             event.paymentReceipt?.let { receipt ->
                 runCompletionStep(event, "payment settlement") {
@@ -446,6 +479,7 @@ class KothService(
                     )
                 }
                 if (!event.isPrivateTest) {
+                    runCompletionStep(event, "timestamped win") { stats.recordTimedWin(event.id, winner.storageKey(), event.arena.id, clock.instant()) }
                     runCompletionStep(event, "statistics update") {
                         stats.incrementWin(winner.storageKey(), event.arena.id)
                         stats.save()
@@ -483,14 +517,14 @@ class KothService(
     private fun cleanupEvent(event: KothEvent) {
         event.clearScores()
         event.currentController = null
-        if (activeEvent === event) activeEvent = null
-        discordLastUpdate = null
+        events.remove(event.id)
+        discordLastUpdates.remove(event.id)
         reminderCounters.remove(event.arena.id)
         runCatching { eventTerminated(event.id) }
             .onFailure { logger("KOTH '${event.arena.id}' restriction cleanup failed", it) }
-        runCatching { displayService.clear() }
+        runCatching { displayService.clear(event.arena.id) }
             .onFailure { logger("KOTH '${event.arena.id}' display cleanup failed", it) }
-        runCatching { zoneBorderService.hide() }
+        runCatching { zoneBorderService.hide(event.id.toString()) }
             .onFailure { logger("KOTH '${event.arena.id}' zone-border cleanup failed", it) }
     }
 
@@ -574,7 +608,7 @@ class KothService(
         paymentReceipt: PaymentReceipt? = null,
         teamMode: TeamMode = TeamMode.SOLO,
     ): Boolean {
-        if (activeEvent != null) return false
+        if (conflicts(arena)) return false
         val cfg = cfgLoader()
         if (!cfg.locks.state.allows(kind)) return false
         val now = clock.instant()
@@ -635,27 +669,23 @@ class KothService(
 
     @Synchronized
     fun processQueue() {
-        if (suppressNextQueueProcess) {
-            suppressNextQueueProcess = false
-            return
-        }
-        if (activeEvent != null) return
-        if (queueDirty && !persistQueue()) return
-
-        while (activeEvent == null) {
-            val next = eventQueue.firstOrNull() ?: return
-            when (next.state) {
-                QueuedEventState.COMPLETED -> if (!compactCompleted(next)) return
-                QueuedEventState.ACTIVATING -> {
-                    resumeActivating(next)
-                    return
+        if (suppressNextQueueProcess) { suppressNextQueueProcess = false; return }
+        if (processingQueue || (queueDirty && !persistQueue())) return
+        processingQueue = true
+        try {
+            while (true) {
+                val next = eventQueue.firstOrNull() ?: return
+                val arena = arenaResolver(next.arenaId)
+                if (next.state != QueuedEventState.COMPLETED && arena != null && conflicts(arena)) return
+                val before = next
+                when (next.state) {
+                    QueuedEventState.COMPLETED -> if (!compactCompleted(next)) return
+                    QueuedEventState.ACTIVATING -> resumeActivating(next)
+                    QueuedEventState.READY -> processReady(next)
                 }
-                QueuedEventState.READY -> {
-                    processReady(next)
-                    return
-                }
+                if (eventQueue.firstOrNull() == before || eventQueue.firstOrNull()?.arenaId == before.arenaId) return
             }
-        }
+        } finally { processingQueue = false }
     }
 
     private fun processReady(next: QueuedEvent) {
@@ -711,7 +741,7 @@ class KothService(
     }
 
     private fun startDurableActivation(next: QueuedEvent, arena: KothArena, recovered: Boolean): Boolean {
-        if (activeEvent != null) return false
+        if (conflicts(arena)) return false
         val cfg = cfgLoader()
         if (!cfg.locks.state.allows(next.startSource)) return false
         val activationId = next.activationId ?: return false
@@ -858,6 +888,7 @@ class KothService(
         )
         event.join(ownerId)
         activeEvent = event
+        if (event.state == EventState.ACTIVE) lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
         Bukkit.getPlayer(ownerId)?.let { owner ->
             if (lobbySeconds > 0) {
                 val key = if (access == PrivateTestAccess.PERMISSION_JOIN) "private.lobby_open_staff" else "private.lobby_open_self"
@@ -873,9 +904,10 @@ class KothService(
     fun forceEnd(
         reason: CancellationReason = CancellationReason.ADMINISTRATIVE,
         announce: Boolean = reason == CancellationReason.ADMINISTRATIVE,
+        arenaId: String? = null,
     ): Boolean {
-        val event = activeEvent ?: return false
-        return cancelEvent(event, reason, announce)
+        val selected = if (arenaId == null) allEvents().take(1) else allEvents().filter { it.arena.id == arenaId }
+        return selected.firstOrNull()?.let { cancelEvent(it, reason, announce) } ?: false
     }
 
     private fun cancelEvent(
@@ -884,7 +916,7 @@ class KothService(
         announce: Boolean,
         advanceQueue: Boolean = reason != CancellationReason.RELOAD && reason != CancellationReason.PLUGIN_DISABLE,
     ): Boolean {
-        if (activeEvent !== event) return false
+        if (events[event.id] !== event || event.state in setOf(EventState.COMPLETED, EventState.CANCELLED, EventState.ENDING)) return false
         lastCancellationRefundPending = false
         if (announce) {
             runCatching { sendEventMessage(event, lang.msg("koth.ended", "koth_name" to event.arena.id)) }
@@ -893,6 +925,7 @@ class KothService(
         val refunded = refundPayment(event, reason)
         lastCancellationRefundPending = !refunded
         event.state = EventState.CANCELLED
+        lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CANCELLED, reason = reason.name)
         cleanupEvent(event)
         if (advanceQueue) processQueue()
         return true
@@ -962,7 +995,7 @@ class KothService(
     }
 
     private fun progressBar(event: KothEvent, cfg: ProgressBarConfig): net.kyori.adventure.text.Component {
-        val progress = if (event.arena.family.equals("moving", true) || event.arena.family.equals("conquest", true)) {
+        val progress = if (event.arena.family.equals("moving", true) || event.arena.family.equals("conquest", true) || event.arena.family.equals("score", true)) {
             displayProgress(event, clock.instant()).toDouble()
         } else {
             val maximum = event.arena.captureSeconds.coerceAtLeast(1).toDouble()
@@ -997,7 +1030,9 @@ class KothService(
         if (reason == CancellationReason.RELOAD || reason == CancellationReason.PLUGIN_DISABLE) {
             suppressNextQueueProcess = true
         }
-        forceEnd(reason, announce = false)
+        var refundPending = false
+        allEvents().forEach { cancelEvent(it, reason, announce = false, advanceQueue = false); refundPending = refundPending || lastCancellationRefundPending }
+        lastCancellationRefundPending = refundPending
         persistQueue()
     }
 }

@@ -25,16 +25,19 @@ class ZoneBorderService(private val plugin: JavaPlugin) {
         const val BORDER_TAG = "ekoth_zone_border"
     }
 
-    private val activeBorders = mutableListOf<BlockDisplay>()
+    private val borders = mutableMapOf<String, MutableList<BlockDisplay>>()
+    private var activeBorders = mutableListOf<BlockDisplay>()
 
     /** Show the border for a zone. Clears any previous border first. */
-    fun show(zone: CaptureZone) {
-        hide()
+    fun show(zone: CaptureZone, eventKey: String = "legacy") {
+        hide(eventKey)
+        activeBorders = mutableListOf()
+        borders[eventKey] = activeBorders
         val world = plugin.server.getWorld(zone.worldName) ?: return
         val y = zone.objectiveY + 0.1 // just above the configured objective surface
 
         // Sweep leftover border entities from a previous unclean shutdown
-        world.entities.filter { it.scoreboardTags.contains(BORDER_TAG) }.forEach { it.remove() }
+        world.entities.filter { it.scoreboardTags.contains(BORDER_TAG) && it.scoreboardTags.contains("ekoth_event_$eventKey") }.forEach { it.remove() }
 
         // Four edges: north, east, south (reversed), west (reversed)
         spawnEdge(world, zone.minX, y, zone.minZ, zone.maxX, zone.minZ)
@@ -44,9 +47,9 @@ class ZoneBorderService(private val plugin: JavaPlugin) {
     }
 
     /** Remove the border. Safe to call multiple times. */
-    fun hide() {
-        activeBorders.forEach { it.remove() }
-        activeBorders.clear()
+    fun hide(eventKey: String? = null) {
+        if (eventKey == null) { borders.values.flatten().forEach { it.remove() }; borders.clear() }
+        else borders.remove(eventKey)?.forEach { it.remove() }
     }
 
     /**
@@ -77,6 +80,7 @@ class ZoneBorderService(private val plugin: JavaPlugin) {
             // would otherwise leave permanent glowing blocks in the world.
             d.isPersistent = false
             d.addScoreboardTag(BORDER_TAG)
+            borders.entries.firstOrNull { it.value === activeBorders }?.key?.let { d.addScoreboardTag("ekoth_event_$it") }
         }
 
         // Transformation = Translation * LeftRotation * Scale * RightRotation.

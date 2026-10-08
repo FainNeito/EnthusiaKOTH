@@ -33,7 +33,7 @@ class ArenaSetupService(
         val existing = snapshot.arenas[id]
         if (family != null && existing != null) throw SetupException(SetupIssue.EXISTS)
         if (family == null && existing == null) throw SetupException(SetupIssue.MISSING)
-        if (family != null && family !in setOf("capture", "moving", "conquest")) throw SetupException(SetupIssue.FAMILY)
+        if (family != null && family !in setOf("capture", "moving", "conquest", "score")) throw SetupException(SetupIssue.FAMILY)
         return ArenaSetupDraft(id, snapshot.revision, family != null,
             existing ?: ArenaConfig(enabled = false, family = family!!, world = world, center = center,
                 rewardFamily = "setup_${java.util.UUID.randomUUID()}"), existing != null)

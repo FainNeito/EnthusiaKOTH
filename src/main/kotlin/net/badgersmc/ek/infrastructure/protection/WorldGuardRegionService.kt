@@ -11,6 +11,16 @@ import org.bukkit.Location
  * to a named WorldGuard region without duplicating its geometry.
  */
 class WorldGuardRegionService {
+    /** Conservative bounding boxes: disjoint boxes prove separation, overlap fails closed. */
+    fun bounds(worldName: String, regionId: String): net.badgersmc.ek.domain.CaptureZone? {
+        val world = Bukkit.getWorld(worldName) ?: return null
+        val region = region(worldName, regionId) ?: return null
+        val a = region.minimumPoint; val b = region.maximumPoint
+        return net.badgersmc.ek.domain.CaptureZone(regionId, worldName,
+            Location(world, a.x.toDouble(), a.y.toDouble(), a.z.toDouble()),
+            Location(world, b.x + 1.0, b.y + 1.0, b.z + 1.0))
+    }
+
     fun exists(worldName: String, regionId: String): Boolean =
         region(worldName, regionId) != null
 

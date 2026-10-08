@@ -11,11 +11,12 @@ import org.bukkit.event.entity.PlayerDeathEvent
 
 class KeepInventoryListener(
     private val activeEvent: () -> KothEvent?,
+    private val allEvents: () -> List<KothEvent> = { listOfNotNull(activeEvent()) },
     private val contains: (KothArena, Location) -> Boolean,
 ) : Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onDeath(event: PlayerDeathEvent) {
-        val active = activeEvent() ?: return
+        val active = allEvents().firstOrNull { it.isParticipant(event.entity.uniqueId) && contains(it.arena, event.entity.location) } ?: return
         if (active.state != EventState.ACTIVE || !active.arena.keepInventory ||
             !active.isParticipant(event.entity.uniqueId) || !contains(active.arena, event.entity.location)) return
         event.keepInventory = true

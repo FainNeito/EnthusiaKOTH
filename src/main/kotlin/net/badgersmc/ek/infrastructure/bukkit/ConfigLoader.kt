@@ -34,6 +34,8 @@ class ConfigLoader(private val plugin: JavaPlugin) {
         }
         return EnthusiaKothConfig(
             configVersion = configVersion,
+            maxConcurrentEvents = integer(config, "events.max-concurrent", 1).coerceIn(1, 16),
+            seasonStart = config.getString("leaderboards.season-start")?.takeIf { it.isNotBlank() },
             timezone = zone,
             manualStart = ManualStartConfigLoader.load(config),
             schedule = ScheduleConfigLoader.load(config, zone),
@@ -206,6 +208,11 @@ internal object ArenaConfigLoader {
     }
 
     private fun chancedRewards(config: ConfigurationSection, path: String): Map<String, Double> {
+        if (config.isList(path)) return config.getMapList(path).mapNotNull { row ->
+            val command = row["command"] as? String ?: return@mapNotNull null
+            val chance = (row["chance"] as? Number)?.toDouble()?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: return@mapNotNull null
+            command to chance
+        }.toMap()
         val values = section(config, path) ?: return emptyMap()
         return buildMap {
             values.getKeys(false).forEach { chanceText ->
@@ -266,13 +273,20 @@ private object LockConfigLoader {
 }
 
 private object DisplayConfigLoader {
-    fun load(config: FileConfiguration) = net.badgersmc.ek.config.DisplayConfig(boolean(config, "display.zone-border", true))
+    fun load(config: FileConfiguration) = net.badgersmc.ek.config.DisplayConfig(
+        zoneBorder = boolean(config, "display.zone-border", true),
+        bossbar = boolean(config, "display.bossbar", true), actionbar = boolean(config, "display.actionbar", true),
+        hologram = boolean(config, "display.hologram", false), scoreboard = boolean(config, "display.scoreboard", false),
+        bossbarColor = string(config, "display.bossbar-color", "RED"), bossbarOverlay = string(config, "display.bossbar-overlay", "PROGRESS"),
+        bossbarTitle = string(config, "display.bossbar-title", ""),
+    )
 }
 
 private object RulesConfigLoader {
     fun load(config: FileConfiguration) = net.badgersmc.ek.config.FamilyRulesConfig(
         rules = mapOf(
             "capture" to ruleSet(config, "rules.defaults.capture"),
+            "score" to ruleSet(config, "rules.defaults.score"),
             "moving" to ruleSet(config, "rules.defaults.moving"),
             "conquest" to ruleSet(config, "rules.defaults.conquest"),
         ),

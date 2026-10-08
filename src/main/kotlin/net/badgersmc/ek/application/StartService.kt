@@ -17,6 +17,7 @@ class StartService(
     private val paymentJournal: PaymentJournal = NoopPaymentJournal,
     private val clock: java.time.Clock = java.time.Clock.systemUTC(),
     private val cooldowns: StartCooldownStore = InMemoryStartCooldownStore(),
+    private val arenaConflict: ((KothArena) -> Boolean)? = null,
     private val onlineTeamCount: (TeamMode) -> Int = { 0 },
 ) {
     private val gate = ReentrantLock()
@@ -78,7 +79,7 @@ class StartService(
     private fun startAdministrative(request: StartRequest, arena: KothArena, cfg: EnthusiaKothConfig): StartResult {
         if (!request.actor.isConsole && !request.actor.isAdmin) return StartResult.Rejected(StartFailure.NO_PERMISSION)
         if (!cfg.locks.state.allows(EventKind.ADMIN)) return StartResult.Rejected(StartFailure.LOCKED)
-        if (hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
+        if (arenaConflict?.invoke(arena) ?: hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
         return attemptStart(arena, EventKind.ADMIN, 0, null, request.teamMode)
     }
 
@@ -86,7 +87,7 @@ class StartService(
         if (!cfg.flares.enabled) return StartResult.Rejected(StartFailure.FEATURE_DISABLED)
         if (!request.actor.canUseFlare) return StartResult.Rejected(StartFailure.NO_PERMISSION)
         if (!cfg.locks.state.allows(EventKind.FLARE)) return StartResult.Rejected(StartFailure.LOCKED)
-        if (hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
+        if (arenaConflict?.invoke(arena) ?: hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
         return guardedPlayerStart(request, cfg) { attemptStart(arena, EventKind.FLARE, 0, null, request.teamMode) }
     }
 
@@ -105,7 +106,7 @@ class StartService(
 
         val kind = if (request.source == StartSource.GUI) EventKind.GUI else EventKind.PLAYER_COMMAND
         if (!cfg.locks.state.allows(kind)) return StartResult.Rejected(StartFailure.LOCKED)
-        if (hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
+        if (arenaConflict?.invoke(arena) ?: hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
 
         return guardedPlayerStart(request, cfg) { chargeAndStart(request, arena, cfg, playerId, tier, kind) }
     }

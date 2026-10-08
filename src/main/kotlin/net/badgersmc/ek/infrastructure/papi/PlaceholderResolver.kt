@@ -20,6 +20,7 @@ class PlaceholderResolver(
     private val allWins: () -> Map<String, Int>,
     private val playerName: (UUID) -> String?,
     private val guildName: (UUID) -> String?,
+    private val arenaState: ((String, UUID?) -> ActivePlaceholderState?)? = null,
 ) {
     fun resolve(playerId: UUID?, rawParams: String): String {
         val params = rawParams.trim()
@@ -62,10 +63,11 @@ class PlaceholderResolver(
         val arena = arenaIds().firstOrNull { id ->
             params.length > id.length && params.startsWith(id, ignoreCase = true) && params[id.length] == '_'
         } ?: return ""
+        val arenaActive = arenaState?.invoke(arena, playerId) ?: active?.takeIf { it.arenaId.equals(arena, true) }
         val suffix = params.substring(arena.length + 1).lowercase()
         return when (suffix) {
-            "timeleft" -> if (active?.arenaId.equals(arena, ignoreCase = true)) formatTime(active!!.endsAt.epochSecond - clock.instant().epochSecond) else "Not Active"
-            "capper" -> if (active?.arenaId.equals(arena, ignoreCase = true)) active?.capper ?: "None" else "None"
+            "timeleft" -> if (arenaActive != null) formatTime(arenaActive.endsAt.epochSecond - clock.instant().epochSecond) else "Not Active"
+            "capper" -> if (arenaActive != null) arenaActive.capper ?: "None" else "None"
             "wins" -> playerId?.let { arenaWins("solo:$it", arena).toString() } ?: "0"
             else -> ""
         }

@@ -63,6 +63,7 @@ class KothCommand(
     private val arenaEnabledAction: (String, Boolean) -> String,
     private val arenaRegionSuggestions: (String) -> List<String>,
     private val setup: ArenaSetupController? = null,
+    private val settings: StaffSettingsController? = null,
 ) : CommandExecutor, TabCompleter {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
@@ -71,12 +72,21 @@ class KothCommand(
             return true
         }
         when (args[0].lowercase()) {
+            "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
+                if (args.getOrNull(1) == "cancel") settings?.cancel(sender)
+                else settings?.open(sender, args.getOrNull(1), when(args[0].lowercase()) {
+                    "schedules" -> StaffSettingsPage.SCHEDULE; "rewards" -> StaffSettingsPage.REWARDS
+                    "displays" -> StaffSettingsPage.DISPLAYS; else -> StaffSettingsPage.HOME
+                })
+            } else sender.sendMessage(lang.msg("command.error.not_a_player"))
+            "info" -> arenaInfo(sender, args.getOrNull(1))
+            "tp" -> arenaTeleport(sender, args.getOrNull(1))
             "gui" -> gui(sender)
             "schedule" -> schedule(sender)
-            "top" -> top(sender, args.getOrNull(1)?.toIntOrNull() ?: 1)
+            "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
             "stats" -> stats(sender, args.getOrNull(1))
             "start" -> start(sender, args.getOrNull(1) ?: "", args.drop(2))
-            "stop", "cancel" -> stop(sender)
+            "stop", "cancel" -> stop(sender, args.getOrNull(1))
             "giveflare" -> giveFlare(sender, args.getOrNull(1) ?: "", args.getOrNull(2) ?: "", args.getOrNull(3)?.toIntOrNull() ?: 1)
             "reload" -> doReload(sender)
             "private", "test" -> privateTest(sender, args)
@@ -104,7 +114,7 @@ class KothCommand(
             }
             if (canStartPrivate(sender) || canJoinPrivate(sender)) options += "test"
             if (sender.hasPermission("enthusiakoth.admin")) {
-                options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock", "arena", "setup", "editor", "wand")
+                options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock", "arena", "setup", "editor", "wand", "manage", "schedules", "rewards", "displays", "info", "tp")
             }
             return options.distinct().filter { it.startsWith(args[0], ignoreCase = true) }.toMutableList()
         }
@@ -116,6 +126,8 @@ class KothCommand(
                 "arena" -> if (sender.hasPermission("enthusiakoth.admin")) {
                     return listOf("create", "region", "center", "enable", "disable").filter { it.startsWith(args[1], true) }.toMutableList()
                 }
+                "top" -> return listOf("lifetime", "daily", "weekly", "season").filter { it.startsWith(args[1], true) }.toMutableList()
+                "manage", "schedules", "rewards", "displays", "info", "tp", "stop", "cancel" -> if (sender.hasPermission("enthusiakoth.admin")) return (cfgLoader().arenas.keys + "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
                 "setup", "editor" -> if (sender.hasPermission("enthusiakoth.admin")) return (cfgLoader().arenas.keys + "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
             }
         }
@@ -126,7 +138,7 @@ class KothCommand(
             return arenaRegionSuggestions(sender.world.name).filter { it.startsWith(args[3], true) }.toMutableList()
         }
         if (args.size == 4 && args[0].equals("arena", true) && args[1].equals("create", true) && sender.hasPermission("enthusiakoth.admin")) {
-            return listOf("capture", "moving", "conquest").filter { it.startsWith(args[3], true) }.toMutableList()
+            return listOf("capture", "moving", "conquest", "score").filter { it.startsWith(args[3], true) }.toMutableList()
         }
         if (args.size == 3 && args[0].equals("start", true)) {
             return listOf("solo", "guild", "basic", "advanced").filter { it.startsWith(args[2], true) }.toMutableList()
@@ -163,6 +175,7 @@ class KothCommand(
             }
             sender.sendMessage(Component.text("/ekoth arena region <arena> <worldguard-region> | center <arena> | enable <arena> | disable <arena>"))
             sender.sendMessage(lang.msg("setup.help"))
+            sender.sendMessage(lang.msg("staff.help"))
         }
     }
 
@@ -179,7 +192,7 @@ class KothCommand(
         val inventory = Bukkit.createInventory(holder, size, lang.msg("command.gui.title"))
         holder.backingInventory = inventory
         arenaIds.forEachIndexed { slot, id ->
-            val activeEvent = kothService.activeEvent?.takeIf { it.arena.id == id }
+            val activeEvent = kothService.eventForArena(id)
             val active = activeEvent != null
             val capper = activeEvent?.let(kothService::capperName) ?: "None"
             val time = activeEvent
@@ -231,11 +244,15 @@ class KothCommand(
         }
     }
 
-    private fun top(sender: CommandSender, page: Int) {
-        val maximum = stats.maxPages().coerceAtLeast(1)
+    private fun top(sender: CommandSender, page: Int, period: String = "lifetime") {
+        val window = net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)
+        if (period != "lifetime" && window == null) { sender.sendMessage(lang.msg("staff.error.period")); return }
+        val wins = if (window == null) stats.allWins() else stats.winsIn(window)
+        val maximum = ((wins.size + 9) / 10).coerceAtLeast(1)
         val selected = page.coerceIn(1, maximum)
         sender.sendMessage(lang.msg("command.top.header"))
-        stats.allWins().entries.sortedByDescending { it.value }.drop((selected - 1) * 10).take(10)
+        sender.sendMessage(lang.msg("staff.standings", "value" to period))
+        wins.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).drop((selected - 1) * 10).take(10)
             .forEachIndexed { offset, entry ->
                 sender.sendMessage(
                     lang.msg(
@@ -246,6 +263,38 @@ class KothCommand(
                     ),
                 )
             }
+    }
+
+    private fun arenaInfo(sender: CommandSender, id: String?) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        val arena = cfgLoader().arenas[id] ?: run { sender.sendMessage(lang.msg("staff.error.arena")); return }
+        sender.sendMessage(lang.msg("staff.info", "value" to "$id | ${arena.family} | enabled=${arena.enabled} | ${arena.world} ${arena.center.x}, ${arena.center.y}, ${arena.center.z}"))
+        sender.sendMessage(lang.msg("staff.info", "value" to "duration=${arena.durationSeconds}s | capture=${arena.captureSeconds}s | leave=${arena.leaveBehavior} | inventory=${arena.keepInventory} | XP=${arena.keepExperience}"))
+        sender.sendMessage(lang.msg("staff.info", "value" to "region=${arena.worldGuardRegion ?: "native"} | radius=${arena.radius} | schedule=${arena.schedule} | ${cfgLoader().timezone.id}"))
+        sender.sendMessage(lang.msg("staff.info", "value" to "money=${cfgLoader().rewards[arena.rewardFamily ?: arena.family]} | fixed=${arena.rewards} | chance=${arena.chancedRewards}"))
+        sender.sendMessage(lang.msg("staff.info", "value" to "rules=${cfgLoader().rules.rules[arena.family]} | event=${kothService.eventForArena(id!!)?.state ?: "idle"}"))
+    }
+
+    private fun arenaTeleport(sender: CommandSender, id: String?) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
+        val arena = cfgLoader().arenas[id] ?: run { sender.sendMessage(lang.msg("staff.error.arena")); return }
+        val world = Bukkit.getWorld(arena.world) ?: run { sender.sendMessage(lang.msg("staff.error.teleport")); return }
+        val origin = Location(world, arena.center.x, arena.center.y, arena.center.z)
+        val offsets = listOf(0) + (1..8).flatMap { listOf(it, -it) }
+        val hazardous = setOf(Material.LAVA, Material.FIRE, Material.SOUL_FIRE, Material.MAGMA_BLOCK, Material.CACTUS,
+            Material.CAMPFIRE, Material.SOUL_CAMPFIRE, Material.POWDER_SNOW, Material.SWEET_BERRY_BUSH, Material.WATER)
+        val target = offsets.map { origin.clone().add(0.0, it.toDouble(), 0.0) }.firstOrNull { location ->
+            if (location.blockY <= world.minHeight || location.blockY + 1 >= world.maxHeight) false
+            else {
+                val feet = location.block; val head = location.clone().add(0.0, 1.0, 0.0).block
+                val floor = location.clone().add(0.0, -1.0, 0.0).block
+                feet.isPassable && head.isPassable && floor.type.isSolid &&
+                    feet.type !in hazardous && head.type !in hazardous && floor.type !in hazardous
+            }
+        } ?: run { sender.sendMessage(lang.msg("staff.error.teleport")); return }
+        // Normal Bukkit teleport honors companion cancellation; no invulnerability or combat bypass.
+        sender.sendMessage(lang.msg(if (sender.teleport(target, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.COMMAND)) "staff.teleported" else "staff.error.teleport"))
     }
 
     private fun stats(sender: CommandSender, target: String?) {
@@ -352,12 +401,15 @@ class KothCommand(
         }
     }
 
-    private fun stop(sender: CommandSender) {
+    private fun stop(sender: CommandSender, arenaId: String? = null) {
         if (!sender.hasPermission("enthusiakoth.admin")) {
             sender.sendMessage(lang.msg("command.error.no_permission"))
             return
         }
-        if (!kothService.forceEnd()) {
+        if (arenaId == null && kothService.allEvents().size > 1) {
+            sender.sendMessage(lang.msg("staff.stop-select")); return
+        }
+        if (!kothService.forceEnd(arenaId = arenaId)) {
             sender.sendMessage(lang.msg("command.error.no_active"))
         } else if (kothService.lastCancellationRefundPending) {
             sender.sendMessage(lang.msg("command.error.refund_failed"))
@@ -403,6 +455,7 @@ class KothCommand(
             return
         }
         val event = kothService.activeEvent
+        sender.sendMessage(lang.msg("staff.active-list", "value" to kothService.allEvents().joinToString(", ") { it.arena.id }))
         val line = lang.msg("command.status.line")
         sender.sendMessage(line)
         sender.sendMessage(lang.msg("command.status.header"))
@@ -546,7 +599,7 @@ class KothCommand(
     }
 
     private fun privateJoin(player: Player) {
-        val event = kothService.activeEvent ?: run {
+        val event = kothService.privateEvent(player.uniqueId) ?: run {
             player.sendMessage(lang.msg("private.error.no_active"))
             return
         }
@@ -584,7 +637,7 @@ class KothCommand(
             player.sendMessage(lang.msg("private.error.not_owner"))
             return
         }
-        kothService.forceEnd(CancellationReason.PRIVATE_OWNER, announce = false)
+        kothService.forceEnd(CancellationReason.PRIVATE_OWNER, announce = false, arenaId = event.arena.id)
         player.sendMessage(lang.msg("private.success.cancelled"))
     }
 

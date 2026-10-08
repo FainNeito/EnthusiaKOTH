@@ -44,3 +44,19 @@ Removed misleading keys:
 - `storage.stats-file` (legacy migration intentionally detects `stats.yml`)
 
 Those values were either duplicated by the language file or never read by production code.
+
+## Expansion keys
+
+| Key | Runtime owner | Behavior |
+|---|---|---|
+| `events.max-concurrent` | `KothService`, `EventConcurrency` | Public capacity, default 1; editor validates 1 through 16 |
+| `leaderboards.season-start` | command/window resolver | ISO local date; blank/invalid/future disables season view |
+| `display.bossbar`, `display.actionbar` | `DisplayService`, `KothService` | Enabled by default; retain regional/opt-out audience |
+| `display.bossbar-color/overlay/title` | `DisplayService` | Bukkit styles and optional MiniMessage template |
+| `display.hologram/sidebar` | `DisplayService` | Optional, default off; audience and sidebar ownership guards |
+| `rules.defaults.score` | `ConfigLoader`, restrictions | Optional SCORE rules, permissive if missing |
+
+Staff editors write existing `schedule.*`, `arenas.*.schedule.times`, arena fixed/
+chance commands and `arenas.*.money-reward-family`. Money writes allocate a new
+`rewards.<editor-family>` with both solo and guild amounts; shared families are
+not edited. No cron model or historic timestamp migration is introduced.

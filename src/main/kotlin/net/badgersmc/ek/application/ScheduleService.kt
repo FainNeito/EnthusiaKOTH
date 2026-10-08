@@ -205,6 +205,12 @@ class ScheduleService(
         return if (current == null || candidate.isBefore(current)) candidate else current
     }
 
+    fun previewUpcoming(cfg: EnthusiaKothConfig, candidates: Map<String, KothArena>, count: Int = 8): List<ScheduledOccurrence> {
+        val now = clock.instant()
+        return occurrencesBetween(now, now.plus(Duration.ofDays(8)), cfg, candidates)
+            .filter { it.instant.isAfter(now) }.sortedWith(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id }).take(count)
+    }
+
     fun nextScheduledStart(): Instant? = nextOccurrenceAfter(clock.instant())?.instant
 
     fun nextEventInfo(): Pair<String, String>? {
@@ -231,7 +237,7 @@ class ScheduleService(
             .minWithOrNull(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id })
     }
 
-    internal fun occurrencesBetween(from: Instant, to: Instant, cfg: EnthusiaKothConfig = cfgLoader()): List<ScheduledOccurrence> {
+    internal fun occurrencesBetween(from: Instant, to: Instant, cfg: EnthusiaKothConfig = cfgLoader(), candidates: Map<String, KothArena> = arenas()): List<ScheduledOccurrence> {
         if (!cfg.schedule.enabled || to.isBefore(from)) return emptyList()
         val zone = cfg.schedule.zone
         val startDate = from.atZone(zone).toLocalDate().minusDays(1)
@@ -239,8 +245,8 @@ class ScheduleService(
         val result = mutableListOf<ScheduledOccurrence>()
         var date = startDate
         while (!date.isAfter(endDate)) {
-            addArenaOccurrences(date, zone, result)
-            addLegacyOccurrences(date, zone, cfg, result)
+            addArenaOccurrences(date, zone, result, candidates.values)
+            addLegacyOccurrences(date, zone, cfg, result, candidates.values)
             date = date.plusDays(1)
         }
         val warningSeconds = maxOf(
@@ -254,8 +260,9 @@ class ScheduleService(
         date: LocalDate,
         zone: ZoneId,
         result: MutableList<ScheduledOccurrence>,
+        candidates: Collection<KothArena> = arenas().values,
     ) {
-        arenas().values.sortedBy { it.id }.forEach { arena ->
+        candidates.sortedBy { it.id }.forEach { arena ->
             arena.schedule.forEachIndexed { index, configured ->
                 val time = parseOrLog("arena:${arena.id}:$index", configured) ?: return@forEachIndexed
                 val instant = ZonedDateTime.of(date, time, zone).toInstant()
@@ -274,8 +281,9 @@ class ScheduleService(
         zone: ZoneId,
         cfg: EnthusiaKothConfig,
         result: MutableList<ScheduledOccurrence>,
+        candidates: Collection<KothArena> = arenas().values,
     ) {
-        val order = dailyOrder(date)
+        val order = dailyOrder(date, candidates)
         if (order.isEmpty()) return
         cfg.schedule.times.forEachIndexed { index, configured ->
             val time = parseOrLog("legacy:$index", configured) ?: return@forEachIndexed
@@ -297,8 +305,8 @@ class ScheduleService(
         return if (Math.floorMod(stableKey.hashCode(), 2) == 0) TeamMode.SOLO else TeamMode.GUILD
     }
 
-    private fun dailyOrder(date: LocalDate): List<KothArena> {
-        val candidates = arenas().values.filter { it.schedule.isEmpty() }.sortedBy { it.id }
+    private fun dailyOrder(date: LocalDate, available: Collection<KothArena> = arenas().values): List<KothArena> {
+        val candidates = available.filter { it.schedule.isEmpty() }.sortedBy { it.id }
         if (candidates.isEmpty()) return emptyList()
         val shift = Math.floorMod(date.toEpochDay(), candidates.size.toLong()).toInt()
         return candidates.drop(shift) + candidates.take(shift)
