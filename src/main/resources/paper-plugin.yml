@@ -7,6 +7,18 @@ description: Modular KOTH framework for Enthusia, powered by Nexus.
 
 dependencies:
   server:
+    EnthusiaAdvancements:
+      load: AFTER
+      required: false
+      join-classpath: true
+    EnthusiaLoreItems:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    EnthusiaTags:
+      load: BEFORE
+      required: false
+      join-classpath: true
     LumaGuilds:
       load: BEFORE
       required: true

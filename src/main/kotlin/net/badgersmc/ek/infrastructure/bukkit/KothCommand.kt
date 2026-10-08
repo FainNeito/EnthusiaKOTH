@@ -64,6 +64,7 @@ class KothCommand(
     private val arenaRegionSuggestions: (String) -> List<String>,
     private val setup: ArenaSetupController? = null,
     private val settings: StaffSettingsController? = null,
+    private val progression: ProgressionController? = null,
 ) : CommandExecutor, TabCompleter {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
@@ -72,6 +73,7 @@ class KothCommand(
             return true
         }
         when (args[0].lowercase()) {
+            "history", "reports", "readiness", "reconcile", "claims", "challenges", "eligibility" -> progression?.command(sender,args.mapIndexed { i,s -> if(i==0) s.lowercase() else s }.toTypedArray())
             "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
                 if (args.getOrNull(1) == "cancel") settings?.cancel(sender)
                 else settings?.open(sender, args.getOrNull(1), when(args[0].lowercase()) {
@@ -108,12 +110,13 @@ class KothCommand(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
         if (args.size == 1) {
-            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications")
+            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications", "claims", "challenges", "eligibility")
             if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {
                 options += "start"
             }
             if (canStartPrivate(sender) || canJoinPrivate(sender)) options += "test"
             if (sender.hasPermission("enthusiakoth.admin")) {
+                options += listOf("history", "reports", "readiness", "reconcile")
                 options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock", "arena", "setup", "editor", "wand", "manage", "schedules", "rewards", "displays", "info", "tp")
             }
             return options.distinct().filter { it.startsWith(args[0], ignoreCase = true) }.toMutableList()

@@ -1,0 +1,32 @@
+name: KOTH verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: koth-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: bash ./gradlew clean test shadowJar --no-daemon
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: koth-verification-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            build/test-results/test/
+            build/reports/tests/test/
+            build/libs/
+          if-no-files-found: warn

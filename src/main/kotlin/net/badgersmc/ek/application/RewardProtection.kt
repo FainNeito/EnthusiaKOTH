@@ -40,6 +40,7 @@ class ProtectedMatch(val config: RewardProtectionConfig, val mode: TeamMode, ros
         private set
     var allianceChanged: Boolean = false
         private set
+    fun relationChanged() { allianceChanged = true }
 
     fun reconcile(graph: Map<UUID, Set<UUID>>?) {
         if (graph == null) { available = false; return }
@@ -113,6 +114,9 @@ class ProtectedMatch(val config: RewardProtectionConfig, val mode: TeamMode, ros
     }
 
     fun qualifyingSideCount(winner: TeamId): Int = if (available) 1 + qualifyingGroups(winner).size else 0
+    fun opponentGroups(winner: TeamId): Set<String> = qualifyingGroups(winner).map { side(it.first()).sorted().joinToString(",") }.toSet()
+    fun oppositionSeconds(winner: TeamId): Int = observed.filter { !sameSide(winner, it) }
+        .maxOfOrNull { maxOf(scoring[it] ?: 0, activity[winner to it] ?: 0) } ?: 0
 
     fun sideCount(teams: Collection<TeamId>): Int = teams.map { side(it).sorted().joinToString(",") }.distinct().size
     fun audit(): String = "allianceChanged=$allianceChanged; invalidPlayers=${invalidPlayers.sorted()}; ineligibleAccounts=${ineligibleAccounts.sorted()}; scoring=$scoring; hillActivity=$activity"
