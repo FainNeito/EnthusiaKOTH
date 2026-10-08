@@ -62,6 +62,7 @@ class KothCommand(
     private val arenaCenterAction: (String, Location) -> String,
     private val arenaEnabledAction: (String, Boolean) -> String,
     private val arenaRegionSuggestions: (String) -> List<String>,
+    private val setup: ArenaSetupController? = null,
 ) : CommandExecutor, TabCompleter {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
@@ -82,6 +83,10 @@ class KothCommand(
             "status" -> status(sender)
             "lock" -> lock(sender, args.getOrNull(1) ?: "")
             "arena" -> arena(sender, args)
+            "setup", "editor" -> if (sender is Player) {
+                if (args.getOrNull(1) == "cancel") setup?.cancel(sender) else setup?.open(sender, args.getOrNull(1))
+            } else sender.sendMessage(lang.msg("command.error.not_a_player"))
+            "wand" -> if (sender is Player) setup?.giveWand(sender) else sender.sendMessage(lang.msg("command.error.not_a_player"))
             "notifications", "messages" -> {
                 if (sender !is Player) sender.sendMessage(lang.msg("command.error.not_a_player"))
                 else sender.sendMessage(lang.msg(if (kothService.toggleNotification(sender)) "command.notifications.enabled" else "command.notifications.disabled"))
@@ -99,7 +104,7 @@ class KothCommand(
             }
             if (canStartPrivate(sender) || canJoinPrivate(sender)) options += "test"
             if (sender.hasPermission("enthusiakoth.admin")) {
-                options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock", "arena")
+                options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock", "arena", "setup", "editor", "wand")
             }
             return options.distinct().filter { it.startsWith(args[0], ignoreCase = true) }.toMutableList()
         }
@@ -109,8 +114,9 @@ class KothCommand(
                 "private", "test" -> return listOf("start", "join", "leave", "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
                 "lock" -> return LockState.entries.map { it.name.lowercase() }.filter { it.startsWith(args[1], true) }.toMutableList()
                 "arena" -> if (sender.hasPermission("enthusiakoth.admin")) {
-                    return listOf("region", "center", "enable", "disable").filter { it.startsWith(args[1], true) }.toMutableList()
+                    return listOf("create", "region", "center", "enable", "disable").filter { it.startsWith(args[1], true) }.toMutableList()
                 }
+                "setup", "editor" -> if (sender.hasPermission("enthusiakoth.admin")) return (cfgLoader().arenas.keys + "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
             }
         }
         if (args.size == 3 && args[0].equals("arena", true) && sender.hasPermission("enthusiakoth.admin")) {
@@ -118,6 +124,9 @@ class KothCommand(
         }
         if (args.size == 4 && args[0].equals("arena", true) && args[1].equals("region", true) && sender is Player) {
             return arenaRegionSuggestions(sender.world.name).filter { it.startsWith(args[3], true) }.toMutableList()
+        }
+        if (args.size == 4 && args[0].equals("arena", true) && args[1].equals("create", true) && sender.hasPermission("enthusiakoth.admin")) {
+            return listOf("capture", "moving", "conquest").filter { it.startsWith(args[3], true) }.toMutableList()
         }
         if (args.size == 3 && args[0].equals("start", true)) {
             return listOf("solo", "guild", "basic", "advanced").filter { it.startsWith(args[2], true) }.toMutableList()
@@ -153,6 +162,7 @@ class KothCommand(
                 sender.sendMessage(lang.msg("command.help.$it"))
             }
             sender.sendMessage(Component.text("/ekoth arena region <arena> <worldguard-region> | center <arena> | enable <arena> | disable <arena>"))
+            sender.sendMessage(lang.msg("setup.help"))
         }
     }
 
@@ -439,6 +449,10 @@ class KothCommand(
         }
         val action = args.getOrNull(1)?.lowercase()
         val arenaId = args.getOrNull(2)
+        if (action == "create" && arenaId != null) {
+            setup?.create(sender, arenaId, args.getOrNull(3)?.lowercase() ?: "capture")
+            return
+        }
         if (action == null || arenaId == null || arenaId !in cfgLoader().arenas) {
             sendArenaUsage(sender)
             return

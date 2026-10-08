@@ -6,6 +6,11 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 class LanguageAndPermissionContractTest {
+    @Test fun `all guided setup readiness errors have configurable language entries`() {
+        val language = YamlConfiguration.loadConfiguration(File("src/main/resources/lang/en_US.yml"))
+        val missing = net.badgersmc.ek.application.SetupIssue.entries.filterNot { language.contains("setup.error.${it.name.lowercase()}") }
+        assertTrue(missing.isEmpty(), "Missing setup error translations: $missing")
+    }
     @Test
     fun `every literal language key referenced by Kotlin exists`() {
         val language = YamlConfiguration.loadConfiguration(File("src/main/resources/lang/en_US.yml"))

@@ -20,3 +20,14 @@ Requirements and verification: [priorities-verification.md](priorities-verificat
 Later proposals remain undecided: allied guild wins, reward selection, guild XP and
 recognition adapters, combat-profile rotation and selective web reset. No guild XP
 command/API, economy discount, loot table or alliance policy is assumed here.
+
+## Guided setup (AxKoth reference)
+
+- [x] Inspect supplied AxKoth 2.27.0 setup bytecode/configuration and compare feature opportunities.
+- [x] Define SETUP-001 through SETUP-006; implement staged arena creation/editor/wand/preview and atomic storage.
+- [x] Complete focused/full local checks and manual code review; 223 tests, artifact hash in evidence.
+- [ ] Hosted checks and source PR review/merge.
+- [ ] TEST/client: naming privacy, selection height, existing WG binding, particles, inventory controls, save failures, restart and legacy gameplay acceptance.
+
+See [arena setup evidence](arena-setup-verification.md) and
+[AxKoth comparison](axkoth-comparison.md). This request does not deploy or merge.
