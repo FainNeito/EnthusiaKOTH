@@ -12,6 +12,7 @@ import java.util.UUID
 class DisplayService(
     private val plugin: JavaPlugin,
     private val lang: net.badgersmc.nexus.i18n.LangService,
+    private val notificationsEnabled: (Player) -> Boolean = { true },
 ) : Listener {
     private var bossBar: BossBar? = null
     private var viewers: Set<UUID> = emptySet()
@@ -53,7 +54,7 @@ class DisplayService(
 
     @EventHandler(ignoreCancelled = true)
     fun onJoin(event: PlayerJoinEvent) {
-        if (publicAudience || event.player.uniqueId in viewers) bossBar?.addViewer(event.player)
+        if ((publicAudience && notificationsEnabled(event.player)) || event.player.uniqueId in viewers) bossBar?.addViewer(event.player)
     }
 
     fun clear() {

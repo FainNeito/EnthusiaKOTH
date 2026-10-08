@@ -6,6 +6,9 @@ data class FlareConsumption(val newAmount: Int, val clearHand: FlareHand?)
 
 object FlareUsePolicy {
     fun rejectionKey(result: StartResult.Rejected): String = when (result.failure) {
+        StartFailure.STARTER_COOLDOWN -> "command.error.starter_cooldown"
+        StartFailure.INSUFFICIENT_TEAMS -> "command.error.insufficient_teams"
+        StartFailure.COOLDOWN_STATE_FAILED -> "command.error.cooldown_state_failed"
         StartFailure.FEATURE_DISABLED -> "flare.disabled"
         StartFailure.LOCKED -> "flare.locked"
         StartFailure.ALREADY_ACTIVE -> "flare.already_active"

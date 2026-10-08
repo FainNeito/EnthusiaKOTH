@@ -28,6 +28,7 @@ Ordinary player-facing subcommands implemented by the plugin include:
 - `/ekoth schedule` — show scheduled KOTH times when scheduling is enabled.
 - `/ekoth top [page]` — show KOTH wins leaderboard pages.
 - `/ekoth stats [player]` — show KOTH win statistics.
+- `/ekoth notifications` — toggle public KOTH messages, warnings and passive displays; saved in player data. `/ekoth messages` is an alias.
 - `/ekoth start <arena> [basic|advanced] [solo|guild]` — request a manual KOTH start when the arena/start mode is available.
 
 Staff-only surfaces include stopping/cancelling KOTHs, flare distribution, reload/status/lock controls, and private-test start/join/cancel flows.
@@ -41,7 +42,47 @@ A KOTH can run in either:
 
 LumaGuilds is a required runtime dependency. The plugin resolves guild membership through its guild integration rather than maintaining a separate guild system.
 
-## Start methods
+## Participation and risk configuration
+
+Config version 8 adds opt-in start/participation gates under `fairness`.
+`starter-cooldown-seconds` covers player command, GUI and flare starts across
+arenas. Admin/console starts bypass it. Cooldowns persist in
+`starter-cooldowns.dat` and survive reload/restart. Reservations are saved before
+payment; ordinary failed starts release them. A crash or failed release may leave
+a conservative cooldown until expiry. Corrupt state blocks configured cooldown
+starts rather than resetting limits; preserve the file for operator repair.
+
+`minimum-online-teams` counts distinct online nonspectator, alive/valid accounts
+for solo events and guilds for guild events before player starts.
+`minimum-participating-teams` independently requires enough distinct eligible
+teams to visit the hill during scoring ticks before any win/reward is granted,
+including scheduled/admin events. Both defaults are 0 (disabled). These are not
+unique-human checks and cannot identify alts or prove actual PvP occurred.
+
+Use `{CONTRIBUTORS}` in arena fixed/chance commands for individual reward
+recipients, for example `give {CONTRIBUTORS} diamond 1`. A player must have scored
+on the winning team for at least `contributor-minimum-percent` (default 10) of
+that team's scoring ticks, be online, and still represent that team at payout.
+Each scoring tick gives every eligible capper one second; multiple simultaneous
+cappers do not divide each other's credit. Contested/non-scoring ticks do not
+count. Credit is cumulative over the event even if capture progress resets or
+decays, and cannot transfer between guilds. Chance is rolled per command, then
+the selected command is applied to its eligible recipients. Offline payouts are
+not queued. Legacy `{ALL_ONLINE}` retains its behavior: online guild members in
+guild mode, all online server players in solo mode. It is not a contributor filter.
+
+Set `arenas.<id>.keep-inventory: true` for a lower-risk arena. Experience is also
+preserved by default (`keep-experience: true`). The rule applies only while the
+event is ACTIVE and to authorized private participants/public players dying inside
+that event's named WorldGuard region, or its capture/protected geometry if no named
+region is configured. It does not extend to deaths elsewhere or delayed starts.
+Set `reward-family` to a separate entry under `rewards` for lower money payouts;
+arena fixed/chance commands must also be configured for that variant. No automatic
+discount is assumed. These features require staged Paper/client acceptance before
+production activation; the earlier live snapshot above is not a current readiness
+claim. See [the priority checklist](docs/tasks.md).
+
+## Start origins
 
 The implementation recognizes several event origins:
 

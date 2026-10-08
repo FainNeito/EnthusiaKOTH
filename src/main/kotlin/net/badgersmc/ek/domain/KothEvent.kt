@@ -30,6 +30,7 @@ data class KothEvent(
     val privateTestAccess: PrivateTestAccess? = null,
 ) {
     val scores: MutableMap<TeamId, Double> = ConcurrentHashMap()
+    val scoringParticipation = ScoringParticipation()
     val participants: MutableSet<UUID> = ConcurrentHashMap.newKeySet()
     @Volatile var currentController: TeamId? = null
     @Volatile var previousControllerTime: Double = 0.0
@@ -79,6 +80,9 @@ data class KothArena(
     val rewards: List<String> = emptyList(),
     val chancedRewards: Map<String, Double> = emptyMap(),
     val captureSpeedBonuses: Map<Int, Double> = emptyMap(),
+    val keepInventory: Boolean = false,
+    val keepExperience: Boolean = true,
+    val rewardFamily: String? = null,
 )
 
 data class TeamId(

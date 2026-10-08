@@ -1,4 +1,11 @@
-config-version: 7
+config-version: 8
+
+# Limits are opt-in. Teams are accounts/guilds, not verified unique humans.
+fairness:
+  contributor-minimum-percent: 10.0
+  starter-cooldown-seconds: 0
+  minimum-online-teams: 0
+  minimum-participating-teams: 0
 
 general:
   timezone: "America/New_York"
@@ -69,6 +76,10 @@ rules:
 arenas:
   capture:
     enabled: true
+    keep-inventory: false
+    keep-experience: true
+    # Empty means use rewards.<family>. Set a separate family for lower-risk payouts.
+    reward-family: ""
     family: "capture"
     world: "world"
     worldguard-region: ""

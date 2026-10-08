@@ -26,6 +26,14 @@ class FullFeatureCoverageContractTest {
     }
 
     private fun coverage(): Map<String, List<String>> = linkedMapOf(
+        "participation fairness, risk variants and notification preferences" to listOf(
+            "src/test/kotlin/net/badgersmc/ek/domain/ScoringParticipationTest.kt",
+            "src/test/kotlin/net/badgersmc/ek/application/KothFairnessIntegrationTest.kt",
+            "src/test/kotlin/net/badgersmc/ek/application/StartFairnessTest.kt",
+            "src/test/kotlin/net/badgersmc/ek/infrastructure/persistence/FileStartCooldownStoreTest.kt",
+            "src/test/kotlin/net/badgersmc/ek/infrastructure/bukkit/KeepInventoryListenerTest.kt",
+            "src/test/kotlin/net/badgersmc/ek/infrastructure/bukkit/PlayerNotificationPreferencesTest.kt",
+        ),
         "capture takeover and event modes" to listOf(
             "src/test/kotlin/net/badgersmc/ek/application/CaptureTakeoverTest.kt",
             "src/test/kotlin/net/badgersmc/ek/application/KothEventModeTest.kt",

@@ -39,6 +39,7 @@ class KothPaymentLifecycleTest {
     fun mockBukkit() {
         mockkStatic(Bukkit::class)
         every { Bukkit.getOnlinePlayers() } returns mutableListOf()
+        every { Bukkit.getConsoleSender() } returns mockk(relaxed = true)
         every { Bukkit.broadcast(any<Component>()) } returns 0
         every { Bukkit.getWorld(any<String>()) } returns null
     }

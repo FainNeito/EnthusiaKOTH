@@ -29,8 +29,8 @@ class ConfigLoader(private val plugin: JavaPlugin) {
         val config = plugin.config
         val zone = parseZoneId(config.getString("general.timezone"), plugin.logger::warning)
         val configVersion = config.getInt("config-version", 0)
-        if (configVersion != 7) {
-            plugin.logger.warning("EnthusiaKOTH: config-version is $configVersion; current version is 7. Review config.yml before production use.")
+        if (configVersion != 8) {
+            plugin.logger.warning("EnthusiaKOTH: config-version is $configVersion; current version is 8. Review config.yml before production use.")
         }
         return EnthusiaKothConfig(
             configVersion = configVersion,
@@ -47,6 +47,12 @@ class ConfigLoader(private val plugin: JavaPlugin) {
             rules = RulesConfigLoader.load(config),
             privateTesting = PrivateTestingConfigLoader.load(config),
             locks = LockConfigLoader.load(config),
+            fairness = net.badgersmc.ek.config.FairnessConfig(
+                contributorMinimumPercent = decimal(config, "fairness.contributor-minimum-percent", 10.0).let { if (it.isFinite()) it.coerceIn(0.0, 100.0) else 10.0 },
+                starterCooldownSeconds = integer(config, "fairness.starter-cooldown-seconds", 0).coerceAtLeast(0),
+                minimumOnlineTeams = integer(config, "fairness.minimum-online-teams", 0).coerceAtLeast(0),
+                minimumParticipatingTeams = integer(config, "fairness.minimum-participating-teams", 0).coerceAtLeast(0),
+            ),
         )
     }
 
@@ -94,6 +100,9 @@ class ConfigLoader(private val plugin: JavaPlugin) {
                 rewards = arenaConfig.rewards,
                 chancedRewards = arenaConfig.chancedRewards,
                 captureSpeedBonuses = arenaConfig.captureSpeedBonuses,
+                keepInventory = arenaConfig.keepInventory,
+                keepExperience = arenaConfig.keepExperience,
+                rewardFamily = arenaConfig.rewardFamily,
             )
         }.toMap()
     }
@@ -186,6 +195,9 @@ private object ArenaConfigLoader {
                 rewards = strings(arena, "rewards"),
                 chancedRewards = chancedRewards(arena, "chanced-rewards"),
                 captureSpeedBonuses = captureBonuses(arena, "capture-speed-bonuses"),
+                keepInventory = boolean(arena, "keep-inventory", false),
+                keepExperience = boolean(arena, "keep-experience", true),
+                rewardFamily = arena.getString("reward-family")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() },
             )
         }
     }

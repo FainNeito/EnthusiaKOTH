@@ -45,6 +45,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 class KothQueueTest {
+    private val observer = mockk<org.bukkit.entity.Player>(relaxed = true)
     @TempDir
     lateinit var temp: Path
 
@@ -53,7 +54,8 @@ class KothQueueTest {
     @BeforeEach
     fun mockBukkit() {
         mockkStatic(Bukkit::class)
-        every { Bukkit.getOnlinePlayers() } returns mutableListOf()
+        every { Bukkit.getOnlinePlayers() } returns mutableListOf(observer)
+        every { Bukkit.getConsoleSender() } returns mockk(relaxed = true)
         every { Bukkit.broadcast(any<Component>()) } returns 0
         every { Bukkit.getWorld(any<String>()) } returns null
         every { Bukkit.getPlayer(any<UUID>()) } returns null
@@ -110,7 +112,7 @@ class KothQueueTest {
 
         assertNull(first.activeEvent)
         assertEquals(QueuedEventState.READY, store.load().single().state)
-        verify(exactly = 0) { Bukkit.broadcast(any<Component>()) }
+        verify(exactly = 0) { observer.sendMessage(any<Component>()) }
 
         val restarted = service(store, LockState.UNLOCKED, mapOf(arena.id to arena))
         restarted.processQueue()
@@ -145,7 +147,7 @@ class KothQueueTest {
         assertTrue(store.load().isEmpty())
         restarted.processQueue()
         assertEquals(activationId, restarted.activeEvent?.id)
-        verify(exactly = 1) { Bukkit.broadcast(any<Component>()) }
+        verify(exactly = 1) { observer.sendMessage(any<Component>()) }
     }
 
     @Test
@@ -352,7 +354,7 @@ class KothQueueTest {
 
         assertTrue(unlocked.forceEnd(announce = false))
         assertEquals("beta", unlocked.activeEvent?.arena?.id)
-        verify(exactly = 2) { Bukkit.broadcast(any<Component>()) }
+        verify(exactly = 2) { observer.sendMessage(any<Component>()) }
     }
 
     @Test

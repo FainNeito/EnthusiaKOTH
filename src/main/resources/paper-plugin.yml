@@ -1,5 +1,5 @@
 name: EnthusiaKOTH
-version: '0.2.0'
+version: '0.3.0-SNAPSHOT'
 main: net.badgersmc.ek.EnthusiaKothPlugin
 api-version: '1.21'
 authors: [BadgersMC]

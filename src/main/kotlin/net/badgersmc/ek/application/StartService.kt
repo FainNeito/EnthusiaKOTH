@@ -15,6 +15,9 @@ class StartService(
     private val starter: EventStarter,
     private val logError: (String, Throwable?) -> Unit,
     private val paymentJournal: PaymentJournal = NoopPaymentJournal,
+    private val clock: java.time.Clock = java.time.Clock.systemUTC(),
+    private val cooldowns: StartCooldownStore = InMemoryStartCooldownStore(),
+    private val onlineTeamCount: (TeamMode) -> Int = { 0 },
 ) {
     private val gate = ReentrantLock()
 
@@ -26,12 +29,50 @@ class StartService(
             val arena = request.arena ?: return StartResult.Rejected(StartFailure.INVALID_ARENA)
             return when (request.source) {
                 StartSource.ADMIN_COMMAND, StartSource.CONSOLE -> startAdministrative(request, arena, cfg)
-                StartSource.FLARE -> startFlare(request, arena, cfg)
-                StartSource.PLAYER_COMMAND, StartSource.GUI -> startPaid(request, arena, cfg)
+                StartSource.FLARE -> guardedPlayerStart(request, cfg) { startFlare(request, arena, cfg) }
+                StartSource.PLAYER_COMMAND, StartSource.GUI -> guardedPlayerStart(request, cfg) { startPaid(request, arena, cfg) }
             }
         } finally {
             gate.unlock()
         }
+    }
+
+    private fun guardedPlayerStart(request: StartRequest, cfg: EnthusiaKothConfig, start: () -> StartResult): StartResult {
+        val policy = cfg.fairness
+        if (policy.minimumOnlineTeams > 0) {
+            val count = try { onlineTeamCount(if (request.arena?.ignoreFactions == true) TeamMode.SOLO else request.teamMode) }
+            catch (error: Throwable) {
+                logError("Cannot establish online KOTH team count", error)
+                return StartResult.Rejected(StartFailure.START_FAILED)
+            }
+            if (count < policy.minimumOnlineTeams) return StartResult.Rejected(StartFailure.INSUFFICIENT_TEAMS)
+        }
+        if (policy.starterCooldownSeconds <= 0) return start()
+        val player = request.actor.playerId ?: return StartResult.Rejected(StartFailure.PLAYER_REQUIRED)
+        val now = clock.instant()
+        val previous = try { cooldowns.until(player) } catch (error: Throwable) {
+            logError("Cannot establish KOTH starter cooldown", error)
+            return StartResult.Rejected(StartFailure.COOLDOWN_STATE_FAILED)
+        }
+        if (previous != null && now.isBefore(previous)) return StartResult.Rejected(StartFailure.STARTER_COOLDOWN)
+        if (!saveCooldown(player, now.plusSeconds(policy.starterCooldownSeconds.toLong()))) {
+            return StartResult.Rejected(StartFailure.COOLDOWN_STATE_FAILED)
+        }
+        var accepted = false
+        try {
+            val result = start()
+            accepted = result is StartResult.Started
+            return result
+        } finally {
+            if (!accepted && !saveCooldown(player, previous)) logError("Failed to release KOTH cooldown reservation for $player; cooldown remains conservative", null)
+        }
+    }
+
+    private fun saveCooldown(player: UUID, until: java.time.Instant?): Boolean = try {
+        cooldowns.set(player, until)
+    } catch (error: Throwable) {
+        logError("Cannot persist KOTH starter cooldown for $player", error)
+        false
     }
 
     private fun startAdministrative(request: StartRequest, arena: KothArena, cfg: EnthusiaKothConfig): StartResult {
@@ -240,6 +281,9 @@ enum class StartFailure {
     PAYMENT_JOURNAL_FAILED,
     REFUND_FAILED,
     CONCURRENT_REQUEST,
+    STARTER_COOLDOWN,
+    INSUFFICIENT_TEAMS,
+    COOLDOWN_STATE_FAILED,
 }
 
 sealed interface StartResult {
