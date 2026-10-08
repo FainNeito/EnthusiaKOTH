@@ -57,3 +57,5 @@ Interactive preview: https://enthusia-koth-setup-preview.awareyak.chatgpt.site/p
 Owner-private ChatGPT login. Simulated browser visuals; in-game acceptance deferred.
 Hosted source-only fallback used because bundled Sites packaging requires absent
 bash; Sites deployment succeeded from pushed source e53a8cb. No server action.
+Refined the existing Build workflow to check the exact PR head and reject bundled
+LoreItems/Tags/Advancements compile mirrors; removed a redundant verification job.
