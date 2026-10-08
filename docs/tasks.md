@@ -6,7 +6,7 @@ Requirements and verification: [priorities-verification.md](priorities-verificat
 
 - [ ] BANK-001: review and merge independent [guild-bank repair PR #1](https://github.com/FainNeito/EnthusiaKOTH/pull/1); verify companion runtime and real transaction.
 - [x] KOTH-101: persistent public notification toggle, preserving private-test messages and command replies.
-- [x] KOTH-106: global start/winner announcements; capture updates/displays restricted to configured spawn/warzone regions.
+- [x] KOTH-106: global start/winner announcements; capture updates/displays restricted to configured spawn/warzone/market regions.
 - [x] KOTH-102: team-bound contribution accounting and `{CONTRIBUTORS}` recipients; 10% default.
 - [x] KOTH-103: configurable durable starter cooldown and online-team gate before payment/flare consumption; disabled by default.
 - [x] KOTH-104: arena-scoped active-event inventory/XP preservation; separately selectable money reward family.

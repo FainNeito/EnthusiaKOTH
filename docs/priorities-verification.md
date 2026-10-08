@@ -104,10 +104,14 @@ server upload, activation or restart occurred.
 
 ## Notification audience correction
 
-KOTH-106: Public start and winner announcements SHALL reach opted-in players globally. Capture entry/leave/countdown/reminders and passive capture displays SHALL reach only opted-in players currently inside configured spawn or warzone WorldGuard regions in the event world. Private tests SHALL remain participant-only. Missing regions SHALL NOT fall back to global capture messages. Region IDs default to spawn and warzone and remain configurable.
+KOTH-106: Public start and winner announcements SHALL reach opted-in players globally. Capture entry/leave/countdown/reminders and passive capture displays SHALL reach only opted-in players currently inside configured spawn, warzone or market WorldGuard regions in the event world. Private tests SHALL remain participant-only. Missing regions SHALL NOT fall back to global capture messages. Region IDs default to spawn, warzone and market and remain configurable.
 
 Current main was fetched and remains f80adeb; this continues PR #2. Project-local SPEAR tooling remains absent.
 
 Notification correction evidence: two new routing regressions failed against the old global capture routing, then passed. Java 21 clean test build passed 180 tests. Final test build passed 182 tests with zero failures/errors/skips after the stale public boss-bar rejoin fix. Coverage includes global start/winner, local capture entry/countdown/leave, current audience changes, public rejoin filtering and private rejoin preservation. WorldGuard lookup remains an infrastructure adapter and missing/wrong-world regions fail closed. Real WorldGuard/Paper/client acceptance remains pending.
 
 Updated unmerged local 0.3.0-SNAPSHOT test artifact SHA-256: `5594afb9cb0c2e017706d6e4ca3d6ab717d219bb90b70000cd04651d3368353a`. Earlier 186-test combined bank verification applies to the earlier source tree recorded above; this follow-up changes notification routing and has not been staged or deployed.
+
+KOTH-106 market extension: user requested Market in the local capture audience. Default config and missing-key fallback include `market`; explicitly configured lists remain authoritative. This is a region-list extension with unchanged routing engine; no new behavioral red/green claim or project-local SPEAR tooling pass.
+
+Market extension validation: Java 21 `test build` passed 182 tests with zero failures/errors/skips. The updated simulation routes Market capture notifications, suppresses outside capture updates and retains global winner announcements. Updated unmerged local test JAR SHA-256: `fc824ed98c1d7c68c728b6cb2586197f21ff8ddc993d6de8933b85386242a2d8`. Production and real WorldGuard/client acceptance remain pending.

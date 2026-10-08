@@ -10,7 +10,7 @@ fairness:
 # Capture updates/displays are restricted to these WorldGuard regions in the event world.
 # Start and winner announcements remain global (respecting the notification opt-out).
 notifications:
-  capture-regions: [spawn, warzone]
+  capture-regions: [spawn, warzone, market]
 
 general:
   timezone: "America/New_York"

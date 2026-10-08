@@ -235,4 +235,4 @@ For implementation behavior, use:
 
 For **current Enthusia SMP availability and values**, use the latest `enthusia-server-state` snapshot instead of repository defaults.
 
-Public start and winner announcements are global and respect `/ekoth notifications`. Capture entry/leave/countdown/reminders, boss bars and progress action bars are limited to players currently inside WorldGuard regions from `notifications.capture-regions` (default `spawn`, `warzone`) in the event world. Missing regions or an empty list suppress these local updates; no global fallback. Private test messages remain participant-only.
+Public start and winner announcements are global and respect `/ekoth notifications`. Capture entry/leave/countdown/reminders, boss bars and progress action bars are limited to players currently inside WorldGuard regions from `notifications.capture-regions` (default `spawn`, `warzone`, `market`) in the event world. Missing regions or an empty list suppress these local updates; no global fallback. Private test messages remain participant-only.
