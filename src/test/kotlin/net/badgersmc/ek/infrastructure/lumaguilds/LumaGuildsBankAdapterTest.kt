@@ -10,11 +10,15 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import java.util.UUID
 
-class LumaGuildsBankAdapterTest {
-    private val guildId = UUID.randomUUID()
-    private val lookup = mockk<GuildLookup>(relaxed = true)
-    private val services = mockk<ServicesManager>()
-    private val adapter = LumaGuildsAdapter()
+private const val REWARD_REASON = "KOTH reward"
+private const val DEBIT_REASON = "KOTH debit"
+private const val RETRY_REASON = "retry"
+
+abstract class GuildBankAdapterFixture {
+    protected val guildId = UUID.randomUUID()
+    protected val lookup = mockk<GuildLookup>(relaxed = true)
+    protected val services = mockk<ServicesManager>()
+    protected val adapter = LumaGuildsAdapter()
 
     @BeforeEach
     fun setup() {
@@ -25,20 +29,22 @@ class LumaGuildsBankAdapterTest {
 
     @AfterEach
     fun cleanup() { unmockkAll() }
+}
 
+class LumaGuildsBankAdapterTest : GuildBankAdapterFixture() {
     @Test
     fun `rewards credit system bank without personal actor`() {
-        every { lookup.systemBankDeposit(guildId, 250L, "KOTH reward") } returns true
-        assertTrue(adapter.depositToVault(guildId, 250.0, "KOTH reward"))
-        verify(exactly = 1) { lookup.systemBankDeposit(guildId, 250L, "KOTH reward") }
+        every { lookup.systemBankDeposit(guildId, 250L, REWARD_REASON) } returns true
+        assertTrue(adapter.depositToVault(guildId, 250.0, REWARD_REASON))
+        verify(exactly = 1) { lookup.systemBankDeposit(guildId, 250L, REWARD_REASON) }
         verify(exactly = 0) { lookup.bankDeposit(any(), any(), any(), any()) }
     }
 
     @Test
     fun `debits use system bank without personal actor`() {
-        every { lookup.systemBankWithdraw(guildId, 250L, "KOTH debit") } returns true
-        assertTrue(adapter.withdrawFromVault(guildId, 250.0, "KOTH debit"))
-        verify(exactly = 1) { lookup.systemBankWithdraw(guildId, 250L, "KOTH debit") }
+        every { lookup.systemBankWithdraw(guildId, 250L, DEBIT_REASON) } returns true
+        assertTrue(adapter.withdrawFromVault(guildId, 250.0, DEBIT_REASON))
+        verify(exactly = 1) { lookup.systemBankWithdraw(guildId, 250L, DEBIT_REASON) }
         verify(exactly = 0) { lookup.bankWithdraw(any(), any(), any(), any()) }
     }
 
@@ -66,6 +72,9 @@ class LumaGuildsBankAdapterTest {
         verify(exactly = 0) { lookup.bankWithdraw(any(), any(), any(), any()) }
     }
 
+}
+
+class LumaGuildsBankCompatibilityTest : GuildBankAdapterFixture() {
     @Test
     fun `old provider missing system API fails closed`() {
         every { lookup.systemBankDeposit(any(), any(), any()) } throws NoSuchMethodError("old API")
@@ -79,9 +88,9 @@ class LumaGuildsBankAdapterTest {
     @Test
     fun `missing provider can be retried after registration`() {
         every { services.load(GuildLookup::class.java) } returnsMany listOf(null, lookup)
-        every { lookup.systemBankDeposit(guildId, 100L, "retry") } returns true
-        assertFalse(adapter.depositToVault(guildId, 100.0, "retry"))
-        assertTrue(adapter.depositToVault(guildId, 100.0, "retry"))
+        every { lookup.systemBankDeposit(guildId, 100L, RETRY_REASON) } returns true
+        assertFalse(adapter.depositToVault(guildId, 100.0, RETRY_REASON))
+        assertTrue(adapter.depositToVault(guildId, 100.0, RETRY_REASON))
     }
 
     @Test
