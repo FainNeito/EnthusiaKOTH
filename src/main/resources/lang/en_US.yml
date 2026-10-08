@@ -1,7 +1,11 @@
 prefix: "<gradient:#FF7272:#FFC976><shadow:#000000:1>[Koth]</shadow></gradient> "
 
 command:
+  notifications:
+    enabled: "<prefix><green>KOTH notifications enabled."
+    disabled: "<prefix><gray>KOTH notifications disabled. Use /ekoth notifications to enable them."
   help:
+    notifications: "<prefix><green>/ekoth notifications <gray>- Toggle KOTH notifications"
     header: "<shadow:#000000:1><prefix><dark_red><bold>EnthusiaKOTH</bold> <dark_gray>Commands"
     gui: "<prefix><green>/ekoth gui <gray>- Open KOTH GUI"
     schedule: "<prefix><green>/ekoth schedule <gray>- Show KOTH schedule"
@@ -22,6 +26,9 @@ command:
     started_from_gui: "<prefix><green>Started <yellow><arena> <green>from the GUI."
 
   error:
+    starter_cooldown: "<prefix><red>Your KOTH start cooldown has not expired."
+    insufficient_teams: "<prefix><red>There are not enough eligible online teams to start this KOTH."
+    cooldown_state_failed: "<prefix><red>KOTH starter limits could not be saved. No money was charged; contact staff."
     no_permission: "<prefix><red>You don't have permission."
     no_permission_start: "<prefix><red>You don't have permission to start KOTHs."
     not_a_player: "<prefix><red>Only players can use this."

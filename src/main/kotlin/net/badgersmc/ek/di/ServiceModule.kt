@@ -51,6 +51,7 @@ import javax.sql.DataSource
 class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     private val configLoader = ConfigLoader(plugin)
     private val clock: Clock = Clock.systemUTC()
+    private val notificationPreferences = net.badgersmc.ek.infrastructure.bukkit.PlayerNotificationPreferences(org.bukkit.NamespacedKey(plugin, "notifications-disabled"))
     @Volatile private var _config: EnthusiaKothConfig = configLoader.load()
     @Volatile private var _arenas: Map<String, KothArena> = configLoader.loadArenas()
 
@@ -164,7 +165,14 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             config().rules.rules[family] ?: RuleSet.PERMISSIVE
         },
     )
-    val displayService = DisplayService(plugin, langService).also {
+    val worldGuardRegionService = WorldGuardRegionService()
+    private fun captureAudience(event: net.badgersmc.ek.domain.KothEvent, player: org.bukkit.entity.Player): Boolean =
+        config().captureNotificationRegions.any { region ->
+            worldGuardRegionService.contains(event.arena.zone.worldName, region, player.location)
+        }
+    val displayService: DisplayService = DisplayService(plugin, langService) { player ->
+        notificationPreferences.enabled(player) && kothService.activeEvent?.let { captureAudience(it, player) } == true
+    }.also {
         plugin.server.pluginManager.registerEvents(it, plugin)
     }
     val objectiveMarkerService = ObjectiveMarkerService()
@@ -179,7 +187,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     )
     private var refundProviderUnavailableLogged = false
 
-    val kothService = KothService(
+    val kothService: KothService = KothService(
         cfgLoader = { config() },
         stats = statsRepository,
         economy = vaultEconomy,
@@ -198,6 +206,9 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             error?.let { plugin.logger.severe(it.stackTraceToString()) }
         },
         eventTerminated = restrictionService::clearEvent,
+        notificationsEnabled = notificationPreferences::enabled,
+        toggleNotifications = notificationPreferences::toggle,
+        captureAudience = ::captureAudience,
     )
     val startService = StartService(
         config = { config() },
@@ -236,6 +247,15 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             error?.let { plugin.logger.severe(it.stackTraceToString()) }
         },
         paymentJournal = paymentJournal,
+        clock = clock,
+        cooldowns = net.badgersmc.ek.infrastructure.persistence.FileStartCooldownStore(File(plugin.dataFolder, "starter-cooldowns.dat")) { message, error ->
+            plugin.logger.severe(message)
+            plugin.logger.severe(error.stackTraceToString())
+        },
+        onlineTeamCount = { mode ->
+            Bukkit.getOnlinePlayers().filter { it.isValid && !it.isDead && it.gameMode != org.bukkit.GameMode.SPECTATOR }
+                .mapNotNull { if (mode == net.badgersmc.ek.domain.TeamMode.SOLO) it.uniqueId else lumaGuildsAdapter.playerGuildId(it) }.distinct().size
+        },
     )
     val scheduleService = ScheduleService(
         cfgLoader = { config() },
@@ -244,7 +264,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         stateStore = operationalState,
         clock = clock,
         warningSink = { arenaId, minutes ->
-            Bukkit.getOnlinePlayers().forEach { player ->
+            Bukkit.getOnlinePlayers().filter(notificationPreferences::enabled).forEach { player ->
                 player.sendMessage(
                     langService.msg(
                         "koth.warning_minutes",
@@ -261,13 +281,20 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
         discordWarningSink = discordWebhook::sendPreStart,
     )
-    val worldGuardRegionService = WorldGuardRegionService()
+    val keepInventoryListener = net.badgersmc.ek.infrastructure.bukkit.KeepInventoryListener(
+        activeEvent = { kothService.activeEvent },
+        contains = { arena, location ->
+            arena.worldGuardRegion?.let { worldGuardRegionService.contains(arena.zone.worldName, it, location) }
+                ?: (arena.zone.contains(location) || arena.protectedRegion?.contains(location) == true)
+        },
+    ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
 
     val flareService = FlareService(
         cfgLoader = { config() },
         startService = startService,
         arenas = { arenas() },
         lang = langService,
+        notificationsEnabled = notificationPreferences::enabled,
     )
     val kothCommand = KothCommand(
         plugin = plugin,

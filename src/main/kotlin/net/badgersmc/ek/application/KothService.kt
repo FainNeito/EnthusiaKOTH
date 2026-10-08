@@ -73,7 +73,12 @@ class KothService(
     private val clock: Clock,
     private val logger: (String, Throwable?) -> Unit,
     private val eventTerminated: (UUID) -> Unit = {},
+    private val notificationsEnabled: (Player) -> Boolean = { true },
+    private val toggleNotifications: (Player) -> Boolean = { true },
+    private val captureAudience: (KothEvent, Player) -> Boolean = { _, _ -> false },
 ) {
+    fun notificationEnabled(player: Player): Boolean = notificationsEnabled(player)
+    fun toggleNotification(player: Player): Boolean = toggleNotifications(player)
     companion object {
         private const val QUEUE_RETRY_SECONDS = 10L
 
@@ -246,7 +251,7 @@ class KothService(
 
         if (cfg.progressBar.enabled && event.currentController != null) {
             val progress = progressBar(event, cfg.progressBar)
-            playersInZone.forEach { it.sendActionBar(progress) }
+            playersInZone.filter { event.isPrivateTest || (notificationsEnabled(it) && captureAudience(event, it)) }.forEach { it.sendActionBar(progress) }
         }
 
         val reminder = cfg.reminders
@@ -262,15 +267,27 @@ class KothService(
                         "capper" to (capperName(event) ?: "None"),
                         "time_left" to formatTime(event.endsAt.epochSecond - now.epochSecond),
                     ),
+                    captureOnly = true,
                 )
             } else reminderCounters[event.arena.id] = counter - 1
         }
 
         val teamsInZone = resolveTeams(playersInZone, event)
+        event.scoringParticipation.observe(teamsInZone)
+        val previousScores = event.scores.toMap()
         when {
             arena.family.equals("moving", true) -> applyMovingScore(event, teamsInZone)
             arena.family.equals("conquest", true) -> tickConquest(event, arena, teamsInZone, playersInZone)
             else -> tickCaptureFamily(event, arena, teamsInZone)
+        }
+        val controller = event.currentController
+        if (controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0)) {
+            event.scoringParticipation.record(controller, playersInZone.filter { teamFor(it, event) == controller }.map { it.uniqueId }.toSet())
+        }
+        if (!arena.family.equals("moving", true) && !arena.family.equals("conquest", true) &&
+            controller != null && (event.scores[controller] ?: 0.0) >= arena.captureSeconds) {
+            finishEvent(event, controller)
+            return
         }
 
         val contested = teamsInZone.size > 1
@@ -313,6 +330,7 @@ class KothService(
                     "koth_name" to arena.id,
                     "captime" to formatTime(arena.captureSeconds.toLong()),
                 ),
+                captureOnly = true,
             )
         }
         if (step.progressCurrent) tickCaptureProgress(event, arena)
@@ -329,6 +347,7 @@ class KothService(
                 "koth_name" to event.arena.id,
                 "time_left" to formatTime(event.arena.captureSeconds.toLong()),
             ),
+            captureOnly = true,
         )
     }
 
@@ -358,9 +377,9 @@ class KothService(
                     "koth_name" to arena.id,
                     "time_left" to formatTime(secondsLeft.toLong()),
                 ),
+                captureOnly = true,
             )
         }
-        if (next >= arena.captureSeconds) finishEvent(event, controller)
     }
 
     private fun playersInStaticCaptureZone(event: KothEvent): List<Player> =
@@ -403,8 +422,9 @@ class KothService(
         return winner
     }
 
-    private fun finishEvent(event: KothEvent, winner: TeamId?) {
+    private fun finishEvent(event: KothEvent, candidate: TeamId?) {
         if (activeEvent !== event) return
+        val winner = candidate.takeIf { event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams }
         event.state = EventState.COMPLETED
         val wasContested = event.scores.size > 1
         try {
@@ -477,8 +497,7 @@ class KothService(
     private fun executeRewards(event: KothEvent, winner: TeamId) {
         val arena = event.arena
         val name = sanitizeName(teamName(winner))
-        val guildId = winner.id.takeIf { winner.mode == TeamMode.GUILD }
-        cfgLoader().rewards[arena.family.lowercase()]?.let { reward ->
+        cfgLoader().rewards[(arena.rewardFamily ?: arena.family).lowercase()]?.let { reward ->
             if (winner.mode == TeamMode.GUILD && reward.guildVaultMoney > 0.0) {
                 val deposited = runCatching { guilds.depositToVault(winner.id, reward.guildVaultMoney, "KOTH win reward") }
                     .onFailure { logger("Guild reward deposit threw for ${winner.id} amount ${reward.guildVaultMoney}", it) }
@@ -492,20 +511,34 @@ class KothService(
             }
         }
         arena.rewards.forEach { command ->
-            runCatching { executeRewardCommand(command, event, name, guildId) }
+            runCatching { executeRewardCommand(command, event, name, winner) }
                 .onFailure { logger("KOTH reward command failed for '${arena.id}'", it) }
         }
         arena.chancedRewards.forEach { (command, chance) ->
             if (ThreadLocalRandom.current().nextDouble() * 100.0 < chance) {
-                runCatching { executeRewardCommand(command, event, name, guildId) }
+                runCatching { executeRewardCommand(command, event, name, winner) }
                     .onFailure { logger("KOTH chanced reward command failed for '${arena.id}'", it) }
             }
         }
     }
 
-    private fun executeRewardCommand(command: String, event: KothEvent, name: String, guildId: UUID?) {
+    private fun executeRewardCommand(command: String, event: KothEvent, name: String, winner: TeamId) {
+        val guildId = winner.id.takeIf { winner.mode == TeamMode.GUILD }
         if (executeBankReward(command, guildId)) return
         val resolved = command.replace("{PLAYER}", name).replace("{FACTION}", name).replace("{KOTH}", event.arena.id)
+        if (resolved.contains("{CONTRIBUTORS}")) {
+            event.scoringParticipation.eligible(winner, cfgLoader().fairness.contributorMinimumPercent)
+                .mapNotNull { Bukkit.getPlayer(it) }.filter { teamFor(it, event) == winner }
+                .forEach { player ->
+                    val rewardCommand = resolved.replace("{CONTRIBUTORS}", player.name).replace("{ALL_ONLINE}", player.name)
+                    runCatching {
+                        if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), rewardCommand)) {
+                            logger("KOTH reward command was rejected: $rewardCommand", null)
+                        }
+                    }.onFailure { logger("KOTH contributor reward command failed for ${player.uniqueId}: $rewardCommand", it) }
+                }
+            return
+        }
         if (resolved.contains("{ALL_ONLINE}") && guildId != null) {
             guilds.onlineMembers(guildId).forEach { member ->
                 val command = resolved.replace("{ALL_ONLINE}", member.name)
@@ -941,13 +974,16 @@ class KothService(
         return lang.msg("progress_bar.format", "progress_bar" to bar)
     }
 
-    private fun eventRecipients(event: KothEvent): List<Player> = if (event.isPrivateTest) {
+    private fun eventRecipients(event: KothEvent, captureOnly: Boolean = true): List<Player> = if (event.isPrivateTest) {
         event.participants.mapNotNull { Bukkit.getPlayer(it) }
-    } else Bukkit.getOnlinePlayers().toList()
+    } else Bukkit.getOnlinePlayers().filter { notificationsEnabled(it) && (!captureOnly || captureAudience(event, it)) }
 
-    private fun sendEventMessage(event: KothEvent, message: net.kyori.adventure.text.Component) {
-        if (event.isPrivateTest) eventRecipients(event).forEach { it.sendMessage(message) }
-        else Bukkit.broadcast(message)
+    private fun sendEventMessage(event: KothEvent, message: net.kyori.adventure.text.Component, captureOnly: Boolean = false) {
+        if (event.isPrivateTest) eventRecipients(event, captureOnly).forEach { it.sendMessage(message) }
+        else {
+            eventRecipients(event, captureOnly).forEach { it.sendMessage(message) }
+            Bukkit.getConsoleSender().sendMessage(message)
+        }
     }
 
     private fun formatTime(seconds: Long): String {

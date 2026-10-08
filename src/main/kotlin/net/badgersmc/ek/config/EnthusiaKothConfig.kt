@@ -5,7 +5,7 @@ import net.badgersmc.ek.infrastructure.restriction.RuleSet
 import java.time.ZoneId
 
 data class EnthusiaKothConfig(
-    val configVersion: Int = 7,
+    val configVersion: Int = 8,
     val timezone: ZoneId = ZoneId.of("America/New_York"),
     val manualStart: ManualStartConfig = ManualStartConfig(),
     val schedule: ScheduleConfig = ScheduleConfig(),
@@ -19,6 +19,15 @@ data class EnthusiaKothConfig(
     val rules: FamilyRulesConfig = FamilyRulesConfig(),
     val privateTesting: PrivateTestingConfig = PrivateTestingConfig(),
     val locks: LockConfig = LockConfig(),
+    val fairness: FairnessConfig = FairnessConfig(),
+    val captureNotificationRegions: List<String> = listOf("spawn", "warzone", "market"),
+)
+
+data class FairnessConfig(
+    val contributorMinimumPercent: Double = 10.0,
+    val starterCooldownSeconds: Int = 0,
+    val minimumOnlineTeams: Int = 0,
+    val minimumParticipatingTeams: Int = 0,
 )
 
 data class ManualStartConfig(val enabled: Boolean = true, val basicCost: Double = 0.0, val advancedCost: Double = 0.0, val delaySeconds: Int = 0)
@@ -49,6 +58,9 @@ data class ArenaConfig(
     val rewards: List<String> = emptyList(),
     val chancedRewards: Map<String, Double> = emptyMap(),
     val captureSpeedBonuses: Map<Int, Double> = emptyMap(),
+    val keepInventory: Boolean = false,
+    val keepExperience: Boolean = true,
+    val rewardFamily: String? = null,
 )
 
 data class PositionConfig(val x: Double = 0.0, val y: Double = 80.0, val z: Double = 0.0)

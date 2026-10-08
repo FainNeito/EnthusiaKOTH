@@ -15,6 +15,9 @@ class StartService(
     private val starter: EventStarter,
     private val logError: (String, Throwable?) -> Unit,
     private val paymentJournal: PaymentJournal = NoopPaymentJournal,
+    private val clock: java.time.Clock = java.time.Clock.systemUTC(),
+    private val cooldowns: StartCooldownStore = InMemoryStartCooldownStore(),
+    private val onlineTeamCount: (TeamMode) -> Int = { 0 },
 ) {
     private val gate = ReentrantLock()
 
@@ -34,6 +37,44 @@ class StartService(
         }
     }
 
+    private fun guardedPlayerStart(request: StartRequest, cfg: EnthusiaKothConfig, start: () -> StartResult): StartResult {
+        val policy = cfg.fairness
+        if (policy.minimumOnlineTeams > 0) {
+            val count = try { onlineTeamCount(if (request.arena?.ignoreFactions == true) TeamMode.SOLO else request.teamMode) }
+            catch (error: Throwable) {
+                logError("Cannot establish online KOTH team count", error)
+                return StartResult.Rejected(StartFailure.START_FAILED)
+            }
+            if (count < policy.minimumOnlineTeams) return StartResult.Rejected(StartFailure.INSUFFICIENT_TEAMS)
+        }
+        if (policy.starterCooldownSeconds <= 0) return start()
+        val player = request.actor.playerId ?: return StartResult.Rejected(StartFailure.PLAYER_REQUIRED)
+        val now = clock.instant()
+        val previous = try { cooldowns.until(player) } catch (error: Throwable) {
+            logError("Cannot establish KOTH starter cooldown", error)
+            return StartResult.Rejected(StartFailure.COOLDOWN_STATE_FAILED)
+        }
+        if (previous != null && now.isBefore(previous)) return StartResult.Rejected(StartFailure.STARTER_COOLDOWN)
+        if (!saveCooldown(player, now.plusSeconds(policy.starterCooldownSeconds.toLong()))) {
+            return StartResult.Rejected(StartFailure.COOLDOWN_STATE_FAILED)
+        }
+        var accepted = false
+        try {
+            val result = start()
+            accepted = result is StartResult.Started
+            return result
+        } finally {
+            if (!accepted && !saveCooldown(player, previous)) logError("Failed to release KOTH cooldown reservation for $player; cooldown remains conservative", null)
+        }
+    }
+
+    private fun saveCooldown(player: UUID, until: java.time.Instant?): Boolean = try {
+        cooldowns.set(player, until)
+    } catch (error: Throwable) {
+        logError("Cannot persist KOTH starter cooldown for $player", error)
+        false
+    }
+
     private fun startAdministrative(request: StartRequest, arena: KothArena, cfg: EnthusiaKothConfig): StartResult {
         if (!request.actor.isConsole && !request.actor.isAdmin) return StartResult.Rejected(StartFailure.NO_PERMISSION)
         if (!cfg.locks.state.allows(EventKind.ADMIN)) return StartResult.Rejected(StartFailure.LOCKED)
@@ -46,7 +87,7 @@ class StartService(
         if (!request.actor.canUseFlare) return StartResult.Rejected(StartFailure.NO_PERMISSION)
         if (!cfg.locks.state.allows(EventKind.FLARE)) return StartResult.Rejected(StartFailure.LOCKED)
         if (hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
-        return attemptStart(arena, EventKind.FLARE, 0, null, request.teamMode)
+        return guardedPlayerStart(request, cfg) { attemptStart(arena, EventKind.FLARE, 0, null, request.teamMode) }
     }
 
     private fun startPaid(request: StartRequest, arena: KothArena, cfg: EnthusiaKothConfig): StartResult {
@@ -66,6 +107,18 @@ class StartService(
         if (!cfg.locks.state.allows(kind)) return StartResult.Rejected(StartFailure.LOCKED)
         if (hasConflictingEvent()) return StartResult.Rejected(StartFailure.ALREADY_ACTIVE)
 
+        return guardedPlayerStart(request, cfg) { chargeAndStart(request, arena, cfg, playerId, tier, kind) }
+    }
+
+    private fun chargeAndStart(
+        request: StartRequest,
+        arena: KothArena,
+        cfg: EnthusiaKothConfig,
+        playerId: UUID,
+        tier: StartTier,
+        kind: EventKind,
+    ): StartResult {
+        val manual = cfg.manualStart
         val cost = when (tier) {
             StartTier.BASIC -> manual.basicCost
             StartTier.ADVANCED -> manual.advancedCost
@@ -240,6 +293,9 @@ enum class StartFailure {
     PAYMENT_JOURNAL_FAILED,
     REFUND_FAILED,
     CONCURRENT_REQUEST,
+    STARTER_COOLDOWN,
+    INSUFFICIENT_TEAMS,
+    COOLDOWN_STATE_FAILED,
 }
 
 sealed interface StartResult {

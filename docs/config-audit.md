@@ -5,6 +5,13 @@
 | Key | Runtime owner | Status |
 |---|---|---|
 | `config-version` | `ConfigLoader` | Validated and warns on mismatch |
+| `fairness.contributor-minimum-percent` | `ScoringParticipation` / reward commands | Default 10; applies only to `{CONTRIBUTORS}` |
+| `fairness.starter-cooldown-seconds` | `StartService` / durable cooldown store | Default 0; covers player command, GUI and flare starts |
+| `fairness.minimum-online-teams` | `StartService` / guild adapter | Default 0; counts distinct eligible online accounts in solo mode or guilds in guild mode before player start |
+| `fairness.minimum-participating-teams` | completion policy | Default 0; withholds rewards and win credit unless enough teams visited the hill |
+| `arenas.*.keep-inventory` | death listener | Default false; active-event arena/participant scope |
+| `arenas.*.keep-experience` | death listener | Default true; takes effect only with keep-inventory |
+| `arenas.*.reward-family` | completion money rewards | Optional independent `rewards.<name>` selection; no fallback when an explicit name is missing |
 | `general.timezone` | `ConfigLoader` / `ScheduleService` | Parsed once with a guarded `America/New_York` fallback |
 | `locks.state` | `ServiceModule` / start services | Loaded, persisted, consumed |
 | `manual-start.enabled` | `StartService` | Consumed |
@@ -20,6 +27,7 @@
 | `progress-bar.enabled/length/character` | `KothService` | Consumed; text template lives in language file |
 | `reminders.enabled/interval-seconds` | `KothService` | Consumed; text template lives in language file |
 | `discord.*` | Discord and scheduling integrations | Consumed; HTTP lifecycle is repaired in PR F |
+| `notifications.capture-regions` | WorldGuard audience adapter / KOTH messages and displays | Region IDs in event world; defaults spawn/warzone/market; empty or missing regions do not broadcast captures globally |
 | `display.zone-border` | display lifecycle | Consumed |
 | `rules.defaults.*` | restriction service | Consumed |
 | `arenas.*` | `ConfigLoader`, scheduling, capture, rewards | Consumed |

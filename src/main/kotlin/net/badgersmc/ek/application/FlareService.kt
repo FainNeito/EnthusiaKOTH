@@ -16,6 +16,7 @@ class FlareService(
     private val startService: StartService,
     private val arenas: () -> Map<String, KothArena>,
     private val lang: net.badgersmc.nexus.i18n.LangService,
+    private val notificationsEnabled: (Player) -> Boolean = { true },
 ) {
     companion object {
         val FLARE_KOTH_KEY = NamespacedKey("ekoth", "koth-flare")
@@ -74,14 +75,13 @@ class FlareService(
 
         player.sendMessage(lang.msg("flare.started", "koth" to arenaId))
         val location = arena.zone.center(player.world)
-        Bukkit.broadcast(
-            lang.msg(
+        val message = lang.msg(
                 "flare.started_broadcast",
                 "player" to player.name,
                 "koth" to arenaId,
                 "location" to "${location.blockX}, ${location.blockY}, ${location.blockZ}",
-            ),
-        )
+            )
+        Bukkit.getOnlinePlayers().filter(notificationsEnabled).forEach { it.sendMessage(message) }
         return true
     }
 }

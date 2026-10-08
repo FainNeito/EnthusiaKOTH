@@ -82,6 +82,10 @@ class KothCommand(
             "status" -> status(sender)
             "lock" -> lock(sender, args.getOrNull(1) ?: "")
             "arena" -> arena(sender, args)
+            "notifications", "messages" -> {
+                if (sender !is Player) sender.sendMessage(lang.msg("command.error.not_a_player"))
+                else sender.sendMessage(lang.msg(if (kothService.toggleNotification(sender)) "command.notifications.enabled" else "command.notifications.disabled"))
+            }
             else -> sendHelp(sender)
         }
         return true
@@ -89,7 +93,7 @@ class KothCommand(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
         if (args.size == 1) {
-            val options = mutableListOf("gui", "schedule", "top", "stats", "private")
+            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications")
             if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {
                 options += "start"
             }
@@ -139,6 +143,7 @@ class KothCommand(
     private fun sendHelp(sender: CommandSender) {
         sender.sendMessage(lang.msg("command.help.header"))
         listOf("gui", "schedule", "top", "stats").forEach { sender.sendMessage(lang.msg("command.help.$it")) }
+        sender.sendMessage(lang.msg("command.help.notifications"))
         if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {
             sender.sendMessage(lang.msg("command.help.start"))
         }
@@ -318,6 +323,9 @@ class KothCommand(
                 lang.msg(if (fromGui) "command.success.started_from_gui" else "command.success.started", "arena" to arenaId),
             )
             is StartResult.Rejected -> when (result.failure) {
+                StartFailure.STARTER_COOLDOWN -> sender.sendMessage(lang.msg("command.error.starter_cooldown"))
+                StartFailure.INSUFFICIENT_TEAMS -> sender.sendMessage(lang.msg("command.error.insufficient_teams"))
+                StartFailure.COOLDOWN_STATE_FAILED -> sender.sendMessage(lang.msg("command.error.cooldown_state_failed"))
                 StartFailure.NO_PERMISSION -> sender.sendMessage(lang.msg("command.error.no_permission_start"))
                 StartFailure.FEATURE_DISABLED -> sender.sendMessage(lang.msg("command.error.manual_start_disabled"))
                 StartFailure.LOCKED -> sender.sendMessage(lang.msg("command.error.locked"))
