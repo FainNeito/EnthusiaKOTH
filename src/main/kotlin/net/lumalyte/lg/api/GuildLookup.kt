@@ -6,6 +6,7 @@ package net.lumalyte.lg.api
 import java.util.UUID
 
 interface GuildLookup {
+    fun getActiveAllianceGraph(): Map<UUID, Set<UUID>>? = null
     fun getPlayerGuildIds(playerId: UUID): Set<UUID>
     fun getGuild(guildId: UUID): GuildSummary?
     fun getAllGuilds(): List<GuildSummary>

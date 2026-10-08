@@ -58,6 +58,21 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     fun config(): EnthusiaKothConfig = _config
     fun arenas(): Map<String, KothArena> = _arenas
 
+    private fun countOnlineSides(mode: net.badgersmc.ek.domain.TeamMode): Int {
+        val players = Bukkit.getOnlinePlayers().filter { it.isValid && !it.isDead && it.gameMode != org.bukkit.GameMode.SPECTATOR }
+        if (!config().rewardProtection.enabled) return players.mapNotNull {
+            if (mode == net.badgersmc.ek.domain.TeamMode.SOLO) it.uniqueId else lumaGuildsAdapter.playerGuildId(it)
+        }.distinct().size
+        val roster = lumaGuildsAdapter.protectionRoster()
+        val match = net.badgersmc.ek.application.ProtectedMatch(config().rewardProtection, mode, roster)
+        return match.sideCount(players.mapNotNull { player ->
+            val evidence = net.badgersmc.ek.application.AccountEvidence(java.time.Instant.ofEpochMilli(player.firstPlayed),
+                player.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE).toLong() / 20)
+            if (!match.accountEligible(evidence, clock.instant())) null
+            else match.team(player.uniqueId, lumaGuildsAdapter.playerGuildIds(player.uniqueId))
+        })
+    }
+
     fun setLockState(state: LockState) {
         plugin.config.set("locks.state", state.name)
         plugin.saveConfig()
@@ -168,7 +183,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     val restrictionService = RestrictionService(
         rulesForArena = { arenaId ->
             val family = arenas()[arenaId]?.family?.lowercase() ?: arenaId.lowercase()
-            config().rules.rules[family] ?: RuleSet.PERMISSIVE
+            if (config().followWarzoneCombat) RuleSet.PERMISSIVE else config().rules.rules[family] ?: RuleSet.PERMISSIVE
         },
     )
     val worldGuardRegionService = WorldGuardRegionService()
@@ -196,6 +211,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     val kothService: KothService = KothService(
         cfgLoader = { config() },
         stats = statsRepository,
+        protectionStore = net.badgersmc.ek.infrastructure.persistence.SqlRewardProtectionStore(dataSource).also { it.init() },
         economy = vaultEconomy,
         guilds = lumaGuildsAdapter,
         displayService = displayService,
@@ -272,9 +288,9 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             plugin.logger.severe(error.stackTraceToString())
         },
         onlineTeamCount = { mode ->
-            Bukkit.getOnlinePlayers().filter { it.isValid && !it.isDead && it.gameMode != org.bukkit.GameMode.SPECTATOR }
-                .mapNotNull { if (mode == net.badgersmc.ek.domain.TeamMode.SOLO) it.uniqueId else lumaGuildsAdapter.playerGuildId(it) }.distinct().size
+            countOnlineSides(mode)
         },
+        protectionReady = { mode -> countOnlineSides(mode) >= 2 },
     )
     val scheduleService = ScheduleService(
         cfgLoader = { config() },

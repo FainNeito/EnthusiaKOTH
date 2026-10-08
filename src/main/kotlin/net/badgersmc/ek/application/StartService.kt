@@ -18,6 +18,7 @@ class StartService(
     private val clock: java.time.Clock = java.time.Clock.systemUTC(),
     private val cooldowns: StartCooldownStore = InMemoryStartCooldownStore(),
     private val arenaConflict: ((KothArena) -> Boolean)? = null,
+    private val protectionReady: (TeamMode) -> Boolean = { false },
     private val onlineTeamCount: (TeamMode) -> Int = { 0 },
 ) {
     private val gate = ReentrantLock()
@@ -40,6 +41,10 @@ class StartService(
 
     private fun guardedPlayerStart(request: StartRequest, cfg: EnthusiaKothConfig, start: () -> StartResult): StartResult {
         val policy = cfg.fairness
+        if (cfg.rewardProtection.enabled) {
+            val mode = if (request.arena?.ignoreFactions == true) TeamMode.SOLO else request.teamMode
+            if (!runCatching { protectionReady(mode) }.getOrDefault(false)) return StartResult.Rejected(StartFailure.START_FAILED)
+        }
         if (policy.minimumOnlineTeams > 0) {
             val count = try { onlineTeamCount(if (request.arena?.ignoreFactions == true) TeamMode.SOLO else request.teamMode) }
             catch (error: Throwable) {

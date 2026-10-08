@@ -58,6 +58,16 @@ class ConfigLoader(private val plugin: JavaPlugin) {
                 minimumOnlineTeams = integer(config, "fairness.minimum-online-teams", 0).coerceAtLeast(0),
                 minimumParticipatingTeams = integer(config, "fairness.minimum-participating-teams", 0).coerceAtLeast(0),
             ),
+            followWarzoneCombat = boolean(config, "combat.follow-warzone-rotation", true),
+            rewardProtection = net.badgersmc.ek.application.RewardProtectionConfig(
+                enabled = boolean(config, "reward-protection.enabled", false),
+                minimumOppositionSeconds = integer(config, "reward-protection.minimum-opposition-seconds", 30).coerceAtLeast(1),
+                minimumAccountAgeDays = integer(config, "reward-protection.minimum-account-age-days", 7).coerceAtLeast(0),
+                minimumPlaytimeMinutes = integer(config, "reward-protection.minimum-playtime-minutes", 120).coerceAtLeast(0),
+                maximumRecipientCommands = integer(config, "reward-protection.maximum-recipient-commands", 1).coerceIn(0, 100),
+                repeatedOpponentWindowHours = integer(config, "reward-protection.repeated-opponent-window-hours", 24).coerceAtLeast(1),
+                maximumRepeatedWins = integer(config, "reward-protection.maximum-repeated-wins", 2).coerceAtLeast(0),
+            ),
         )
     }
 

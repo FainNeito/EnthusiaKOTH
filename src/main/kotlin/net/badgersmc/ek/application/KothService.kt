@@ -77,8 +77,54 @@ class KothService(
     private val toggleNotifications: (Player) -> Boolean = { true },
     private val lifecycleSink: (net.badgersmc.ek.api.KothLifecycleEvent) -> Unit = {},
     private val arenasOverlap: (KothArena, KothArena) -> Boolean = EventConcurrency::overlaps,
+    private val protectionStore: RewardProtectionStore? = null,
     private val captureAudience: (KothEvent, Player) -> Boolean = { _, _ -> false },
 ) {
+    private val protectedMatches = mutableMapOf<UUID, ProtectedMatch>()
+    private val recipientBudgets = mutableMapOf<UUID, Int>()
+
+    private fun initializeProtection(event: KothEvent) {
+        val policy = cfgLoader().rewardProtection
+        if (!policy.enabled || event.isPrivateTest || event.id in protectedMatches) return
+        val mode = if (event.arena.ignoreFactions) TeamMode.SOLO else event.teamMode
+        val roster = runCatching { guilds.protectionRoster() }
+            .onFailure { logger("KOTH alliance roster unavailable; rewards disabled for ${event.id}", it) }.getOrNull()
+        protectedMatches[event.id] = ProtectedMatch(policy, mode, roster)
+    }
+
+    private fun accountEvidence(player: Player): AccountEvidence? = runCatching {
+        AccountEvidence(Instant.ofEpochMilli(player.firstPlayed), player.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE).toLong() / 20)
+    }.getOrNull()
+
+    private fun refreshProtection(match: ProtectedMatch) {
+        match.reconcile(runCatching { guilds.allianceGraph() }.getOrNull())
+    }
+
+    private fun protectedWinner(event: KothEvent, candidate: TeamId?): TeamId? {
+        val match = protectedMatches[event.id] ?: return candidate
+        refreshProtection(match)
+        // Validate online identities again before selecting recipients/settlement.
+        Bukkit.getOnlinePlayers().forEach { teamFor(it, event) }
+        val opponents = candidate?.let(match::qualifyingOpponents).orEmpty()
+        val reason = when {
+            !match.available -> "ALLIANCE_DATA_UNAVAILABLE"
+            candidate == null -> "NO_WINNER"
+            opponents.isEmpty() -> "INSUFFICIENT_OPPOSITION"
+            match.qualifyingSideCount(candidate) < cfgLoader().fairness.minimumParticipatingTeams -> "INSUFFICIENT_SIDES"
+            else -> null
+        }
+        return try {
+            if (reason != null) {
+                protectionStore?.reject(event.id, event.arena.id, clock.instant(), "$reason; ${match.audit()}")
+                logger("KOTH ${event.id} reward withheld: $reason", null)
+                null
+            } else if (protectionStore?.reserve(event.id, event.arena.id, match.side(candidate!!), opponents,
+                clock.instant(), match.config, "recipientCommandBudget=${match.config.maximumRecipientCommands}; ${match.audit()}") == true) candidate
+            else { logger("KOTH ${event.id} reward withheld: repeated opponent, duplicate or unavailable audit store", null); null }
+        } catch (error: Exception) {
+            logger("KOTH ${event.id} reward history failed; no rewards or win credit issued", error); null
+        }
+    }
     fun notificationEnabled(player: Player): Boolean = notificationsEnabled(player)
     fun toggleNotification(player: Player): Boolean = toggleNotifications(player)
     companion object {
@@ -220,6 +266,7 @@ class KothService(
 
     private fun activateEvent(event: KothEvent, cfg: EnthusiaKothConfig) {
         event.state = EventState.ACTIVE
+        initializeProtection(event)
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
         discordLastUpdates.remove(event.id)
@@ -235,6 +282,7 @@ class KothService(
 
     private fun activateQueuedEvent(event: KothEvent, cfg: EnthusiaKothConfig, recovered: Boolean) {
         event.state = EventState.ACTIVE
+        initializeProtection(event)
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
         discordLastUpdates.remove(event.id)
@@ -298,6 +346,7 @@ class KothService(
             } else reminderCounters[event.arena.id] = counter - 1
         }
 
+        protectedMatches[event.id]?.let(::refreshProtection)
         val teamsInZone = resolveTeams(playersInZone, event)
         event.scoringParticipation.observe(teamsInZone)
         val previousScores = event.scores.toMap()
@@ -311,6 +360,8 @@ class KothService(
         if (previousController != event.currentController) lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CONTROL_CHANGED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
         val controller = event.currentController
+        protectedMatches[event.id]?.observe(teamsInZone, controller,
+            controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0))
         if (controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0)) {
             event.scoringParticipation.record(controller, playersInZone.filter { teamFor(it, event) == controller }.map { it.uniqueId }.toSet())
         }
@@ -456,7 +507,7 @@ class KothService(
 
     private fun finishEvent(event: KothEvent, candidate: TeamId?) {
         if (events[event.id] !== event) return
-        val winner = candidate.takeIf { event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams }
+        val winner = protectedWinner(event, candidate.takeIf { event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams })
         event.state = EventState.COMPLETED
         val wasContested = event.scores.size > 1
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.COMPLETED, winner)
@@ -515,6 +566,8 @@ class KothService(
     }
 
     private fun cleanupEvent(event: KothEvent) {
+        protectedMatches.remove(event.id)
+        recipientBudgets.remove(event.id)
         event.clearScores()
         event.currentController = null
         events.remove(event.id)
@@ -529,6 +582,7 @@ class KothService(
     }
 
     private fun executeRewards(event: KothEvent, winner: TeamId) {
+        protectedMatches[event.id]?.let { recipientBudgets[event.id] = it.config.maximumRecipientCommands }
         val arena = event.arena
         val name = sanitizeName(teamName(winner))
         cfgLoader().rewards[(arena.rewardFamily ?: arena.family).lowercase()]?.let { reward ->
@@ -563,6 +617,8 @@ class KothService(
         if (resolved.contains("{CONTRIBUTORS}")) {
             event.scoringParticipation.eligible(winner, cfgLoader().fairness.contributorMinimumPercent)
                 .mapNotNull { Bukkit.getPlayer(it) }.filter { teamFor(it, event) == winner }
+                .sortedWith(compareByDescending<Player> { event.scoringParticipation.playerSeconds(winner, it.uniqueId) }.thenBy { it.uniqueId.toString() })
+                .filter { consumeRecipientBudget(event) }
                 .forEach { player ->
                     val rewardCommand = resolved.replace("{CONTRIBUTORS}", player.name).replace("{ALL_ONLINE}", player.name)
                     runCatching {
@@ -574,11 +630,19 @@ class KothService(
             return
         }
         if (resolved.contains("{ALL_ONLINE}") && guildId != null) {
+            if (event.id in protectedMatches) {
+                executeRewardCommand(command.replace("{ALL_ONLINE}", "{CONTRIBUTORS}"), event, name, winner)
+                return
+            }
             guilds.onlineMembers(guildId).forEach { member ->
                 val command = resolved.replace("{ALL_ONLINE}", member.name)
                 if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command)) logger("KOTH reward command was rejected: $command", null)
             }
         } else if (resolved.contains("{ALL_ONLINE}")) {
+            if (event.id in protectedMatches) {
+                executeRewardCommand(command.replace("{ALL_ONLINE}", "{CONTRIBUTORS}"), event, name, winner)
+                return
+            }
             Bukkit.getOnlinePlayers().forEach { player ->
                 val command = resolved.replace("{ALL_ONLINE}", player.name)
                 if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command)) logger("KOTH reward command was rejected: $command", null)
@@ -974,8 +1038,22 @@ class KothService(
     private fun resolveTeams(players: List<Player>, event: KothEvent): List<TeamId> =
         players.mapNotNull { teamFor(it, event) }.distinct()
 
-    private fun teamFor(player: Player, event: KothEvent): TeamId? =
-        event.resolveTeam(player.uniqueId, guilds.playerGuildId(player))
+    private fun consumeRecipientBudget(event: KothEvent): Boolean {
+        val remaining = recipientBudgets[event.id] ?: return true
+        if (remaining <= 0) return false
+        recipientBudgets[event.id] = remaining - 1
+        return true
+    }
+
+    private fun teamFor(player: Player, event: KothEvent): TeamId? {
+        val match = protectedMatches[event.id] ?: return event.resolveTeam(player.uniqueId, guilds.playerGuildId(player))
+        if (!match.accountEligible(accountEvidence(player), clock.instant())) {
+            match.ineligibleAccounts.add(player.uniqueId)
+            return null
+        }
+        return runCatching { match.team(player.uniqueId, guilds.playerGuildIds(player.uniqueId)) }
+            .getOrElse { match.reconcile(null); null }
+    }
 
     private fun teamName(team: TeamId): String = if (team.mode == TeamMode.GUILD) {
         guilds.guildName(team.id) ?: team.id.toString().take(8)
