@@ -49,10 +49,10 @@ rewards, payment rollback and WorldGuard/private-event boundaries before deliver
 
 ## Delivery gates
 
-- [ ] Focused behavioral regressions and full Java 21 clean build.
-- [ ] Runtime API/shaded artifact contracts and configuration documentation.
+- [x] Focused behavioral regressions and full Java 21 clean build.
+- [x] Compile-time API/shaded artifact contracts and configuration documentation; live runtime acceptance remains pending.
 - [ ] Exact-head hosted checks and actionable review findings.
-- [ ] Reviewable PR, unmerged; no production readiness claim.
+- [x] Reviewable [PR #2](https://github.com/FainNeito/EnthusiaKOTH/pull/2), unmerged; no production readiness claim.
 - [ ] Separate staged Paper/client acceptance, especially death drops/XP,
       guild money and cross-plugin protection. Not performed by local tests.
 
@@ -79,3 +79,25 @@ Bank PR #1 remains open at `65ed709c8b7800300ca5955d079cdeb2d13ce6c2`.
 Its local evidence (167 passing tests) was inspected alongside the dispatch and
 failure guards. GitHub returned zero exact-head workflow runs; no hosted pass
 is claimed. FainNeito and upstream wsg138 main both resolved to the base above.
+
+## Final artifact and combined verification
+
+Feature implementation commit: `417ff734ad01aa9d8e5455179abc56d9ea559207`.
+The versioned `test build` rerun passed all 177 tests. Unmerged local test artifact:
+`EnthusiaKOTH-0.3.0-SNAPSHOT-all.jar`, SHA-256
+`c113337aa736e87808eb08a7f978365ab0684025528de6faf1554c6b63764f6f`.
+
+An isolated temporary merge of that feature commit plus bank PR head
+`65ed709c8b7800300ca5955d079cdeb2d13ce6c2` applied without conflicts.
+Combined source tree: `c70171a9143d7457e76c6a34bc73090615d974cf`.
+Java 21 `clean test build` passed 186 tests, zero failures/errors/skips.
+Combined unmerged local test JAR SHA-256:
+`ab1114519ab7f26361ce41f3cf34414ae113d9869524d0ea2a1e4387c00474cc`.
+This local combined tree is not a canonical merge, a network build/pin update or
+a production artifact. Bank regressions prove dispatch/failure handling, not a
+real live guild-bank transaction. Feature and bank PRs remain independently open.
+
+GitHub returned no workflow runs for feature implementation head either. No hosted
+pass or automated review approval is claimed. The GitHub connector refused PR
+creation; the signed-in browser successfully created PR #2. No source merge,
+server upload, activation or restart occurred.
