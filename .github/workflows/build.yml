@@ -50,7 +50,8 @@ jobs:
             echo 'Server-provided API classes were packaged unexpectedly.' >&2
             exit 1
           fi
-          DUPLICATES="$(sort build/jar-contents.txt | uniq -d)"
+          # Shadow may repeat directory records; duplicate class/resource files are forbidden.
+          DUPLICATES="$(grep -v '/$' build/jar-contents.txt | sort | uniq -d)"
           if [ -n "$DUPLICATES" ]; then
             printf 'Duplicate JAR entries:\n%s\n' "$DUPLICATES" >&2
             exit 1
@@ -61,7 +62,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: EnthusiaKOTH-${{ github.sha }}
+          name: EnthusiaKOTH-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             build/libs/*-all.jar
             build/reports/tests/test/

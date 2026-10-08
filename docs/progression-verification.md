@@ -59,3 +59,7 @@ Hosted source-only fallback used because bundled Sites packaging requires absent
 bash; Sites deployment succeeded from pushed source e53a8cb. No server action.
 Refined the existing Build workflow to check the exact PR head and reject bundled
 LoreItems/Tags/Advancements compile mirrors; removed a redundant verification job.
+The first hosted exact-head run passed compilation and tests, then exposed repeated
+directory records in Shadow's archive. The packaging audit now ignores directory
+records while continuing to reject duplicate class/resource files; evidence
+artifact names also identify the checked PR head instead of the synthetic merge.
