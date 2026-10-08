@@ -67,4 +67,35 @@ tasks.build {
 
 tasks.test {
     useJUnitPlatform()
+    environment("ENTHUSIA_GUILD_API_CONTRACT", "0")
+}
+
+// Run the consumer against the supplied real provider, ahead of the compile shim.
+// A separate task keeps this verification distinct from ordinary unit tests.
+tasks.register<Test>("actualGuildApiTest") {
+    group = "verification"
+    description = "Verify alliance and bank adapters against a real LumaGuilds JAR"
+    useJUnitPlatform()
+    val providerJar = providers.environmentVariable("ENTHUSIA_GUILD_API_JAR").orElse("")
+    inputs.property("guildApiJarPath", providerJar)
+    inputs.files(providerJar.map { path -> if (path.isBlank()) files() else files(path) })
+        .withPropertyName("guildApiJarContents")
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = files(providerJar) + sourceSets.test.get().runtimeClasspath
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    environment("ENTHUSIA_GUILD_API_CONTRACT", "1")
+    environment("ENTHUSIA_GUILD_API_JAR", providerJar.get())
+    filter {
+        includeTestsMatching("net.badgersmc.ek.application.ActualGuildApiContractTest")
+        includeTestsMatching("net.badgersmc.ek.application.AllianceAdapterCompatibilityTest")
+        includeTestsMatching("net.badgersmc.ek.infrastructure.lumaguilds.LumaGuildsBank*")
+        includeTestsMatching("net.badgersmc.ek.application.ProtectedRewardsIntegrationTest")
+    }
+    doFirst {
+        require(providerJar.get().isNotBlank() && file(providerJar.get()).isFile) {
+            "ENTHUSIA_GUILD_API_JAR must name a real LumaGuilds JAR"
+        }
+    }
 }
