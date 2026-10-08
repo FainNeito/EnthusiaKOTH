@@ -54,7 +54,7 @@ class DisplayService(
 
     @EventHandler(ignoreCancelled = true)
     fun onJoin(event: PlayerJoinEvent) {
-        if ((publicAudience && notificationsEnabled(event.player)) || event.player.uniqueId in viewers) bossBar?.addViewer(event.player)
+        if (if (publicAudience) notificationsEnabled(event.player) else event.player.uniqueId in viewers) bossBar?.addViewer(event.player)
     }
 
     fun clear() {

@@ -27,6 +27,7 @@
 | `progress-bar.enabled/length/character` | `KothService` | Consumed; text template lives in language file |
 | `reminders.enabled/interval-seconds` | `KothService` | Consumed; text template lives in language file |
 | `discord.*` | Discord and scheduling integrations | Consumed; HTTP lifecycle is repaired in PR F |
+| `notifications.capture-regions` | WorldGuard audience adapter / KOTH messages and displays | Region IDs in event world; defaults spawn/warzone; empty or missing regions do not broadcast captures globally |
 | `display.zone-border` | display lifecycle | Consumed |
 | `rules.defaults.*` | restriction service | Consumed |
 | `arenas.*` | `ConfigLoader`, scheduling, capture, rewards | Consumed |

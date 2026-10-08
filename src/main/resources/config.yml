@@ -7,6 +7,11 @@ fairness:
   minimum-online-teams: 0
   minimum-participating-teams: 0
 
+# Capture updates/displays are restricted to these WorldGuard regions in the event world.
+# Start and winner announcements remain global (respecting the notification opt-out).
+notifications:
+  capture-regions: [spawn, warzone]
+
 general:
   timezone: "America/New_York"
 

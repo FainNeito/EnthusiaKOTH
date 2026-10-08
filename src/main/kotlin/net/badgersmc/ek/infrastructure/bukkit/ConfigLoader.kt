@@ -47,6 +47,9 @@ class ConfigLoader(private val plugin: JavaPlugin) {
             rules = RulesConfigLoader.load(config),
             privateTesting = PrivateTestingConfigLoader.load(config),
             locks = LockConfigLoader.load(config),
+            captureNotificationRegions = if (config.contains("notifications.capture-regions"))
+                strings(config, "notifications.capture-regions").map(String::trim).filter(String::isNotEmpty).distinct()
+                else listOf("spawn", "warzone"),
             fairness = net.badgersmc.ek.config.FairnessConfig(
                 contributorMinimumPercent = decimal(config, "fairness.contributor-minimum-percent", 10.0).let { if (it.isFinite()) it.coerceIn(0.0, 100.0) else 10.0 },
                 starterCooldownSeconds = integer(config, "fairness.starter-cooldown-seconds", 0).coerceAtLeast(0),

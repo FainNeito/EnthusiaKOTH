@@ -75,6 +75,7 @@ class KothService(
     private val eventTerminated: (UUID) -> Unit = {},
     private val notificationsEnabled: (Player) -> Boolean = { true },
     private val toggleNotifications: (Player) -> Boolean = { true },
+    private val captureAudience: (KothEvent, Player) -> Boolean = { _, _ -> false },
 ) {
     fun notificationEnabled(player: Player): Boolean = notificationsEnabled(player)
     fun toggleNotification(player: Player): Boolean = toggleNotifications(player)
@@ -250,7 +251,7 @@ class KothService(
 
         if (cfg.progressBar.enabled && event.currentController != null) {
             val progress = progressBar(event, cfg.progressBar)
-            playersInZone.filter { event.isPrivateTest || notificationsEnabled(it) }.forEach { it.sendActionBar(progress) }
+            playersInZone.filter { event.isPrivateTest || (notificationsEnabled(it) && captureAudience(event, it)) }.forEach { it.sendActionBar(progress) }
         }
 
         val reminder = cfg.reminders
@@ -266,6 +267,7 @@ class KothService(
                         "capper" to (capperName(event) ?: "None"),
                         "time_left" to formatTime(event.endsAt.epochSecond - now.epochSecond),
                     ),
+                    captureOnly = true,
                 )
             } else reminderCounters[event.arena.id] = counter - 1
         }
@@ -328,6 +330,7 @@ class KothService(
                     "koth_name" to arena.id,
                     "captime" to formatTime(arena.captureSeconds.toLong()),
                 ),
+                captureOnly = true,
             )
         }
         if (step.progressCurrent) tickCaptureProgress(event, arena)
@@ -344,6 +347,7 @@ class KothService(
                 "koth_name" to event.arena.id,
                 "time_left" to formatTime(event.arena.captureSeconds.toLong()),
             ),
+            captureOnly = true,
         )
     }
 
@@ -373,6 +377,7 @@ class KothService(
                     "koth_name" to arena.id,
                     "time_left" to formatTime(secondsLeft.toLong()),
                 ),
+                captureOnly = true,
             )
         }
     }
@@ -965,14 +970,14 @@ class KothService(
         return lang.msg("progress_bar.format", "progress_bar" to bar)
     }
 
-    private fun eventRecipients(event: KothEvent): List<Player> = if (event.isPrivateTest) {
+    private fun eventRecipients(event: KothEvent, captureOnly: Boolean = true): List<Player> = if (event.isPrivateTest) {
         event.participants.mapNotNull { Bukkit.getPlayer(it) }
-    } else Bukkit.getOnlinePlayers().filter(notificationsEnabled)
+    } else Bukkit.getOnlinePlayers().filter { notificationsEnabled(it) && (!captureOnly || captureAudience(event, it)) }
 
-    private fun sendEventMessage(event: KothEvent, message: net.kyori.adventure.text.Component) {
-        if (event.isPrivateTest) eventRecipients(event).forEach { it.sendMessage(message) }
+    private fun sendEventMessage(event: KothEvent, message: net.kyori.adventure.text.Component, captureOnly: Boolean = false) {
+        if (event.isPrivateTest) eventRecipients(event, captureOnly).forEach { it.sendMessage(message) }
         else {
-            eventRecipients(event).forEach { it.sendMessage(message) }
+            eventRecipients(event, captureOnly).forEach { it.sendMessage(message) }
             Bukkit.getConsoleSender().sendMessage(message)
         }
     }

@@ -22,10 +22,12 @@ class KothFairnessIntegrationTest {
     private val guild = UUID.randomUUID()
     private val capper = mockk<Player>(relaxed = true)
     private val idle = mockk<Player>(relaxed = true)
+    private val localPlayers = mutableSetOf<Player>()
     private val guilds = mockk<LumaGuildsAdapter>(relaxed = true)
     private val stats = mockk<SqlStatsRepository>(relaxed = true)
     private val zone = mockk<CaptureZone>(relaxed = true)
     @BeforeEach fun setup() {
+        localPlayers.clear(); localPlayers.add(capper)
         mockkStatic(Bukkit::class)
         every { capper.uniqueId } returns UUID.randomUUID()
         every { idle.uniqueId } returns UUID.randomUUID()
@@ -46,9 +48,9 @@ class KothFairnessIntegrationTest {
         every { guilds.guildName(guild) } returns "Guild"
     }
     @AfterEach fun cleanup() = unmockkAll()
-    private fun service(minimumTeams: Int = 0, mute: Boolean = false): KothService {
+    private fun service(minimumTeams: Int = 0, mute: Boolean = false, localAudience: Boolean = false): KothService {
         val lang = mockk<LangService>(relaxed = true)
-        every { lang.msg(any(), *anyVararg()) } returns Component.empty()
+        every { lang.msg(any(), *anyVararg()) } answers { Component.text(firstArg<String>()) }
         return KothService(
             cfgLoader = { EnthusiaKothConfig(display = DisplayConfig(false), fairness = FairnessConfig(minimumParticipatingTeams = minimumTeams)) },
             stats = stats, economy = mockk(relaxed = true), guilds = guilds,
@@ -56,6 +58,7 @@ class KothFairnessIntegrationTest {
             discordWebhook = mockk(relaxed = true), zoneBorderService = mockk(relaxed = true), lang = lang,
             arenaResolver = { null }, queueStore = InMemoryEventQueueStore(), clock = Clock.fixed(now, ZoneOffset.UTC),
             logger = { _, _ -> }, notificationsEnabled = { !mute || it !== idle },
+            captureAudience = { _, player -> !localAudience || player in localPlayers },
         )
     }
     private fun arena() = KothArena("capture", "capture", zone, durationSeconds = 60,
@@ -82,6 +85,36 @@ class KothFairnessIntegrationTest {
         assertTrue(service(mute = true).startEvent(arena(), teamMode = TeamMode.GUILD))
         verify(atLeast = 1) { capper.sendMessage(any<Component>()) }
         verify(exactly = 0) { idle.sendMessage(any<Component>()) }
+    }
+    @Test fun `start and winner remain global while capture entry stays local`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena(), teamMode = TeamMode.GUILD))
+        verify(exactly = 1) { idle.sendMessage(Component.text("koth.begin")) }
+        service.tick()
+        verify(exactly = 1) { capper.sendMessage(Component.text("koth.enter")) }
+        verify(exactly = 0) { idle.sendMessage(Component.text("koth.enter")) }
+        service.tick()
+        verify(exactly = 1) { idle.sendMessage(Component.text("koth.capture")) }
+    }
+    @Test fun `capture countdown and leave stay local`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        service.tick(); service.tick()
+        verify(exactly = 1) { capper.sendMessage(Component.text("koth.capping")) }
+        verify(exactly = 0) { idle.sendMessage(Component.text("koth.capping")) }
+        every { zone.containsCircular(capper.location) } returns false
+        service.tick()
+        verify(exactly = 1) { capper.sendMessage(Component.text("koth.leave")) }
+        verify(exactly = 0) { idle.sendMessage(Component.text("koth.leave")) }
+    }
+    @Test fun `moving out of notification regions suppresses subsequent capture messages`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        service.tick()
+        localPlayers.clear()
+        service.tick()
+        verify(exactly = 0) { capper.sendMessage(Component.text("koth.capping")) }
+        verify(exactly = 0) { idle.sendMessage(Component.text("koth.capping")) }
     }
     @Test fun `guild switch cannot redeem contributions earned for old guild`() {
         val service = service()

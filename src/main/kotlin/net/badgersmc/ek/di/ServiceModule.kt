@@ -165,7 +165,14 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             config().rules.rules[family] ?: RuleSet.PERMISSIVE
         },
     )
-    val displayService = DisplayService(plugin, langService, notificationPreferences::enabled).also {
+    val worldGuardRegionService = WorldGuardRegionService()
+    private fun captureAudience(event: net.badgersmc.ek.domain.KothEvent, player: org.bukkit.entity.Player): Boolean =
+        config().captureNotificationRegions.any { region ->
+            worldGuardRegionService.contains(event.arena.zone.worldName, region, player.location)
+        }
+    val displayService: DisplayService = DisplayService(plugin, langService) { player ->
+        notificationPreferences.enabled(player) && kothService.activeEvent?.let { captureAudience(it, player) } == true
+    }.also {
         plugin.server.pluginManager.registerEvents(it, plugin)
     }
     val objectiveMarkerService = ObjectiveMarkerService()
@@ -180,7 +187,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     )
     private var refundProviderUnavailableLogged = false
 
-    val kothService = KothService(
+    val kothService: KothService = KothService(
         cfgLoader = { config() },
         stats = statsRepository,
         economy = vaultEconomy,
@@ -201,6 +208,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         eventTerminated = restrictionService::clearEvent,
         notificationsEnabled = notificationPreferences::enabled,
         toggleNotifications = notificationPreferences::toggle,
+        captureAudience = ::captureAudience,
     )
     val startService = StartService(
         config = { config() },
@@ -273,7 +281,6 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
         discordWarningSink = discordWebhook::sendPreStart,
     )
-    val worldGuardRegionService = WorldGuardRegionService()
     val keepInventoryListener = net.badgersmc.ek.infrastructure.bukkit.KeepInventoryListener(
         activeEvent = { kothService.activeEvent },
         contains = { arena, location ->
