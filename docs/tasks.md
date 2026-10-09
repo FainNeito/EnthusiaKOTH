@@ -50,4 +50,3 @@ Evidence: priorities-verification.md, arena-setup-verification.md, expansion-ver
 - [ ] Add a read-only LoreItems definition query before enabling enforced readiness with item definitions; current unsupported capability blocks starts rather than fabricating verification.
 - [ ] TEST calibration: contest boundaries, holds/restart/review permissions, budgets across allied aliases/UTC rollover, renamed/copied/displaced hills, delayed preflight failure/refunds and Java/Bedrock result menus. No server testing performed here.
 - [ ] Update network PR #171 to the merged integrity source and verify the owning combined build; maintainer merge/trusted private Display build remain release gates.
-
