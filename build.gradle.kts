@@ -71,6 +71,29 @@ tasks.build {
 tasks.test {
     useJUnitPlatform()
     environment("ENTHUSIA_GUILD_API_CONTRACT", "0")
+    environment("ENTHUSIA_LORE_API_CONTRACT", "0")
+}
+
+tasks.register<Test>("actualLoreApiTest") {
+    group = "verification"
+    description = "Verify read-only readiness against the real LoreItems provider API"
+    useJUnitPlatform()
+    val providerJar = providers.environmentVariable("ENTHUSIA_LORE_API_JAR").orElse("")
+    inputs.property("loreApiJarPath", providerJar)
+    inputs.files(providerJar.map { path -> if (path.isBlank()) files() else files(path) })
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = files(providerJar) + sourceSets.test.get().runtimeClasspath
+    environment("ENTHUSIA_LORE_API_CONTRACT", "1")
+    environment("ENTHUSIA_LORE_API_JAR", providerJar.get())
+    filter {
+        includeTestsMatching("net.badgersmc.ek.infrastructure.bukkit.ActualLoreApiContractTest")
+        includeTestsMatching("net.badgersmc.ek.infrastructure.bukkit.LoreDefinitionReadinessTest")
+    }
+    doFirst {
+        require(providerJar.get().isNotBlank() && file(providerJar.get()).isFile) {
+            "ENTHUSIA_LORE_API_JAR must name a real LoreItems JAR"
+        }
+    }
 }
 
 // Run the consumer against the supplied real provider, ahead of the compile shim.

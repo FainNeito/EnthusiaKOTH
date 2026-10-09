@@ -1,6 +1,6 @@
 # KOTH delivery checklist
 
-Reconciled 2026-10-09 against fetched canonical main `d0552119f3a5ea01fdb094189c9a32df290e6081` and GitHub merged PR records. Checked items establish source delivery only. Server/client acceptance is separate. Earlier verification documents retain historical branch/test observations.
+Reconciled 2026-10-09 against fetched canonical main `2ad0b693caaaf2ce5011579152fd4b54b7b55f5b` and GitHub merged PR records. Checked items establish source delivery only. Server/client acceptance is separate. Earlier verification documents retain historical branch/test observations.
 
 ## Completed source work
 
@@ -19,7 +19,7 @@ Reconciled 2026-10-09 against fetched canonical main `d0552119f3a5ea01fdb094189c
 
 ## Remaining integration and configuration
 
-- [ ] Merge owning [network PR #171](https://github.com/BadgersMC/enthusia-network/pull/171) after current-head checks; account lacks merge access. Public Build 37882730858 passed at 843cfbb; documentation-only 651ec31 rerun 37884305013 also passed. Trusted private Display-inclusive build remains a release gate.
+- [ ] Merge owning [network PR #171](https://github.com/BadgersMC/enthusia-network/pull/171) after current-head checks; account lacks merge access. Integrity pin head `2708f8f` passed public Build `37892096786` and local `buildAll` including Display. Recheck the latest pin/head before merge; trusted private Display-inclusive release build remains a separate gate.
 - [ ] Reconcile old server config by key. Preserve real arenas/assets and active Advancements pilot; disable TEST Discord guild-role writes and legacy payouts before loading candidates.
 - [ ] Accept arena identities/geometry and attainable challenge requirements; draft relics require four distinct arenas.
 - [ ] Calibrate opposition, age/playtime, repeated opponents, scoring floor and optional roster/start gates on TEST. Protection/progression remain disabled until then.
@@ -46,7 +46,8 @@ Evidence: priorities-verification.md, arena-setup-verification.md, expansion-ver
 
 - [x] Implement contest evidence, bounded win-trading reports, audited durable reward/challenge holds, UTC event currency/item caps and stable physical arena identities.
 - [x] Implement opt-in start readiness and private own-result/claim/challenge breakdown. New enforcement disabled/zero until TEST.
-- [x] Local/full/provider verification and manual source review; [PR #8](https://github.com/FainNeito/EnthusiaKOTH/pull/8) Build 37891506702 passed at source head f6430df. Final documentation head checks must pass before merge; see match-integrity-verification.md.
-- [ ] Add a read-only LoreItems definition query before enabling enforced readiness with item definitions; current unsupported capability blocks starts rather than fabricating verification.
+- [x] Local/full/provider verification and manual source review; [PR #8](https://github.com/FainNeito/EnthusiaKOTH/pull/8) merged at `2ad0b69` after final-head `4e3cddd` Build `37891803581` passed. See match-integrity-verification.md for historical evidence and provider-readiness-verification.md for this follow-up.
+- [x] Implement nonblocking bounded KOTH definition-query readiness, proactive refresh, unsupported-provider fallback and real LoreItems API contract suite.
+- [ ] Merge companion LoreItems definition query into its authoritative main and verify the later installed runtime before enabling item readiness. Unsupported providers block starts without creating a probe item.
 - [ ] TEST calibration: contest boundaries, holds/restart/review permissions, budgets across allied aliases/UTC rollover, renamed/copied/displaced hills, delayed preflight failure/refunds and Java/Bedrock result menus. No server testing performed here.
-- [ ] Update network PR #171 to the merged integrity source and verify the owning combined build; maintainer merge/trusted private Display build remain release gates.
+- [x] Update network PR #171 to merged integrity source and verify public/local combined build at `2708f8f`. Follow-up readiness pin/head checks and maintainer merge remain separate gates.

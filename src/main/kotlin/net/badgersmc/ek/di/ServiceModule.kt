@@ -127,6 +127,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         _config = configLoader.load()
         _arenas = configLoader.loadArenas()
         progressionSettings.reload()
+        progressionClaims.clearReadiness()
         registerArenaIdentities()
         langService.reload()
         kothService.processQueue()
@@ -215,6 +216,12 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         plugin.server.servicesManager.register(net.badgersmc.ek.api.KothProgressionV1::class.java,it,plugin,org.bukkit.plugin.ServicePriority.Normal)
     }
     private val progressionClaims = net.badgersmc.ek.infrastructure.bukkit.ProgressionClaims(plugin,progressionStore,vaultEconomy)
+
+    fun refreshRewardReadiness() {
+        val policy = progressionSettings.policy()
+        if (policy.enabled && policy.integrity.requireReadiness) progressionClaims.definitionIssues(policy)
+        else progressionClaims.clearReadiness()
+    }
 
     private fun rewardedStartIssues(arena: KothArena): List<String> {
         val p=progressionSettings.policy()

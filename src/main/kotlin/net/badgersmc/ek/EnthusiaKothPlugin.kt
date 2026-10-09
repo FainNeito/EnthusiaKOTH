@@ -52,6 +52,7 @@ class EnthusiaKothPlugin : JavaPlugin() {
             server.pluginManager.disablePlugin(this)
             return
         }
+        server.scheduler.runTaskTimer(this, services::refreshRewardReadiness, 1L, 20L)
         server.scheduler.runTaskTimer(this, services.kothService::tick, 20L, 20L)
         server.scheduler.runTaskTimer(this, services.scheduleService::tick, 20L, 20L)
         server.scheduler.runTaskTimer(this, services::retryPendingPaymentRecovery, 20L * 5L, 20L * 30L)
