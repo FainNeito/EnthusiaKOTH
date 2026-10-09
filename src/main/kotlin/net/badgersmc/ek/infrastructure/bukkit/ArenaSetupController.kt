@@ -18,6 +18,7 @@ import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.inventory.*
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.java.JavaPlugin
@@ -44,6 +45,7 @@ class ArenaSetupController(
     private val selectionWorlds = mutableMapOf<UUID, String>()
     private val selecting = mutableSetOf<UUID>()
     private val previews = mutableMapOf<UUID, BukkitTask>()
+    private val selectionPreviews = mutableMapOf<UUID, BukkitTask>()
     private val pendingNames = ConcurrentHashMap<UUID, UUID>()
     private val wandKey = NamespacedKey(plugin, "arena-setup-wand")
     private fun text(key: String, vararg values: Pair<String, String>) = lang.msg("setup.$key", *values)
@@ -249,6 +251,8 @@ class ArenaSetupController(
         wand.editMeta { it.persistentDataContainer.set(wandKey, PersistentDataType.STRING, player.uniqueId.toString()) }
         player.inventory.setItem(slot, wand)
         firstCorners.remove(player.uniqueId); selectionWorlds.remove(player.uniqueId); selecting.add(player.uniqueId)
+        selectionPreviews.remove(player.uniqueId)?.cancel()
+        previews.remove(player.uniqueId)?.cancel()
         player.closeInventory(); tell(player, "select-prompt")
     }
 
@@ -268,17 +272,56 @@ class ArenaSetupController(
             when (event.action) {
                 Action.LEFT_CLICK_BLOCK -> {
                     firstCorners[player.uniqueId] = point; selectionWorlds[player.uniqueId] = block.world.name
+                    selectionOutline(player, draft)
                     tell(player, "first-corner")
                 }
                 Action.RIGHT_CLICK_BLOCK -> {
                     val first = firstCorners[player.uniqueId] ?: run { tell(player, "first-required"); return@guarded }
                     service.selectBoundary(draft, selectionWorlds.getValue(player.uniqueId), first, point)
                     selecting.remove(player.uniqueId); removeWands(player); tell(player, "selected")
+                    selectionOutline(player, draft)
                     plugin.server.scheduler.runTask(plugin, Runnable { if (player.isOnline && allowed(player) && drafts[player.uniqueId] === draft) editor(player, draft) })
                 }
                 else -> Unit
             }
         }
+    }
+
+    private fun selectionOutline(player: Player, draft: ArenaSetupDraft) {
+        selectionPreviews.remove(player.uniqueId)?.cancel()
+        selectionPreviews[player.uniqueId] = plugin.server.scheduler.runTaskTimer(plugin, Runnable {
+            if (!player.isOnline || !player.hasPermission("enthusiakoth.admin") ||
+                drafts[player.uniqueId] !== draft || player.world.name != draft.arena.world) {
+                selectionPreviews.remove(player.uniqueId)?.cancel(); return@Runnable
+            }
+            val selectingNow = player.uniqueId in selecting
+            val points = if (selectingNow) {
+                val first = firstCorners[player.uniqueId] ?: return@Runnable
+                val target = player.getTargetBlockExact(6)
+                SelectionOutline.selectedBlocks(first, target?.let {
+                    PositionConfig(it.x.toDouble(), it.y.toDouble(), it.z.toDouble())
+                } ?: first)
+            } else {
+                if (!draft.boundaryReady || draft.arena.worldGuardRegion != null) return@Runnable
+                SelectionOutline.points(draft.arena.protectedRegion.corner1, draft.arena.protectedRegion.corner2)
+            }
+            val location = player.location
+            val dust = Particle.DustOptions(if (selectingNow) Color.ORANGE else Color.AQUA, 1.4f)
+            points.filter { point ->
+                val dx = point.x - location.x; val dy = point.y - location.y; val dz = point.z - location.z
+                dx * dx + dy * dy + dz * dz <= 64.0 * 64.0
+            }.forEach { point ->
+                player.spawnParticle(Particle.DUST, point.x, point.y, point.z, 1, 0.0, 0.0, 0.0, 0.0, dust)
+            }
+            if (selectingNow) firstCorners[player.uniqueId]?.let { first ->
+                    SelectionOutline.selectedBlocks(first, first).filter { point ->
+                        location.distanceSquared(Location(player.world, point.x, point.y, point.z)) <= 64.0 * 64.0
+                    }.forEach { point ->
+                        player.spawnParticle(Particle.DUST, point.x, point.y, point.z, 1, 0.0, 0.0, 0.0, 0.0,
+                            Particle.DustOptions(Color.YELLOW, 1.8f))
+                    }
+            }
+        }, 1L, 10L)
     }
 
     private fun preview(player: Player, draft: ArenaSetupDraft) {
@@ -319,13 +362,15 @@ class ArenaSetupController(
     private fun clear(player: Player) {
         drafts.remove(player.uniqueId); firstCorners.remove(player.uniqueId); selectionWorlds.remove(player.uniqueId)
         selecting.remove(player.uniqueId); pendingNames.remove(player.uniqueId); previews.remove(player.uniqueId)?.cancel(); removeWands(player)
+        selectionPreviews.remove(player.uniqueId)?.cancel()
     }
     @EventHandler fun quit(event: PlayerQuitEvent) = clear(event.player)
+    @EventHandler fun changeWorld(event: PlayerChangedWorldEvent) { selectionPreviews.remove(event.player.uniqueId)?.cancel() }
     @EventHandler(priority = EventPriority.HIGHEST) fun breakBlock(event: BlockBreakEvent) {
         if (event.player.inventory.itemInMainHand.itemMeta?.persistentDataContainer?.has(wandKey, PersistentDataType.STRING) == true) event.isCancelled = true
     }
     @EventHandler fun drop(event: PlayerDropItemEvent) {
         if (event.itemDrop.itemStack.itemMeta?.persistentDataContainer?.has(wandKey, PersistentDataType.STRING) == true) event.isCancelled = true
     }
-    fun shutdown() { previews.values.forEach { it.cancel() }; Bukkit.getOnlinePlayers().forEach(::clear); pendingNames.clear() }
+    fun shutdown() { previews.values.forEach { it.cancel() }; selectionPreviews.values.forEach { it.cancel() }; selectionPreviews.clear(); Bukkit.getOnlinePlayers().forEach(::clear); pendingNames.clear() }
 }
