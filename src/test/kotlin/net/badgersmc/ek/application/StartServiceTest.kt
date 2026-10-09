@@ -19,6 +19,21 @@ import java.util.concurrent.TimeUnit
 
 class StartServiceTest {
     @Test
+    fun `readiness failure happens before paid withdrawal or event startup`() {
+        val calls=mutableListOf<String>()
+        val economy=object:PlayerEconomy {
+            override fun isAvailable():Boolean { calls.add("economy"); return true }
+            override fun balance(playerId:UUID)=100.0
+            override fun withdraw(playerId:UUID,amount:Double):Boolean { calls.add("withdraw"); return true }
+            override fun deposit(playerId:UUID,amount:Double)=true
+        }
+        val service=StartService({config(basicCost=5.0)},{true},{false},economy,
+            EventStarter { _,_,_,_ -> calls.add("start"); true },{_,_->},rewardedStartIssues={ listOf("Unknown reward definition") })
+        val result=service.start(StartRequest(StartActor(UUID.randomUUID(),canStartBasic=true),arena,StartSource.PLAYER_COMMAND))
+        assertEquals(StartFailure.START_FAILED,(result as StartResult.Rejected).failure)
+        assertTrue(calls.isEmpty())
+    }
+    @Test
     fun `paid start is journaled before withdrawal and charged before event start`() {
         val calls = mutableListOf<String>()
         val payer = UUID.randomUUID()

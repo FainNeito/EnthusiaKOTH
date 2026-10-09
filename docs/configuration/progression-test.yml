@@ -54,3 +54,19 @@ challenges:
     tag: ''
     lore-definition: ''
     exclusive: true
+# Optional enforcement remains disabled until TEST calibration.
+integrity:
+  require-contest: false
+  minimum-control-changes: 1
+  minimum-opposing-score-seconds: 30
+  minimum-reciprocal-combat-seconds: 10
+  hold-suspicious: false
+  pattern-window-hours: 24
+  pattern-minimum-matches: 3
+  # Zero means unlimited; UTC completion day, reservations count before redemption.
+  player-daily-cents: 0
+  player-daily-units: 0
+  side-daily-cents: 0
+  side-daily-units: 0
+  require-readiness: false
+  accepted-arenas: []

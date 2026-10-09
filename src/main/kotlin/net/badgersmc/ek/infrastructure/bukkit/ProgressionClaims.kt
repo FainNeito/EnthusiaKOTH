@@ -16,6 +16,25 @@ class ProgressionClaims(private val plugin: JavaPlugin, private val store: SqlPr
     init { store.recoverIdempotentClaims() }
     fun loreAvailable(): Boolean = runCatching { Bukkit.getServicesManager().load(LoreItemsServiceV1::class.java) != null }.getOrDefault(false)
     fun tagsAvailable(): Boolean = runCatching { Bukkit.getServicesManager().load(TagService::class.java) != null }.getOrDefault(false)
+    fun definitionIssues(policy: net.badgersmc.ek.application.ProgressionPolicy): List<String> = buildList {
+        val definitions=(policy.challenges.map { it.loreDefinition }+policy.packages.map { it.loreDefinition }).filter(String::isNotBlank).distinct()
+        if (definitions.isNotEmpty()) {
+            if (!loreAvailable()) add("LoreItems delivery provider is unavailable")
+            // Current V1 exposes delivery only. Never create an item as a readiness probe.
+            add("LoreItems V1 cannot verify definitions read-only: ${definitions.joinToString()}; readiness requires a provider query API")
+        }
+        val tags=policy.challenges.map { it.tag }.filter(String::isNotBlank).distinct()
+        if (tags.isNotEmpty()) {
+            val provider=runCatching { Bukkit.getServicesManager().load(TagService::class.java) }.getOrNull()
+            tags.forEach { id ->
+                val exists=runCatching {
+                    val registry=provider?.javaClass?.getMethod("getRegistry")?.invoke(provider)
+                    registry?.javaClass?.getMethod("get",String::class.java)?.invoke(registry,id)!=null
+                }.getOrDefault(false)
+                if (!exists) add("Tag definition unavailable or unverifiable: $id")
+            }
+        }
+    }
     fun redeem(player: UUID, claimId: String): String {
         val claim = store.claims(player).firstOrNull { it.id == claimId } ?: return "Claim unavailable."
         if (claim.status != "PENDING") return "Claim status: ${claim.status}."

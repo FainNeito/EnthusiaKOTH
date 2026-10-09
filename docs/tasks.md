@@ -19,7 +19,7 @@ Reconciled 2026-10-09 against fetched canonical main `d0552119f3a5ea01fdb094189c
 
 ## Remaining integration and configuration
 
-- [ ] Merge owning [network PR #171](https://github.com/BadgersMC/enthusia-network/pull/171) after current-head checks; account lacks merge access. Public Build 37882730858 passed at 843cfbb; documentation-only 651ec31 rerun remains separate. Trusted private Display-inclusive build remains a release gate.
+- [ ] Merge owning [network PR #171](https://github.com/BadgersMC/enthusia-network/pull/171) after current-head checks; account lacks merge access. Public Build 37882730858 passed at 843cfbb; documentation-only 651ec31 rerun 37884305013 also passed. Trusted private Display-inclusive build remains a release gate.
 - [ ] Reconcile old server config by key. Preserve real arenas/assets and active Advancements pilot; disable TEST Discord guild-role writes and legacy payouts before loading candidates.
 - [ ] Accept arena identities/geometry and attainable challenge requirements; draft relics require four distinct arenas.
 - [ ] Calibrate opposition, age/playtime, repeated opponents, scoring floor and optional roster/start gates on TEST. Protection/progression remain disabled until then.
@@ -41,3 +41,11 @@ Reconciled 2026-10-09 against fetched canonical main `d0552119f3a5ea01fdb094189c
 Alliance anti-abuse, selectable packages and guild recognition are approved and implemented; production values remain pending. Cooperative allied capture as a gameplay mode, database replacement and arbitrary leaderboard/web resets are not implemented or approved by this checklist. Kill tracker counts remain cosmetic. Historical AxKoth comparisons remain reference material, not runtime dependencies.
 
 Evidence: priorities-verification.md, arena-setup-verification.md, expansion-verification.md, anti-abuse-verification.md, companion-api-verification.md, progression-verification.md, exclusive-rewards.md.
+
+## Match integrity source work (INT-001..007)
+
+- [x] Implement contest evidence, bounded win-trading reports, audited durable reward/challenge holds, UTC event currency/item caps and stable physical arena identities.
+- [x] Implement opt-in start readiness and private own-result/claim/challenge breakdown. New enforcement disabled/zero until TEST.
+- [ ] Record exact-head local/hosted verification and reviewed PR delivery; see match-integrity-verification.md.
+- [ ] Add a read-only LoreItems definition query before enabling enforced readiness with item definitions; current unsupported capability blocks starts rather than fabricating verification.
+- [ ] TEST calibration: contest boundaries, holds/restart/review permissions, budgets across allied aliases/UTC rollover, renamed/copied/displaced hills, delayed preflight failure/refunds and Java/Bedrock result menus. No server testing performed here.

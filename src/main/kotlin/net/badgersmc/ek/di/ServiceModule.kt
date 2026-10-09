@@ -127,6 +127,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         _config = configLoader.load()
         _arenas = configLoader.loadArenas()
         progressionSettings.reload()
+        registerArenaIdentities()
         langService.reload()
         kothService.processQueue()
     }
@@ -215,12 +216,42 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
     private val progressionClaims = net.badgersmc.ek.infrastructure.bukkit.ProgressionClaims(plugin,progressionStore,vaultEconomy)
 
+    private fun rewardedStartIssues(arena: KothArena): List<String> {
+        val p=progressionSettings.policy()
+        if (!p.enabled || !p.integrity.requireReadiness) return emptyList()
+        val issues=buildList {
+            if (Bukkit.getWorld(arena.zone.worldName)==null) add("World is unavailable")
+            arena.worldGuardRegion?.let { region ->
+                if (worldGuardRegionService.bounds(arena.zone.worldName,region)==null) add("WorldGuard region is unavailable")
+            }
+            if (runCatching { lumaGuildsAdapter.protectionRoster()!=null }.getOrDefault(false).not()) add("Guild alliance roster is unavailable")
+            if (p.poolCents>0 && !vaultEconomy.isAvailable()) add("Reward economy is unavailable")
+            addAll(progressionClaims.definitionIssues(p))
+        }
+        return net.badgersmc.ek.application.RewardedStartReadiness.issues(p,arena.id,config().rewardProtection.enabled,issues)
+    }
+
+    private fun progressionArenaIdentity(arena: KothArena): String {
+        // Physical objective center, independent of names/modes/radius and shared protection regions.
+        val zone=arena.zone
+        val center=listOf((zone.minX+zone.maxX)/2,(zone.minY+zone.maxY)/2,(zone.minZ+zone.maxZ)/2)
+            .map { java.math.BigDecimal.valueOf(it).setScale(3,java.math.RoundingMode.HALF_UP).toPlainString() }
+        val geometry=(listOf(zone.worldName)+center).joinToString("|")
+        return progressionStore.arenaIdentity(arena.id,geometry)
+    }
+
+    private fun registerArenaIdentities() {
+        arenas().values.forEach { arena -> progressionArenaIdentity(arena) }
+    }
+
     val kothService: KothService = KothService(
         cfgLoader = { config() },
         stats = statsRepository,
         protectionStore = net.badgersmc.ek.infrastructure.persistence.SqlRewardProtectionStore(dataSource).also { it.init() },
         progressionSink = progressionStore,
         progressionPolicy = progressionSettings::policy,
+        rewardedStartIssues = ::rewardedStartIssues,
+        arenaIdentity = ::progressionArenaIdentity,
         economy = vaultEconomy,
         guilds = lumaGuildsAdapter,
         displayService = displayService,
@@ -300,6 +331,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             countOnlineSides(mode)
         },
         protectionReady = { mode -> countOnlineSides(mode) >= 2 },
+        rewardedStartIssues = ::rewardedStartIssues,
     )
     val scheduleService = ScheduleService(
         cfgLoader = { config() },
@@ -420,6 +452,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     ).also { it.register() }
 
     init {
+        registerArenaIdentities()
         recoverOutstandingPayments()
     }
 

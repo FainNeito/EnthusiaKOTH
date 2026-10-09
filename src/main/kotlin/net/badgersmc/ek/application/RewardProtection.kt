@@ -32,6 +32,9 @@ class ProtectedMatch(val config: RewardProtectionConfig, val mode: TeamMode, ros
     private val observed = mutableSetOf<TeamId>()
     private val activity = mutableMapOf<Pair<TeamId, TeamId>, Int>()
     private val scoring = mutableMapOf<TeamId, Int>()
+    private val transfers = mutableListOf<Pair<TeamId, TeamId>>()
+    private var lastScoringController: TeamId? = null
+    private val combat = mutableMapOf<Pair<TeamId, TeamId>, MutableSet<Long>>()
     private val soloIds = mutableMapOf<UUID, TeamId>()
     private val sides = mutableMapOf<UUID, Set<String>>()
     val ineligibleAccounts = mutableSetOf<UUID>()
@@ -94,7 +97,34 @@ class ProtectedMatch(val config: RewardProtectionConfig, val mode: TeamMode, ros
     fun observe(teams: List<TeamId>, controller: TeamId?, earnedScore: Boolean) {
         observed.addAll(teams)
         if (earnedScore && controller != null) scoring.merge(controller, 1, Int::plus)
+        if (earnedScore && controller != null) {
+            lastScoringController?.takeIf { !sameSide(it, controller) }?.let { transfers.add(it to controller) }
+            lastScoringController = controller
+        }
         teams.forEach { a -> teams.filter { it != a }.forEach { b -> activity.merge(a to b, 1, Int::plus) } }
+    }
+
+    /** Called only for effective, uncancelled PvP in this active event's objective. */
+    fun combat(attacker: TeamId, victim: TeamId, second: Long) {
+        if (!available || sameSide(attacker, victim)) return
+        val samples = combat.getOrPut(attacker to victim) { mutableSetOf() }
+        if (samples.size < 3600) samples.add(second)
+    }
+
+    fun evidence(winner: TeamId): ContestEvidence {
+        val opponents = observed.filter { !sameSide(winner, it) }
+        // Reciprocal exchanges must occur within a five-second window; spam in one tick counts once.
+        // Match the SAME independent side in each direction; two unrelated opponents cannot cooperate to fake an exchange.
+        val reciprocal = combat.keys.filter { sameSide(it.first,winner) && !sameSide(it.second,winner) }
+            .groupBy { side(it.second).sorted().joinToString(",") }.values.flatMap { pairs ->
+                val forward=pairs.flatMap { combat[it].orEmpty() }.toSet()
+                val opponent=pairs.first().second
+                val backward=combat.filterKeys { sameSide(it.first,opponent) && sameSide(it.second,winner) }.values.flatten().toSet()
+                forward.filter { a -> (-5L..5L).any { delta -> a+delta in backward } }
+            }.toSet().size
+        return ContestEvidence(transfers.count { sameSide(it.first,winner) || sameSide(it.second,winner) },
+            opponents.maxOfOrNull { scoring[it] ?: 0 } ?: 0, reciprocal,
+            opponents.maxOfOrNull { activity[winner to it] ?: 0 } ?: 0)
     }
 
     fun qualifyingOpponents(winner: TeamId): Set<String> {
