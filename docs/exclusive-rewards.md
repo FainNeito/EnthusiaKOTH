@@ -36,8 +36,9 @@ Save the fully prepared held template through LoreItems, preserving its metadata
 
 ## Safe activation sequence
 
-1. Keep production unchanged. Merge source through the stacked PRs, then verify
-   runtime APIs, network pins and combined build separately before deployment.
+1. Keep production unchanged. Feature source is merged; see [tasks.md](tasks.md).
+   Merge the owning network integration and verify runtime APIs, canonical pins
+   and combined/trusted provider builds separately before deployment.
 2. In TEST verify WorldGuard arena/notification regions and MaceGuard's current
    rotating warzone rules cover each arena. KOTH adds no separate combat rotation.
 3. Inspect Signature signer UUID, tracker metadata, LoreItems definitions, actual

@@ -1,74 +1,43 @@
-# KOTH priority checklist
+# KOTH delivery checklist
 
-This is the source work checklist derived from the October 8 Discord audit.
-Implementation and local evidence do not establish deployed/client acceptance.
-Requirements and verification: [priorities-verification.md](priorities-verification.md).
+Reconciled 2026-10-09 against fetched canonical main `d0552119f3a5ea01fdb094189c9a32df290e6081` and GitHub merged PR records. Checked items establish source delivery only. Server/client acceptance is separate. Earlier verification documents retain historical branch/test observations.
 
-- [ ] BANK-001: review and merge independent [guild-bank repair PR #1](https://github.com/FainNeito/EnthusiaKOTH/pull/1); verify companion runtime and real transaction.
-- [x] KOTH-101: persistent public notification toggle, preserving private-test messages and command replies.
-- [x] KOTH-106: global start/winner announcements; capture updates/displays restricted to configured spawn/warzone/market regions.
-- [x] KOTH-102: team-bound contribution accounting and `{CONTRIBUTORS}` recipients; 10% default.
-- [x] KOTH-103: configurable durable starter cooldown and online-team gate before payment/flare consumption; disabled by default.
-- [x] KOTH-104: arena-scoped active-event inventory/XP preservation; separately selectable money reward family.
-- [x] KOTH-105: optional minimum hill-participating teams before wins/rewards; disabled by default.
-- [x] Manual review of bank and priority PRs; REV-001/REV-002 fixed with local regressions.
-- [ ] Exact-head hosted build checks and independent review; merge through the normal process.
-- [ ] Configure risk-specific commands/money, gates, permissions, schedules and arenas; review old live config migration.
-- [ ] Stage two-team Paper/client checks: capture/contest/death/respawn, drops/XP, notifications/rejoin, guild change, exact balances, restart/payment failures and companion restrictions.
-- [ ] Verify merged source, owning network pin/build and live acceptance before activation.
+## Completed source work
 
-Later proposals remain undecided: allied guild wins, reward selection, guild XP and
-recognition adapters, combat-profile rotation and selective web reset. No guild XP
-command/API, economy discount, loot table or alliance policy is assumed here.
+- [x] BANK-001: system guild-bank dispatch and conservative transactions; [PR #1](https://github.com/FainNeito/EnthusiaKOTH/pull/1) merged. Real balances remain a TEST gate.
+- [x] KOTH-101..106: notification toggle, global start/winner, regional spawn/warzone/market captures, 10% contributors, durable cooldown/team gates and inventory/XP preservation; [PR #2](https://github.com/FainNeito/EnthusiaKOTH/pull/2) merged.
+- [x] SETUP-001..006: disabled drafts, editor/wand/WorldGuard selection, private preview and atomic save; [PR #3](https://github.com/FainNeito/EnthusiaKOTH/pull/3) merged.
+- [x] EXP-001..008: schedule/reward/display editors, information/teleport, window standings, SCORE, lifecycle API and bounded concurrent events; [PR #4](https://github.com/FainNeito/EnthusiaKOTH/pull/4) merged.
+- [x] ABUSE-001..007: alliance accounting, frozen membership, opposition/account gates, bounded recipients, durable repeated opponents and audit; [PR #5](https://github.com/FainNeito/EnthusiaKOTH/pull/5) merged.
+- [x] Combat follows MaceGuard's current warzone rotation; actual region coverage remains a TEST gate.
+- [x] PROG-001..008: verified challenges, fixed event pool, immutable packages, durable claims, lifetime relics, audit/readiness/reconciliation and companion projection; [PR #6](https://github.com/FainNeito/EnthusiaKOTH/pull/6) merged.
+- [x] Actual Guilds artifact contract suite exists: 16 provider cases and 296 ordinary passing cases (one provider-only skip) recorded in delivery evidence.
+- [x] Source manual reviews and hosted build gates completed for merged features. CodeRabbit skipped automatic review; this is not independent approval.
+- [x] Alliance API [LumaGuilds #220](https://github.com/BadgersMC/LumaGuilds/pull/220) and projection [Advancements #21](https://github.com/BadgersMC/EnthusiaAdvancements/pull/21) merged.
+- [x] Advancements [#22](https://github.com/BadgersMC/EnthusiaAdvancements/pull/22) retires AxKoth. Old capture tokens cannot authorize verified progress/rewards.
+- [x] Prepare inactive challenge/reward candidate and provider mapping: [challenge-reward-plan.md](challenge-reward-plan.md), [progression-test.yml](configuration/progression-test.yml). Values remain drafts until TEST; no installed tags/templates claimed.
 
-## Guided setup (AxKoth reference)
+## Remaining integration and configuration
 
-- [x] Inspect supplied AxKoth 2.27.0 setup bytecode/configuration and compare feature opportunities.
-- [x] Define SETUP-001 through SETUP-006; implement staged arena creation/editor/wand/preview and atomic storage.
-- [x] Complete focused/full local checks and manual code review; 223 tests, artifact hash in evidence.
-- [ ] Hosted checks and source PR review/merge.
-- [ ] TEST/client: naming privacy, selection height, existing WG binding, particles, inventory controls, save failures, restart and legacy gameplay acceptance.
+- [ ] Merge owning [network PR #171](https://github.com/BadgersMC/enthusia-network/pull/171) after current-head checks; account lacks merge access. Public Build 37882730858 passed at 843cfbb; documentation-only 651ec31 rerun remains separate. Trusted private Display-inclusive build remains a release gate.
+- [ ] Reconcile old server config by key. Preserve real arenas/assets and active Advancements pilot; disable TEST Discord guild-role writes and legacy payouts before loading candidates.
+- [ ] Accept arena identities/geometry and attainable challenge requirements; draft relics require four distinct arenas.
+- [ ] Calibrate opposition, age/playtime, repeated opponents, scoring floor and optional roster/start gates on TEST. Protection/progression remain disabled until then.
+- [ ] Select event currency/item budgets and balanced package definitions; verify actual guild XP command/amount.
+- [ ] Register/check tags, prepare genuine FainNeito signed/tracked sword and helmet LoreItems templates, and accept Java/Bedrock helmet visuals.
+- [ ] Recheck canonical source, network pins, clean artifact versions/hashes and runtime APIs before activation.
 
-See [arena setup evidence](arena-setup-verification.md) and
-[AxKoth comparison](axkoth-comparison.md). This request does not deploy or merge.
+## Deferred TEST and player acceptance
 
-## Approved AxKoth-inspired expansion
+- [ ] Run [test-acceptance.md](test-acceptance.md): independent/allied teams, brief/uncontested opposition, roster/relation edits, alternate aliases and repeated wins.
+- [ ] Verify contribution boundaries, fixed aggregate payouts, package ownership, simultaneous relic reservations and no private/admin/advancement bypass.
+- [ ] Verify real bank/currency/XP balances, queue versus delivery, offline/full inventory, restart/disk failures and ambiguous payout reconciliation.
+- [ ] Verify death/drops/XP, notifications/rejoin, region/rotation coverage, concurrency, schedules and Java/Bedrock menus/items.
+- [ ] Record isolated TEST storage, backups and rollback; never import TEST ownership or claims into production.
+- [ ] Obtain production activation authorization separately; source merge/build is not live acceptance.
 
-- [x] EXP-001: staged schedules editor and actual upcoming-occurrence preview.
-- [x] EXP-002: staged fixed/chance/money reward editor and payout preview.
-- [x] EXP-003: arena information and safe, cancellable staff teleport.
-- [x] EXP-004: display editor and optional hologram/sidebar with ownership guards.
-- [x] EXP-005: timestamped daily, weekly and season standings.
-- [x] EXP-006: SCORE accumulation, pause, expiry and tie behavior.
-- [x] EXP-007: immutable informational Bukkit lifecycle API.
-- [x] EXP-008: bounded simultaneous public events and isolated cleanup/listeners.
-- [x] Local review, 265-test clean build, JAR inspection and responsive simulation.
-- [ ] Exact-head hosted checks and PR review/merge (stacked on setup PR #3).
-- [ ] Deferred TEST/client acceptance and clean merged-source deployment gates.
+## Scope decisions
 
-Details and limits: [expansion-verification.md](expansion-verification.md).
-Score and concurrency are now approved by the expansion request; alliance policy,
-database replacement and arbitrary leaderboard resets remain undecided.
+Alliance anti-abuse, selectable packages and guild recognition are approved and implemented; production values remain pending. Cooperative allied capture as a gameplay mode, database replacement and arbitrary leaderboard/web resets are not implemented or approved by this checklist. Kill tracker counts remain cosmetic. Historical AxKoth comparisons remain reference material, not runtime dependencies.
 
-## Reward anti-abuse foundation
-
-- [x] ABUSE-001/002: alliance-side accounting and activation membership snapshot,
-  conservative relation merges and observed guild-switch exclusion, including SOLO.
-- [x] ABUSE-003/004: meaningful opposition and account age/playtime eligibility.
-- [x] ABUSE-005: one event recipient-command budget and one winning identity.
-- [x] ABUSE-006: durable repeated-opponent reservations and staff audit records.
-- [x] ABUSE-007: legacy/private compatibility and gates disabled until TEST.
-- [x] Inspect MaceGuard and yield KOTH item/cooldown rules to its current rotation.
-- [ ] Review/merge KOTH and companion relation API PRs; verify runtime/network pins.
-- [ ] Deferred TEST: staged opposition, payout selection/counts, restart/disk failure,
-  live guild/alliance edits, old provider, two events and MaceGuard region/rotation.
-
-[Anti-abuse requirements and limits](anti-abuse-verification.md). Cooperative
-allied capture, selectable packages, guild XP/recognition and leaderboard
-corrections are later slices; this foundation does not implement those menus.
-
-
-## Real companion API verification
-
-- [x] Opt-in actualGuildApiTest with provider class-origin assertion, tracked artifact path/contents, 14 executed alliance/bank/protected-payout cases and cache-change verification. Ordinary suite: 282 passing cases plus one explicit provider-only skip. Evidence: companion-api-verification.md.
-- [ ] Exact-head hosted checks, independent review, canonical releases/pins and deferred server/client acceptance. No production changes.
+Evidence: priorities-verification.md, arena-setup-verification.md, expansion-verification.md, anti-abuse-verification.md, companion-api-verification.md, progression-verification.md, exclusive-rewards.md.

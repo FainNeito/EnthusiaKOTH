@@ -1,7 +1,7 @@
 # KOTH TEST acceptance
 
 User authorized review, dependency-order merges and TEST preparation on October 8.
-Production remains read-only. TEST is Bloom SMP Test Server `5d109214`, observed
+Production remains read-only. Historical October 8 snapshot: TEST is Bloom SMP Test Server `5d109214`, observed
 running Paper 26.2 build 128 with zero connected players. Existing TEST KOTH is
 0.1.0; schedules and Discord delivery are disabled and guild money is zero.
 Existing capture/moving coordinates are configuration examples, not accepted
@@ -9,10 +9,10 @@ arena geometry. Do not start a rewarded event before a player checks the areas.
 
 ## Source and runtime gates
 
-- Merge setup, expansion, anti-abuse and progression source in dependency order.
-  Preserve current-main changes and inspect exact-head hosted results/findings.
-- Merge the reviewed LumaGuilds alliance API and Advancements companion changes.
-  Build from their canonical merged commits and update the owning network pins.
+- Setup, expansion, anti-abuse and progression source and companion integrations
+  are merged as of October 9; see [tasks.md](tasks.md) for reconciled evidence.
+  Merge the owning network pin PR and check its current-head hosted results.
+  Build from canonical merged commits; verify trusted private-provider builds separately.
 - Record versions, commits and SHA-256 for every candidate; preserve prior TEST
   jars/configuration outside the active plugin directory. Install only one
   Advancements profile. TEST currently has the display-only pilot profile.
@@ -47,6 +47,10 @@ claim operation IDs and provider balances/deliveries for each run.
 | Keep-inventory death, XP, disconnect/rejoin, Java and Bedrock menus | Actual player/client evidence required; no unit-test substitution |
 
 ## Draft challenge and reward preparation
+
+Prepared inactive YAML, provider mapping, actual UTC-day semantics and budget/template
+decisions: [challenge-reward-plan.md](challenge-reward-plan.md). No candidate is
+installed or enabled by this document.
 
 The existing five-metric challenges are drafts, still disabled: Contender
 5 wins/3 opposing sides/2 arenas/3 days/1,800 scoring seconds; Veteran

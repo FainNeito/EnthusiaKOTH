@@ -1,0 +1,56 @@
+# Review candidate only: do not auto-install or enable. See ../challenge-reward-plan.md.
+# IDs and draft thresholds match canonical d055211; provider keys remain blank.
+# Disabled progression DOES NOT disable arena legacy commands/money; clear those separately.
+# Inactive until TEST. Enabling also requires reward-protection.enabled in config.yml.
+enabled: false
+# Fixed EVENT pool, divided among qualifying contributors. No legacy reward commands
+# run when progression is enabled. Money uses cents (100 cents = one currency unit).
+pool-cents: 0
+package-units: 0
+contribution-percent: 10.0
+# This floor is additional to 10% of winning-side scoring. Calibrate short events.
+minimum-scoring-seconds: 120
+minimum-opposition-seconds: 120
+# Optional observed membership-age gate; unknown history fails closed when nonzero.
+minimum-roster-age-seconds: 0
+# Optional server-controlled command, never auto-replayed after uncertain dispatch.
+# Requires a supported guild XP command verified in TEST. {GUILD_UUID} only.
+guild-xp-command: ''
+packages: {}
+# Draft difficulty: ALL metrics required, public protected victories only.
+# days = distinct UTC dates of eligible wins; not consecutive days or schedule timezone.
+# Relic drafts require four distinct accepted arena IDs. Do not rename IDs to add credit.
+# Empty tag/definition values mean no physical/cosmetic reward is issued.
+challenges:
+  contender:
+    wins: 5
+    opponents: 3
+    arenas: 2
+    days: 3
+    seconds: 1800
+    tag: ''
+  veteran:
+    wins: 25
+    opponents: 10
+    arenas: 3
+    days: 14
+    seconds: 10800
+    tag: ''
+  sovereign_blade:
+    wins: 100
+    opponents: 25
+    arenas: 4
+    days: 30
+    seconds: 43200
+    tag: ''
+    lore-definition: ''
+    exclusive: true
+  sovereign_crown:
+    wins: 150
+    opponents: 35
+    arenas: 4
+    days: 45
+    seconds: 64800
+    tag: ''
+    lore-definition: ''
+    exclusive: true
