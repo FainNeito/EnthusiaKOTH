@@ -75,6 +75,21 @@ Do not substitute fake signer metadata or claim artwork is installed from a draf
 
 ## Acceptance record
 
+### Additional integrity and readiness cases
+
+| Case | Expected result |
+| --- | --- |
+| Cold/delayed definition query before paid or flare start | Pending check blocks without payment or flare consumption; retry after completion; no probe item/ownership/claim |
+| Readiness loop with actual provider and a scheduled event | Proactive checks run only while progression/readiness are enabled; event uses a valid snapshot, and missing evidence cannot be bypassed |
+| Definition deleted, provider stops/restarts or KOTH reloads | Completed missing/failure result blocks immediately; a previous snapshot expires within five seconds of initiation; replacement/reload clears cache |
+| Unresponsive, old V1 or unsupported provider | Three-second query timeout/unsupported capability blocks; delivery-only API remains usable when readiness enforcement is disabled |
+| Delayed start loses readiness between payment and activation | Activation check rejects and uses the existing refund path; no winner claims or challenge credit |
+| Held match after restart; concurrent approve; rejected decision retry | Frozen qualification survives; one audited decision/payout; rejection cannot be approved later |
+| Allied aliases at UTC rollover and queued/unredeemed package claims | Player/side caps reserve once by completion day; no multiplied event pool; tags/relics remain separate |
+| Renamed/same-center/displaced arena copy | Stored aliases preserve history; same center converges; staff must accept meaningful distinct displaced hills before enabling variety challenges |
+
+Reward setup stays inactive: choose budgets after recorded balance tests, register collision-checked tag IDs, create/confirm the real signed/tracked sword and real textured helmet, then record provider keys/hashes. Four accepted distinct arenas are needed for current relic drafts. No live acceptance is asserted by this checklist.
+
 Local source evidence: 296 passing KOTH cases plus one explicit provider-only skip;
 16 actual-provider cases pass against the refreshed LumaGuilds artifact. Guilds
 clean verification discovered 1,608 cases, five skips, zero failures/errors.

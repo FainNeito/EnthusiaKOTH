@@ -13,16 +13,15 @@ import java.util.concurrent.TimeUnit
 
 /** Idempotent providers retry original IDs. Non-idempotent providers reserve REVIEW before dispatch. */
 class ProgressionClaims(private val plugin: JavaPlugin, private val store: SqlProgressionStore, private val economy: PlayerEconomy) {
+    private val definitionReadiness = LoreDefinitionReadiness()
+    fun clearReadiness() = definitionReadiness.clear()
     init { store.recoverIdempotentClaims() }
     fun loreAvailable(): Boolean = runCatching { Bukkit.getServicesManager().load(LoreItemsServiceV1::class.java) != null }.getOrDefault(false)
     fun tagsAvailable(): Boolean = runCatching { Bukkit.getServicesManager().load(TagService::class.java) != null }.getOrDefault(false)
     fun definitionIssues(policy: net.badgersmc.ek.application.ProgressionPolicy): List<String> = buildList {
         val definitions=(policy.challenges.map { it.loreDefinition }+policy.packages.map { it.loreDefinition }).filter(String::isNotBlank).distinct()
-        if (definitions.isNotEmpty()) {
-            if (!loreAvailable()) add("LoreItems delivery provider is unavailable")
-            // Current V1 exposes delivery only. Never create an item as a readiness probe.
-            add("LoreItems V1 cannot verify definitions read-only: ${definitions.joinToString()}; readiness requires a provider query API")
-        }
+        val lore = runCatching { Bukkit.getServicesManager().load(LoreItemsServiceV1::class.java) }.getOrNull()
+        addAll(definitionReadiness.issues(lore, definitions))
         val tags=policy.challenges.map { it.tag }.filter(String::isNotBlank).distinct()
         if (tags.isNotEmpty()) {
             val provider=runCatching { Bukkit.getServicesManager().load(TagService::class.java) }.getOrNull()
