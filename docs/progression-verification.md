@@ -63,3 +63,7 @@ The first hosted exact-head run passed compilation and tests, then exposed repea
 directory records in Shadow's archive. The packaging audit now ignores directory
 records while continuing to reject duplicate class/resource files; evidence
 artifact names also identify the checked PR head instead of the synthetic merge.
+Merge preparation incorporates the refreshed anti-abuse branch and its real-JAR
+contract task: 296 ordinary cases pass with one explicit provider-only skip, and
+16 cases pass against the actual refreshed LumaGuilds JAR. Detailed runtime and
+multiplayer acceptance steps are in [test-acceptance.md](test-acceptance.md).
