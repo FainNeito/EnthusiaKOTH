@@ -1,0 +1,50 @@
+# Inactive until TEST. Enabling also requires reward-protection.enabled in config.yml.
+enabled: false
+# Fixed EVENT pool, divided among qualifying contributors. No legacy reward commands
+# run when progression is enabled. Money uses cents (100 cents = one currency unit).
+pool-cents: 0
+package-units: 0
+contribution-percent: 10.0
+minimum-scoring-seconds: 120
+minimum-opposition-seconds: 120
+# Optional observed membership-age gate; unknown history fails closed when nonzero.
+minimum-roster-age-seconds: 0
+# Optional server-controlled command, never auto-replayed after uncertain dispatch.
+# Requires a supported guild XP command verified in TEST. {GUILD_UUID} only.
+guild-xp-command: ''
+packages: {}
+# Draft difficulty: ALL metrics required, public protected victories only.
+# Empty tag/definition values mean no physical/cosmetic reward is issued.
+challenges:
+  contender:
+    wins: 5
+    opponents: 3
+    arenas: 2
+    days: 3
+    seconds: 1800
+    tag: ''
+  veteran:
+    wins: 25
+    opponents: 10
+    arenas: 3
+    days: 14
+    seconds: 10800
+    tag: ''
+  sovereign_blade:
+    wins: 100
+    opponents: 25
+    arenas: 4
+    days: 30
+    seconds: 43200
+    tag: ''
+    lore-definition: ''
+    exclusive: true
+  sovereign_crown:
+    wins: 150
+    opponents: 35
+    arenas: 4
+    days: 45
+    seconds: 64800
+    tag: ''
+    lore-definition: ''
+    exclusive: true

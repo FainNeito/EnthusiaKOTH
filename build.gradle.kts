@@ -59,6 +59,9 @@ tasks.shadowJar {
     archiveBaseName.set("EnthusiaKOTH")
     mergeServiceFiles()
     exclude("net/lumalyte/lg/api/**")
+    exclude("net/enthusia/loreitems/api/**")
+    exclude("org/enthusia/tags/TagService.class")
+    exclude("io/github/badgersmc/advancements/pilot/**")
 }
 
 tasks.build {

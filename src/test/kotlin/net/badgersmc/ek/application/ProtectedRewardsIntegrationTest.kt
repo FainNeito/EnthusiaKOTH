@@ -47,15 +47,17 @@ class ProtectedRewardsIntegrationTest {
         every { store.reserve(any(),any(),any(),any(),any(),any(),any()) } returns true
     }
     @AfterEach fun cleanup()=unmockkAll()
-    private fun game():KothService {
+    private fun game(sink:MatchProgressionSink? = null,progression:ProgressionPolicy=ProgressionPolicy(),afterScore:(KothService)->Unit={}):KothService {
         val arena=KothArena("hill","score",CaptureZone("hill","world",Location(world,0.0,75.0,0.0),Location(world,10.0,85.0,10.0)),durationSeconds=120,captureSeconds=10,
             rewards=listOf("give {CONTRIBUTORS} diamond 1","give {ALL_ONLINE} gold_ingot 1"))
         val s=KothService(cfgLoader={ EnthusiaKothConfig(rewardProtection=RewardProtectionConfig(enabled=true),display=DisplayConfig(false),rewards=mapOf("score" to RewardConfig(guildVaultMoney=10.0))) },
             stats=stats,economy=mockk(relaxed=true),guilds=guilds,displayService=mockk(relaxed=true),fireworkService=mockk(relaxed=true),discordWebhook=mockk(relaxed=true),zoneBorderService=mockk(relaxed=true),
-            lang=mockk<LangService>(relaxed=true).also { every { it.msg(any(),*anyVararg()) } returns Component.empty() },arenaResolver={arena},queueStore=InMemoryEventQueueStore(),clock=clock,logger={_,_->},protectionStore=store)
+            lang=mockk<LangService>(relaxed=true).also { every { it.msg(any(),*anyVararg()) } returns Component.empty() },arenaResolver={arena},queueStore=InMemoryEventQueueStore(),clock=clock,logger={_,_->},protectionStore=store,
+            progressionSink=sink,progressionPolicy={progression})
         assertTrue(s.startEvent(arena,teamMode=TeamMode.GUILD))
         hill=listOf(enemy); repeat(30) { s.tick() }
         hill=listOf(p1,p2); repeat(41) { s.tick() }
+        afterScore(s)
         now=now.plusSeconds(120); s.tick(); return s
     }
     @Test fun `multiple contributors and legacy all online commands share one event budget`() {
@@ -75,5 +77,17 @@ class ProtectedRewardsIntegrationTest {
         every { store.reserve(any(),any(),any(),any(),any(),any(),any()) } throws java.sql.SQLException("disk")
         game()
         verify(exactly=0) { Bukkit.dispatchCommand(any(),any()); guilds.depositToVault(any(),any(),any()); stats.incrementWin(any(),any()) }
+    }
+    @Test fun `verified sink receives only winner contributors and suppresses legacy payouts`() {
+        val sink=mockk<MatchProgressionSink>(relaxed=true)
+        game(sink,ProgressionPolicy(enabled=true,minimumScoringSeconds=1,minimumOppositionSeconds=30))
+        verify(exactly=1) { sink.complete(match { it.source=="PLAYER_COMMAND" && it.winner=="guild:$a" &&
+            it.oppositionSeconds==30 && it.contributions.filter { c -> c.eligible }.map { c -> c.player }.toSet()==ids.take(2).toSet() },any()) }
+        verify(exactly=0) { Bukkit.dispatchCommand(any(),any()); guilds.depositToVault(any(),any(),any()) }
+    }
+    @Test fun `membership event invalidates earned contributor even when back in original guild`() {
+        val sink=mockk<MatchProgressionSink>(relaxed=true)
+        game(sink,ProgressionPolicy(enabled=true,minimumScoringSeconds=1,minimumOppositionSeconds=30)) { it.membershipChanged(ids[0]) }
+        verify(exactly=1) { sink.complete(match { m -> m.contributions.none { c -> c.player==ids[0] && c.eligible } },any()) }
     }
 }

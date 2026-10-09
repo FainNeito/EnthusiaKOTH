@@ -28,6 +28,7 @@ data class KothEvent(
     val paymentReceipt: PaymentReceipt? = null,
     val teamMode: TeamMode = TeamMode.SOLO,
     val privateTestAccess: PrivateTestAccess? = null,
+    val source: EventKind = EventKind.ADMIN,
 ) {
     val scores: MutableMap<TeamId, Double> = ConcurrentHashMap()
     val scoringParticipation = ScoringParticipation()

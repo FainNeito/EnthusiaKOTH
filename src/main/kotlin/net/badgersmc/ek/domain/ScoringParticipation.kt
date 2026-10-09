@@ -20,6 +20,7 @@ class ScoringParticipation {
         return players[team].orEmpty().filterValues { it > 0 && it.toDouble() * 100 / total >= percent }.keys.toSet()
     }
     fun teamCount(): Int = observed.size
+    fun snapshot(): Map<TeamId, Map<UUID, Long>> = players.mapValues { it.value.toMap() }
     fun playerSeconds(team: TeamId, player: UUID): Long = players[team]?.get(player) ?: 0L
     fun observe(teams: Collection<TeamId>) { observed.addAll(teams) }
 }

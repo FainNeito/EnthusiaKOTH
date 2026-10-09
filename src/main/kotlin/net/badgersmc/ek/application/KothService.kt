@@ -78,12 +78,19 @@ class KothService(
     private val lifecycleSink: (net.badgersmc.ek.api.KothLifecycleEvent) -> Unit = {},
     private val arenasOverlap: (KothArena, KothArena) -> Boolean = EventConcurrency::overlaps,
     private val protectionStore: RewardProtectionStore? = null,
+    private val progressionSink: MatchProgressionSink? = null,
+    private val progressionPolicy: () -> ProgressionPolicy = { ProgressionPolicy() },
     private val captureAudience: (KothEvent, Player) -> Boolean = { _, _ -> false },
 ) {
     private val protectedMatches = mutableMapOf<UUID, ProtectedMatch>()
     private val recipientBudgets = mutableMapOf<UUID, Int>()
+    private val progressionMatches = mutableMapOf<UUID, ProgressionPolicy>()
+
+    fun membershipChanged(player: UUID) { protectedMatches.values.forEach { it.invalidPlayers.add(player) } }
+    fun relationChanged() { protectedMatches.values.forEach { it.relationChanged() } }
 
     private fun initializeProtection(event: KothEvent) {
+        progressionMatches.putIfAbsent(event.id, progressionPolicy().also { it.validate() })
         val policy = cfgLoader().rewardProtection
         if (!policy.enabled || event.isPrivateTest || event.id in protectedMatches) return
         val mode = if (event.arena.ignoreFactions) TeamMode.SOLO else event.teamMode
@@ -510,8 +517,23 @@ class KothService(
         val winner = protectedWinner(event, candidate.takeIf { event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams })
         event.state = EventState.COMPLETED
         val wasContested = event.scores.size > 1
+        val frozenProgression = progressionMatches[event.id]
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.COMPLETED, winner)
         try {
+            frozenProgression?.takeIf { it.enabled }?.let { policy ->
+                runCompletionStep(event, "verified progression") {
+                    val protection = protectedMatches[event.id]
+                    val qualified = winner?.let { event.scoringParticipation.eligible(it, policy.contributionPercent) }.orEmpty()
+                    val contributions = event.scoringParticipation.snapshot().flatMap { (team, ledger) -> ledger.map { (id, seconds) ->
+                        MatchContribution(id, team.storageKey(), seconds, team == winner && id in qualified &&
+                            protection != null && id !in protection.invalidPlayers && id !in protection.ineligibleAccounts)
+                    } }
+                    progressionSink?.complete(VerifiedMatch(event.id, event.arena.id, event.arena.family, event.source.name,
+                        clock.instant(), winner?.storageKey(), winner?.let { protection?.opponentGroups(it) }.orEmpty(),
+                        contributions, winner?.let { protection?.oppositionSeconds(it) } ?: 0,
+                        protection?.allianceChanged ?: true, protection?.audit() ?: "PROTECTION_REQUIRED"), policy)
+                }
+            }
             event.paymentReceipt?.let { receipt ->
                 runCompletionStep(event, "payment settlement") {
                     if (!receipt.settle()) {
@@ -536,7 +558,7 @@ class KothService(
                         stats.save()
                     }
                     runCompletionStep(event, "reward execution") {
-                        executeRewards(event, winner)
+                        if (frozenProgression?.enabled != true) executeRewards(event, winner)
                     }
                 }
             } else {
@@ -567,6 +589,7 @@ class KothService(
 
     private fun cleanupEvent(event: KothEvent) {
         protectedMatches.remove(event.id)
+        progressionMatches.remove(event.id)
         recipientBudgets.remove(event.id)
         event.clearScores()
         event.currentController = null
@@ -685,6 +708,7 @@ class KothService(
             state = if (delaySeconds > 0) EventState.STARTING else EventState.ACTIVE,
             teamMode = if (arena.ignoreFactions) TeamMode.SOLO else teamMode,
             paymentReceipt = paymentReceipt,
+            source = kind,
         )
         activeEvent = event
         if (event.state == EventState.ACTIVE) {
@@ -817,6 +841,7 @@ class KothService(
             endsAt = now.plusSeconds(arena.durationSeconds.toLong()),
             state = EventState.ACTIVE,
             teamMode = if (arena.ignoreFactions) TeamMode.SOLO else next.teamMode,
+            source = next.startSource,
         )
         activeEvent = event
         activateQueuedEvent(event, cfg, recovered)

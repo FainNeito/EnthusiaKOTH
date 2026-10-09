@@ -51,6 +51,7 @@ import javax.sql.DataSource
 class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     private val configLoader = ConfigLoader(plugin)
     private val clock: Clock = Clock.systemUTC()
+    private val progressionSettings = net.badgersmc.ek.infrastructure.bukkit.ProgressionSettings(plugin)
     private val notificationPreferences = net.badgersmc.ek.infrastructure.bukkit.PlayerNotificationPreferences(org.bukkit.NamespacedKey(plugin, "notifications-disabled"))
     @Volatile private var _config: EnthusiaKothConfig = configLoader.load()
     @Volatile private var _arenas: Map<String, KothArena> = configLoader.loadArenas()
@@ -125,6 +126,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         configLoader.reload()
         _config = configLoader.load()
         _arenas = configLoader.loadArenas()
+        progressionSettings.reload()
         langService.reload()
         kothService.processQueue()
     }
@@ -207,11 +209,18 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
     )
     private var refundProviderUnavailableLogged = false
+    private val progressionStore = net.badgersmc.ek.infrastructure.persistence.SqlProgressionStore(dataSource,progressionSettings::policy).also {
+        it.init()
+        plugin.server.servicesManager.register(net.badgersmc.ek.api.KothProgressionV1::class.java,it,plugin,org.bukkit.plugin.ServicePriority.Normal)
+    }
+    private val progressionClaims = net.badgersmc.ek.infrastructure.bukkit.ProgressionClaims(plugin,progressionStore,vaultEconomy)
 
     val kothService: KothService = KothService(
         cfgLoader = { config() },
         stats = statsRepository,
         protectionStore = net.badgersmc.ek.infrastructure.persistence.SqlRewardProtectionStore(dataSource).also { it.init() },
+        progressionSink = progressionStore,
+        progressionPolicy = progressionSettings::policy,
         economy = vaultEconomy,
         guilds = lumaGuildsAdapter,
         displayService = displayService,
@@ -351,6 +360,17 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     val staffSettingsController = net.badgersmc.ek.infrastructure.bukkit.StaffSettingsController(
         plugin, staffSettingsService, ::config, ::arenas, scheduleService, { reload() }, langService,
     ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
+    private val progressionController = net.badgersmc.ek.infrastructure.bukkit.ProgressionController(
+        progressionStore,progressionSettings,progressionClaims,kothService,::config,::arenas,worldGuardRegionService,lumaGuildsAdapter,
+    ).also {
+        plugin.server.pluginManager.registerEvents(it,plugin)
+        plugin.server.scheduler.runTaskTimer(plugin,Runnable { runCatching { progressionClaims.dispatchGuildClaims() }
+            .onFailure { error -> plugin.logger.severe("Guild reward dispatch failed: ${error.message}") } },200L,200L)
+    }
+    private val advancementProjection = net.badgersmc.ek.infrastructure.bukkit.KothAdvancementProjection(plugin,progressionSettings,progressionStore).also {
+        plugin.server.scheduler.runTaskTimer(plugin,Runnable { runCatching { it.tick() }.onFailure { error ->
+            plugin.logger.warning("KOTH advancement projection unavailable: ${error.message}") } },40L,200L)
+    }
     val kothCommand = KothCommand(
         plugin = plugin,
         cfgLoader = { config() },
@@ -370,6 +390,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         arenaRegionSuggestions = worldGuardRegionService::regionIds,
         setup = arenaSetupController,
         settings = staffSettingsController,
+        progression = progressionController,
     ).also(::registerCommand)
     val kothListeners = KothListeners(
         cfgLoader = { config() },
@@ -508,6 +529,8 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         scheduleService.flush()
         discordWebhook.shutdown()
         statsRepository.shutdown()
+        advancementProjection.close()
+        plugin.server.servicesManager.unregisterAll(plugin)
         (dataSource as? HikariDataSource)?.close()
     }
 }
