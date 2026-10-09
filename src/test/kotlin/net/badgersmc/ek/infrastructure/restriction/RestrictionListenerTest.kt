@@ -190,6 +190,7 @@ class RestrictionListenerTest {
         every { player.inventory } returns inventory
         val koth = mockk<KothService>()
         every { koth.activeEvent } returns event
+        every { koth.allEvents() } returns listOf(event)
         val restrictions = RestrictionService(rulesForArena = { rules })
         return Fixture(event, player, inventory, inside, restrictions, RestrictionListener(koth, restrictions))
     }

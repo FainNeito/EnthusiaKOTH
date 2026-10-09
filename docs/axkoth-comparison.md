@@ -27,7 +27,7 @@ Preview draws a static center circle and native cuboid; it does not animate a
 moving path or render a named WorldGuard polygon. Save refuses while an event or
 queued start exists so configuration reload cannot interrupt a match.
 
-## Feature comparison and priorities
+## Initial comparison before the expansion request
 
 | AxKoth surface evidenced in supplied JAR | Enthusia status | Benefit / recommendation |
 |---|---|---|
@@ -50,7 +50,7 @@ queued start exists so configuration reload cannot interrupt a match.
 | H2/MySQL/PostgreSQL/SQLite adapters | Current Hikari/SQLite persistence | Database portability only if operationally required; migration and transaction proof needed |
 | Advertised asynchronous/modular runtime | Not a benchmark | Profile our actual TEST event before performance changes; Bukkit work remains on main thread |
 
-## Recommended order after this PR
+## Original recommendation before expansion approval
 
 1. TEST/client acceptance of guided setup and existing gameplay/reward rules.
 2. Schedule editor with next-run preview, timezone and enabled/disabled visibility.
@@ -60,3 +60,17 @@ queued start exists so configuration reload cannot interrupt a match.
 Score mode, simultaneous events, alliances, arbitrary leaderboard resets and
 database changes remain proposals. The setup request does not approve new payout
 rates, automated Discord posts, production deployment or importing AxKoth files.
+
+## Expansion approved and implemented October 8
+
+The subsequent request to add all eight recommendations supersedes the earlier
+proposal status for editors, arena info/teleport, optional displays, dated
+leaderboards, SCORE, lifecycle API and concurrency. All eight now have source
+and local regression evidence on the expansion branch stacked on setup PR #3.
+See [expansion evidence](expansion-verification.md) and [API contract](lifecycle-api.md).
+The reward editor supports commands (including item-grant commands), chance
+commands and existing solo/guild money; it does not import AxKoth item data or
+copy its payout policy. Schedules retain our daily/rotation model rather than
+introducing cron. Alliance policy, arbitrary resets and database replacement
+remain unapproved. TEST/client checks remain deferred; implementation is not a
+production or measured-performance claim.

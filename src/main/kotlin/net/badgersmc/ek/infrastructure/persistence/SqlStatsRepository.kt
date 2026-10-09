@@ -17,6 +17,23 @@ class SqlStatsRepository(
     private data class ArenaKey(val entityKey: String, val arena: String)
     private data class FamilyKey(val entityKey: String, val family: String)
 
+    private data class TimedWin(val entity: String, val arena: String, val at: java.time.Instant)
+    private val timedWins = ConcurrentHashMap<java.util.UUID, TimedWin>()
+    /** A durable idempotent win journal. Legacy wins intentionally have no invented date. */
+    fun recordTimedWin(eventId: java.util.UUID, entityKey: String, arenaId: String, at: java.time.Instant) {
+        val win = TimedWin(entityKey, arenaId, at)
+        if (timedWins.containsKey(eventId)) return
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("INSERT OR IGNORE INTO koth_win_history(event_id, entity_key, arena, won_at) VALUES(?, ?, ?, ?)").use { statement ->
+                statement.setString(1, eventId.toString()); statement.setString(2, entityKey)
+                statement.setString(3, arenaId); statement.setLong(4, at.toEpochMilli())
+                if (statement.executeUpdate() > 0) timedWins[eventId] = win
+            }
+        }
+    }
+    fun winsIn(window: net.badgersmc.ek.application.LeaderboardWindow): Map<String, Int> = timedWins.values
+        .filter { window.contains(it.at) }.groupingBy { it.entity }.eachCount()
+
     private val arenaCache = ConcurrentHashMap<ArenaKey, Int>()
     private val familyCache = ConcurrentHashMap<FamilyKey, Int>()
     private val legacyFamilyBaselineCache = ConcurrentHashMap<FamilyKey, Int>()
@@ -34,6 +51,12 @@ class SqlStatsRepository(
     fun init() {
         dataSource.connection.use { connection ->
             ensureSchema(connection)
+            connection.createStatement().use { statement ->
+                statement.execute("CREATE TABLE IF NOT EXISTS koth_win_history(event_id TEXT PRIMARY KEY, entity_key TEXT NOT NULL, arena TEXT NOT NULL, won_at INTEGER NOT NULL)")
+                statement.executeQuery("SELECT event_id, entity_key, arena, won_at FROM koth_win_history").use { rows ->
+                    while (rows.next()) timedWins[java.util.UUID.fromString(rows.getString(1))] = TimedWin(rows.getString(2), rows.getString(3), java.time.Instant.ofEpochMilli(rows.getLong(4)))
+                }
+            }
             backfillTotals(connection)
         }
         migrationOutcome = legacyStatsFile?.let { file ->

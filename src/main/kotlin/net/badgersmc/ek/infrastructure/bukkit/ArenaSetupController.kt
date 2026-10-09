@@ -120,6 +120,7 @@ class ArenaSetupController(
         inv.setItem(23, icon(Material.LEVER, "enabled", a.enabled.toString(), "enable-hint"))
         if (draft.creating) inv.setItem(24, icon(Material.NETHER_STAR, "family", a.family))
         inv.setItem(25, icon(Material.MAP, "bind-region", lore = "bind-region-hint"))
+        if (!draft.creating) inv.setItem(34, icon(Material.WRITABLE_BOOK, "manage", lore = "manage-hint"))
         val issues = service.issues(draft)
         inv.setItem(31, ItemStack(if (issues.isEmpty()) Material.LIME_DYE else Material.RED_DYE).apply {
             editMeta { meta -> meta.displayName(text(if (issues.isEmpty()) "ready" else "not-ready"))
@@ -182,8 +183,9 @@ class ArenaSetupController(
                             corner2 = a.protectedRegion.corner2.copy(y = world.maxHeight.toDouble())))
                     }
                     23 -> draft.arena = a.copy(enabled = !a.enabled)
-                    24 -> if (draft.creating) { val choices = listOf("capture", "moving", "conquest"); draft.arena = a.copy(family = choices[(choices.indexOf(a.family) + 1) % choices.size]) }
+                    24 -> if (draft.creating) { val choices = listOf("capture", "moving", "conquest", "score"); draft.arena = a.copy(family = choices[(choices.indexOf(a.family) + 1) % choices.size]) }
                     25 -> { regionList(player, draft, 0); return@guarded }
+                    34 -> if (!draft.creating) { player.performCommand("ekoth manage ${draft.id}"); return@guarded }
                     45 -> { cancel(player); return@guarded }
                     49 -> {
                         service.save(draft); clear(player)

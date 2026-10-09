@@ -68,7 +68,7 @@ class ArenaSetupServiceTest {
         assertEquals(SetupIssue.EXISTS, assertThrows(SetupException::class.java) { service.begin("hill", "world", center, "capture") }.issue)
         assertEquals(SetupIssue.MISSING, assertThrows(SetupException::class.java) { service.begin("none", "world", center) }.issue)
         assertEquals(SetupIssue.ID, assertThrows(SetupException::class.java) { service.begin("../bad", "world", center, "capture") }.issue)
-        assertEquals(SetupIssue.FAMILY, assertThrows(SetupException::class.java) { service.begin("new", "world", center, "score") }.issue)
+        assertEquals(SetupIssue.FAMILY, assertThrows(SetupException::class.java) { service.begin("new", "world", center, "unknown") }.issue)
     }
     @Test fun `existing rewards and rules survive draft settings change`() {
         arenas["hill"] = ArenaConfig(worldGuardRegion = "koth", center = center, rewards = listOf("bank 500"), schedule = listOf("12:00"), rewardFamily = "custom", ignoreFactions = true)

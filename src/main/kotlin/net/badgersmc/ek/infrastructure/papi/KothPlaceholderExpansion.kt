@@ -32,11 +32,16 @@ class KothPlaceholderExpansion(
         allWins = stats::allWins,
         playerName = { Bukkit.getOfflinePlayer(it).name },
         guildName = guilds::guildName,
+        arenaState = state@ { id, playerId ->
+            val event = kothService.eventForArena(id) ?: return@state null
+            if (event.isPrivateTest && (playerId == null || !event.isParticipant(playerId))) return@state null
+            ActivePlaceholderState(event.arena.id, kothService.capperName(event), event.endsAt)
+        },
     )
 
     override fun getIdentifier(): String = "enthusiakoth"
     override fun getAuthor(): String = "BadgersMC"
-    override fun getVersion(): String = "0.2.0"
+    override fun getVersion(): String = "0.3.0"
     override fun persist(): Boolean = true
     override fun canRegister(): Boolean = true
 

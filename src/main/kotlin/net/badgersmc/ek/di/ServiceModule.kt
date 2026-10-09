@@ -212,6 +212,18 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             error?.let { plugin.logger.severe(it.stackTraceToString()) }
         },
         eventTerminated = restrictionService::clearEvent,
+        lifecycleSink = { plugin.server.pluginManager.callEvent(it) },
+        arenasOverlap = overlap@ { a, b ->
+            if (a.zone.worldName != b.zone.worldName) return@overlap false
+            fun bounded(arena: KothArena): KothArena? {
+                val id = arena.worldGuardRegion ?: return arena
+                val bounds = worldGuardRegionService.bounds(arena.zone.worldName, id) ?: return null
+                return arena.copy(worldGuardRegion = null, protectedRegion = bounds)
+            }
+            val left = bounded(a) ?: return@overlap true
+            val right = bounded(b) ?: return@overlap true
+            net.badgersmc.ek.application.EventConcurrency.overlaps(left, right)
+        },
         notificationsEnabled = notificationPreferences::enabled,
         toggleNotifications = notificationPreferences::toggle,
         captureAudience = ::captureAudience,
@@ -220,6 +232,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         config = { config() },
         pluginReady = { plugin.isEnabled },
         hasConflictingEvent = { kothService.activeEvent != null },
+        arenaConflict = kothService::conflicts,
         economy = vaultEconomy,
         starter = object : EventStarter {
             override fun start(
@@ -289,6 +302,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     )
     val keepInventoryListener = net.badgersmc.ek.infrastructure.bukkit.KeepInventoryListener(
         activeEvent = { kothService.activeEvent },
+        allEvents = kothService::allEvents,
         contains = { arena, location ->
             arena.worldGuardRegion?.let { worldGuardRegionService.contains(arena.zone.worldName, it, location) }
                 ?: (arena.zone.contains(location) || arena.protectedRegion?.contains(location) == true)
@@ -314,6 +328,13 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     val arenaSetupController = net.badgersmc.ek.infrastructure.bukkit.ArenaSetupController(
         plugin, arenaSetupService, arenaSetupStore::read, { reload() }, langService, worldGuardRegionService::regionIds,
     ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
+    private val staffSettingsStore = net.badgersmc.ek.infrastructure.persistence.FileStaffSettingsStore(File(plugin.dataFolder, "config.yml"))
+    private val staffSettingsService = net.badgersmc.ek.application.StaffSettingsService(staffSettingsStore) {
+        kothService.allEvents().isNotEmpty() || kothService.queuedEvents().isNotEmpty()
+    }
+    val staffSettingsController = net.badgersmc.ek.infrastructure.bukkit.StaffSettingsController(
+        plugin, staffSettingsService, ::config, ::arenas, scheduleService, { reload() }, langService,
+    ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
     val kothCommand = KothCommand(
         plugin = plugin,
         cfgLoader = { config() },
@@ -332,6 +353,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         arenaEnabledAction = { arenaId, enabled -> setArenaEnabled(arenaId, enabled) },
         arenaRegionSuggestions = worldGuardRegionService::regionIds,
         setup = arenaSetupController,
+        settings = staffSettingsController,
     ).also(::registerCommand)
     val kothListeners = KothListeners(
         cfgLoader = { config() },
@@ -466,6 +488,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
 
     fun shutdown() {
         arenaSetupController.shutdown()
+        staffSettingsController.shutdown()
         scheduleService.flush()
         discordWebhook.shutdown()
         statsRepository.shutdown()

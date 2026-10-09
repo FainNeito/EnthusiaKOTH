@@ -20,6 +20,8 @@ data class EnthusiaKothConfig(
     val privateTesting: PrivateTestingConfig = PrivateTestingConfig(),
     val locks: LockConfig = LockConfig(),
     val fairness: FairnessConfig = FairnessConfig(),
+    val maxConcurrentEvents: Int = 1,
+    val seasonStart: String? = null,
     val captureNotificationRegions: List<String> = listOf("spawn", "warzone", "market"),
 )
 
@@ -67,7 +69,7 @@ data class PositionConfig(val x: Double = 0.0, val y: Double = 80.0, val z: Doub
 data class ProtectedRegionConfig(val corner1: PositionConfig = PositionConfig(-32.0, -64.0, -32.0), val corner2: PositionConfig = PositionConfig(32.0, 320.0, 32.0))
 data class RewardConfig(val soloVaultMoney: Double = 0.0, val guildVaultMoney: Double = 0.0)
 data class DiscordConfig(val enabled: Boolean = false, val webhookUrl: String = "", val preStartPingMinutes: Int = 10, val liveUpdateSeconds: Int = 60)
-data class DisplayConfig(val zoneBorder: Boolean = true)
+data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
 data class FamilyRulesConfig(val rules: Map<String, RuleSet> = emptyMap())
 data class PrivateTestingConfig(val lobbySeconds: Int = 0, val quickMatchDurationSeconds: Int = 120, val quickCaptureSeconds: Int = 15, val showObjectiveParticles: Boolean = true)
 data class LockConfig(val state: LockState = LockState.UNLOCKED)

@@ -62,6 +62,13 @@ discord:
 
 display:
   zone-border: true
+  bossbar: true
+  actionbar: true
+  hologram: false
+  scoreboard: false
+  bossbar-color: RED
+  bossbar-overlay: PROGRESS
+  bossbar-title: "" # Blank uses lang/en_US.yml; MiniMessage placeholders koth_name, capper, time, contested.
 
 rules:
   defaults:
@@ -152,3 +159,11 @@ rewards:
   conquest:
     solo-vault-money: 0.0
     guild-vault-money: 0.0
+
+# Concurrent public events require nonoverlapping native arenas; private tests remain exclusive.
+events:
+  max-concurrent: 1
+
+# Inclusive local date; leave blank until a season has been selected.
+leaderboards:
+  season-start: ""
