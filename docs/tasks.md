@@ -66,3 +66,9 @@ database replacement and arbitrary leaderboard resets remain undecided.
 [Anti-abuse requirements and limits](anti-abuse-verification.md). Cooperative
 allied capture, selectable packages, guild XP/recognition and leaderboard
 corrections are later slices; this foundation does not implement those menus.
+
+
+## Real companion API verification
+
+- [x] Opt-in actualGuildApiTest with provider class-origin assertion, tracked artifact path/contents, 14 executed alliance/bank/protected-payout cases and cache-change verification. Ordinary suite: 282 passing cases plus one explicit provider-only skip. Evidence: companion-api-verification.md.
+- [ ] Exact-head hosted checks, independent review, canonical releases/pins and deferred server/client acceptance. No production changes.
