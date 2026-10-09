@@ -1,5 +1,22 @@
 config-version: 8
 
+# Disabled until TEST acceptance. Enabling requires the alliance-capable LumaGuilds API.
+reward-protection:
+  enabled: false
+  minimum-opposition-seconds: 30
+  minimum-account-age-days: 7
+  minimum-playtime-minutes: 120
+  # Total executions of recipient-expanded commands per event, across all reward rows.
+  maximum-recipient-commands: 1
+  repeated-opponent-window-hours: 24
+  # Zero disables the repeated-opponent limit only.
+  maximum-repeated-wins: 2
+
+# MaceGuard enforces the current rotation inside its configured warzone regions.
+# KOTH adds no competing item/cooldown policy when this is true.
+combat:
+  follow-warzone-rotation: true
+
 # Limits are opt-in. Teams are accounts/guilds, not verified unique humans.
 fairness:
   contributor-minimum-percent: 10.0

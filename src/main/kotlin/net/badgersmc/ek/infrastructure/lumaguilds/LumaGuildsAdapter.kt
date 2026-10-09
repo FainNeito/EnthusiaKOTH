@@ -34,6 +34,23 @@ class LumaGuildsAdapter {
 
     fun isAvailable(): Boolean = lookup != null
 
+    fun playerGuildIds(playerId: UUID): Set<UUID> = lookup?.getPlayerGuildIds(playerId) ?: emptySet()
+
+    /** Null distinguishes old/unavailable providers from a known alliance-free roster. */
+    fun allianceGraph(): Map<UUID, Set<UUID>>? = try {
+        lookup?.getActiveAllianceGraph()?.mapValues { it.value.toSet() }
+    } catch (_: LinkageError) { null }
+
+    fun protectionRoster(): net.badgersmc.ek.application.ProtectionRoster? {
+        val lk = lookup ?: return null
+        val graph = allianceGraph() ?: return null
+        val memberships = mutableMapOf<UUID, MutableSet<UUID>>()
+        graph.keys.forEach { guild -> lk.getGuildMemberIds(guild).forEach { player ->
+            memberships.getOrPut(player) { mutableSetOf() }.add(guild)
+        } }
+        return net.badgersmc.ek.application.ProtectionRoster(graph, memberships.mapValues { it.value.toSet() })
+    }
+
     fun playerGuildId(player: Player): UUID? {
         val lk = lookup ?: return null
         val ids = lk.getPlayerGuildIds(player.uniqueId)

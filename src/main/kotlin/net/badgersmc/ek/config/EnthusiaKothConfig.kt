@@ -20,6 +20,8 @@ data class EnthusiaKothConfig(
     val privateTesting: PrivateTestingConfig = PrivateTestingConfig(),
     val locks: LockConfig = LockConfig(),
     val fairness: FairnessConfig = FairnessConfig(),
+    val rewardProtection: net.badgersmc.ek.application.RewardProtectionConfig = net.badgersmc.ek.application.RewardProtectionConfig(),
+    val followWarzoneCombat: Boolean = true,
     val maxConcurrentEvents: Int = 1,
     val seasonStart: String? = null,
     val captureNotificationRegions: List<String> = listOf("spawn", "warzone", "market"),

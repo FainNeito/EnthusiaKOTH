@@ -60,3 +60,15 @@ Staff editors write existing `schedule.*`, `arenas.*.schedule.times`, arena fixe
 chance commands and `arenas.*.money-reward-family`. Money writes allocate a new
 `rewards.<editor-family>` with both solo and guild amounts; shared families are
 not edited. No cron model or historic timestamp migration is introduced.
+
+## Reward protection
+
+`reward-protection.*` is loaded by ConfigLoader and frozen per protected match.
+`enabled` defaults false until TEST. Opposition seconds are positive, account-age
+days/playtime minutes nonnegative, recipient command budget 0 through 100, repeat
+window at least one hour and repeat wins nonnegative (zero disables only that
+limit). Identity/alliance checks remain active whenever protection is enabled.
+Legacy `fairness.minimum-online-teams` becomes a count of eligible sides under
+protection; paid/flare starts require two eligible sides before payment/start.
+`combat.follow-warzone-rotation` selects permissive KOTH item rules versus retained
+family rules; actual MaceGuard enforcement is its own region/runtime responsibility.

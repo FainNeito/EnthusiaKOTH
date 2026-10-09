@@ -49,3 +49,26 @@ See [arena setup evidence](arena-setup-verification.md) and
 Details and limits: [expansion-verification.md](expansion-verification.md).
 Score and concurrency are now approved by the expansion request; alliance policy,
 database replacement and arbitrary leaderboard resets remain undecided.
+
+## Reward anti-abuse foundation
+
+- [x] ABUSE-001/002: alliance-side accounting and activation membership snapshot,
+  conservative relation merges and observed guild-switch exclusion, including SOLO.
+- [x] ABUSE-003/004: meaningful opposition and account age/playtime eligibility.
+- [x] ABUSE-005: one event recipient-command budget and one winning identity.
+- [x] ABUSE-006: durable repeated-opponent reservations and staff audit records.
+- [x] ABUSE-007: legacy/private compatibility and gates disabled until TEST.
+- [x] Inspect MaceGuard and yield KOTH item/cooldown rules to its current rotation.
+- [ ] Review/merge KOTH and companion relation API PRs; verify runtime/network pins.
+- [ ] Deferred TEST: staged opposition, payout selection/counts, restart/disk failure,
+  live guild/alliance edits, old provider, two events and MaceGuard region/rotation.
+
+[Anti-abuse requirements and limits](anti-abuse-verification.md). Cooperative
+allied capture, selectable packages, guild XP/recognition and leaderboard
+corrections are later slices; this foundation does not implement those menus.
+
+
+## Real companion API verification
+
+- [x] Opt-in actualGuildApiTest with provider class-origin assertion, tracked artifact path/contents, 14 executed alliance/bank/protected-payout cases and cache-change verification. Ordinary suite: 282 passing cases plus one explicit provider-only skip. Evidence: companion-api-verification.md.
+- [ ] Exact-head hosted checks, independent review, canonical releases/pins and deferred server/client acceptance. No production changes.

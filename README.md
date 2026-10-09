@@ -290,3 +290,29 @@ period views, in the configured schedule timezone. Weeks start Monday. Set
 remain lifetime-only. Optional `display.hologram` and `display.sidebar` default
 off; sidebars yield to existing owners. See the [lifecycle API](docs/lifecycle-api.md)
 and [verification and acceptance limits](docs/expansion-verification.md).
+
+## Reward protection and combat ownership
+
+`reward-protection.enabled` is **false until TEST acceptance**, as requested.
+When enabled, allied guilds (including indirect allies and their SOLO accounts)
+cannot qualify as independent opponents. Match membership is captured at
+activation; observed guild swaps invalidate eligibility, removed alliances remain
+grouped and added alliances merge conservatively. Old/missing alliance API data
+withholds protected win credit and payouts rather than assuming no alliances.
+
+Configured minimum opposition, server first-seen age and played time apply.
+Recipient-expanded commands share `maximum-recipient-commands` across the entire
+event; eligible winning contributors with most scoring time are selected first.
+Legacy `{ALL_ONLINE}` uses that same bounded contributor pool while protection is
+enabled. A durable rolling opponent history applies across arenas/restarts and
+reserves the event before payouts. Reservation failures withhold rewards; a crash
+after reservation may require staff reconciliation rather than unsafe replay.
+These checks reduce farming but cannot prove unique humans or genuine combat.
+See [detailed rules, audit tables and evidence](docs/anti-abuse-verification.md).
+
+`combat.follow-warzone-rotation` defaults true: MaceGuard owns current warzone
+item restrictions and cooldowns, including changes during a KOTH match. KOTH
+adds no competing item policy in that setting. Place arenas within MaceGuard's
+configured region coverage and verify that its module is active on TEST. Setting
+false restores KOTH's retained per-family rule values. This does not expand
+MaceGuard's region scope or deploy/configure it automatically.
