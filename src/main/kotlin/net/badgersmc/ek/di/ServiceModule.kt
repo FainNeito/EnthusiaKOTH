@@ -65,6 +65,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun bindArenaRegion(arenaId: String, worldName: String, regionId: String): String {
+        if (kothService.activeEvent != null || kothService.queuedEvents().isNotEmpty()) return plainSetupBusy()
         if (arenaId !in config().arenas) return "Unknown KOTH arena '$arenaId'."
         if (!worldGuardRegionService.exists(worldName, regionId)) {
             return "WorldGuard region '$regionId' does not exist in world '$worldName'."
@@ -77,6 +78,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun setArenaCenter(arenaId: String, location: Location): String {
+        if (kothService.activeEvent != null || kothService.queuedEvents().isNotEmpty()) return plainSetupBusy()
         if (arenaId !in config().arenas) return "Unknown KOTH arena '$arenaId'."
         val world = location.world ?: return "Unable to resolve your current world."
         val x = location.blockX + 0.5
@@ -92,6 +94,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun setArenaEnabled(arenaId: String, enabled: Boolean): String {
+        if (kothService.activeEvent != null || kothService.queuedEvents().isNotEmpty()) return plainSetupBusy()
         if (arenaId !in config().arenas) return "Unknown KOTH arena '$arenaId'."
         plugin.config.set("arenas.$arenaId.enabled", enabled)
         plugin.saveConfig()
@@ -110,6 +113,9 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         langService.reload()
         kothService.processQueue()
     }
+
+    private fun plainSetupBusy() = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        .serialize(langService.msg("setup.error.busy"))
 
     private val dataSource: DataSource by lazy {
         val cfg = HikariConfig().apply {
@@ -296,6 +302,18 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         lang = langService,
         notificationsEnabled = notificationPreferences::enabled,
     )
+    private val arenaSetupStore = net.badgersmc.ek.infrastructure.persistence.FileArenaSetupStore(File(plugin.dataFolder, "config.yml"))
+    private val arenaSetupService = net.badgersmc.ek.application.ArenaSetupService(
+        arenaSetupStore,
+        { kothService.activeEvent != null || kothService.queuedEvents().isNotEmpty() },
+        { Bukkit.getWorld(it) != null },
+        worldGuardRegionService::exists,
+        { worldName, regionId, point -> worldGuardRegionService.contains(worldName, regionId,
+            Location(Bukkit.getWorld(worldName), point.x, point.y, point.z)) },
+    )
+    val arenaSetupController = net.badgersmc.ek.infrastructure.bukkit.ArenaSetupController(
+        plugin, arenaSetupService, arenaSetupStore::read, { reload() }, langService, worldGuardRegionService::regionIds,
+    ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
     val kothCommand = KothCommand(
         plugin = plugin,
         cfgLoader = { config() },
@@ -313,6 +331,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         arenaCenterAction = { arenaId, location -> setArenaCenter(arenaId, location) },
         arenaEnabledAction = { arenaId, enabled -> setArenaEnabled(arenaId, enabled) },
         arenaRegionSuggestions = worldGuardRegionService::regionIds,
+        setup = arenaSetupController,
     ).also(::registerCommand)
     val kothListeners = KothListeners(
         cfgLoader = { config() },
@@ -446,6 +465,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun shutdown() {
+        arenaSetupController.shutdown()
         scheduleService.flush()
         discordWebhook.shutdown()
         statsRepository.shutdown()

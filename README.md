@@ -167,7 +167,32 @@ Each KOTH arena can bind directly to a named WorldGuard region with `worldguard-
 
 The capture objective is independent of the arena boundary. `center` selects the objective center and `radius` is a true horizontal circular radius.
 
-Staff can configure an arena entirely in game:
+Staff can create and configure arena geometry and basic rules entirely in game:
+
+```text
+/ekoth setup
+```
+
+Choose **Create arena**, type its name privately in chat, then use the editor.
+**Arena boundary** gives a tagged selection wand: left-click the first block,
+right-click the opposite corner. Select the intended vertical extent, or click
+**Extend native arena to full world height** after selection. Alternatively,
+**Choose existing WorldGuard region** binds a region without changing its flags.
+Stand at the desired hill and click **Capture center**; adjust radius, event limit,
+capture time, leave behavior and inventory/XP toggles. **Preview geometry** sends
+private particles for 30 seconds (static circle and native cuboid only; no named
+WorldGuard outline or moving-path animation). Use `/ekoth setup` to return.
+
+**Save arena** validates and atomically persists before applying. Nothing changes
+until Save. Closing keeps the draft; Cancel, `/ekoth setup cancel`, logout or plugin
+disable discard it. Saves are blocked while any event or queued start exists and
+reject stale drafts after another configuration change. New arenas are disabled,
+unscheduled and have an isolated zero-money reward family with no reward commands.
+Rewards, schedules and advanced family rules still require deliberate configuration.
+
+Shortcuts: `/ekoth arena create <name> [capture|moving|conquest]`,
+`/ekoth setup <name>`, `/ekoth editor <name>` and `/ekoth wand`.
+All setup actions require `enthusiakoth.admin`. Existing setup commands remain:
 
 ```text
 //wand

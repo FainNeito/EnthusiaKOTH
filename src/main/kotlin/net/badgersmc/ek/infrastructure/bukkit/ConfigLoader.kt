@@ -169,7 +169,7 @@ private object ReminderConfigLoader {
     )
 }
 
-private object ArenaConfigLoader {
+internal object ArenaConfigLoader {
     fun load(config: FileConfiguration): Map<String, ArenaConfig> {
         val arenas = section(config, "arenas") ?: return emptyMap()
         return arenas.getKeys(false).associateWith { id ->
