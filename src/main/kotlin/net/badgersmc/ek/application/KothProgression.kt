@@ -19,8 +19,10 @@ data class ProgressionPolicy(
     val challenges: List<ChallengeRule> = emptyList(),
     val guildXpCommand: String = "",
     val minimumRosterAgeSeconds: Long = 0,
+    val integrity: IntegrityPolicy = IntegrityPolicy(),
 ) {
     fun validate() {
+        integrity.validate()
         require(poolCents in 0..100_000_000 && packageUnits in 0..100)
         require(contributionPercent.isFinite() && contributionPercent in 10.0..100.0)
         require(minimumScoringSeconds >= 1 && minimumOppositionSeconds >= 1)
@@ -40,6 +42,9 @@ data class VerifiedMatch(
     val eventId: UUID, val arena: String, val family: String, val source: String,
     val at: Instant, val winner: String?, val opponents: Set<String>, val contributions: List<MatchContribution>,
     val oppositionSeconds: Int, val relationChanged: Boolean, val detail: String,
+    val evidence: ContestEvidence = ContestEvidence(),
+    val winnerSide: Set<String> = winner?.let { setOf(it) }.orEmpty(),
+    val arenaIdentity: String = arena,
 )
 data class ChallengeTotals(val wins: Int, val opponents: Int, val arenas: Int, val days: Int, val seconds: Long) {
     fun progress(rule: ChallengeRule): Int = listOf(

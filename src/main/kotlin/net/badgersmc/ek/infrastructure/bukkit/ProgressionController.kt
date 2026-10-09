@@ -32,9 +32,21 @@ class ProgressionController(
     private val regions:WorldGuardRegionService, private val guilds:LumaGuildsAdapter,
 ):Listener {
     fun command(sender:CommandSender,args:Array<out String>) {
-        val staff=args[0] in setOf("history","reports","readiness","reconcile")
+        val staff=args[0] in setOf("history","reports","readiness","reconcile","holds","reviewmatch")
         if(staff && !sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage("KOTH administrator permission required."); return }
         when(args[0]) {
+            "holds" -> {
+                val pending=store.decisions()
+                if (pending.isEmpty()) sender.sendMessage("No held matches.")
+                pending.forEach { sender.sendMessage("${it.id}: ${it.flags.joinToString()}. /ekoth reports ${it.id}") }
+            }
+            "reviewmatch" -> {
+                if (args.size<4 || args[2] !in setOf("approve","reject")) {
+                    sender.sendMessage("Inspect /ekoth reports first. /ekoth reviewmatch <match UUID> approve|reject <evidence>"); return
+                }
+                sender.sendMessage(if (store.reviewMatch(args[1],sender.name,args[2]=="approve",args.drop(3).joinToString(" ")))
+                    "Match review recorded; approved rewards use the original rules." else "Match is not awaiting review.")
+            }
             "reconcile" -> {
                 if(args.size<4 || args[2] !in setOf("paid","retry")) {
                     sender.sendMessage("First verify the external payout. /ekoth reconcile <claim-id> paid|retry <evidence>")
@@ -58,6 +70,8 @@ class ProgressionController(
         add("Progression: ${if(p.enabled) "enabled" else "disabled pending TEST"}; protection=${cfg().rewardProtection.enabled}")
         add("Guild alliance API: ${if(runCatching { guilds.protectionRoster() != null }.getOrDefault(false)) "available" else "unavailable - no verified credit"}")
         add("LoreItems queue=${claims.loreAvailable()}; durable Tags=${claims.tagsAvailable()}")
+        addAll(claims.definitionIssues(p))
+        add("Readiness enforcement=${p.integrity.requireReadiness}; accepted arenas=${p.integrity.acceptedArenas}")
         add("MaceGuard follow-current-warzone=${cfg().followWarzoneCombat}; rotation scope must be verified in TEST")
         arenas().values.forEach { a ->
             val loaded=Bukkit.getWorld(a.zone.worldName)!=null
@@ -81,6 +95,18 @@ class ProgressionController(
         val entries=mutableListOf<Pair<String,List<String>>>()
         val actions=mutableMapOf<Int,()->Unit>()
         when(page) {
+            "results" -> {
+                store.results(player.uniqueId,100).forEach { result ->
+                val slot=entries.size
+                entries.add("${result.arena}: ${result.status}" to listOf(result.at.toString(),"Your scoring: ${result.scoringSeconds}s",
+                    "Challenge credit: ${result.qualifying}",result.detail,"Click to view your claims"))
+                actions[slot]={ open(player,"claims") }
+                }
+                val progress=store.progress(player.uniqueId)
+                val slot=entries.size
+                entries.add("Your challenge progress" to (progress?.map { "${it.key}: ${it.value}%" } ?: listOf("Progression inactive or unavailable")))
+                actions[slot]={ open(player,"challenges") }
+            }
             "history" -> store.history(100).forEach { match ->
                 val slot=entries.size
                 entries.add("${match.arena} ${match.at}" to listOf(match.winner ?: "No winner",match.detail,"Click for report"))

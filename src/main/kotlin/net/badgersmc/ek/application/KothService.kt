@@ -81,16 +81,42 @@ class KothService(
     private val progressionSink: MatchProgressionSink? = null,
     private val progressionPolicy: () -> ProgressionPolicy = { ProgressionPolicy() },
     private val captureAudience: (KothEvent, Player) -> Boolean = { _, _ -> false },
+    private val rewardedStartIssues: (KothArena) -> List<String> = { emptyList() },
+    private val arenaIdentity: (KothArena) -> String = { it.id },
 ) {
     private val protectedMatches = mutableMapOf<UUID, ProtectedMatch>()
     private val recipientBudgets = mutableMapOf<UUID, Int>()
     private val progressionMatches = mutableMapOf<UUID, ProgressionPolicy>()
+    private val matchArenaIdentities = mutableMapOf<UUID, String>()
+    private val matchParticipants = mutableMapOf<UUID, MutableMap<UUID, String>>()
+
+    private fun checkRewardedStart(arena: KothArena, kind: EventKind): Boolean {
+        if (kind == EventKind.ADMIN) return true
+        val issues = runCatching { rewardedStartIssues(arena) }.getOrElse { logger("KOTH readiness unavailable", it); return false }
+        if (issues.isNotEmpty()) logger("KOTH '${arena.id}' start blocked: ${issues.joinToString("; ")}", null)
+        return issues.isEmpty()
+    }
+
+    /** Monitor-only evidence; combat rules continue to come from MaceGuard's current rotation. */
+    fun recordCombat(attacker: Player, victim: Player) {
+        allEvents().filter { !it.isPrivateTest && it.state == EventState.ACTIVE }.forEach { event ->
+            val match = protectedMatches[event.id] ?: return@forEach
+            val players = if (event.arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInStaticCaptureZone(event)
+            if (attacker !in players || victim !in players) return@forEach
+            refreshProtection(match)
+            val a = teamFor(attacker, event) ?: return@forEach
+            val b = teamFor(victim, event) ?: return@forEach
+            match.combat(a, b, clock.instant().epochSecond)
+        }
+    }
 
     fun membershipChanged(player: UUID) { protectedMatches.values.forEach { it.invalidPlayers.add(player) } }
     fun relationChanged() { protectedMatches.values.forEach { it.relationChanged() } }
 
     private fun initializeProtection(event: KothEvent) {
         progressionMatches.putIfAbsent(event.id, progressionPolicy().also { it.validate() })
+        if (!event.isPrivateTest && progressionMatches[event.id]?.enabled == true)
+            matchArenaIdentities.putIfAbsent(event.id, arenaIdentity(event.arena))
         val policy = cfgLoader().rewardProtection
         if (!policy.enabled || event.isPrivateTest || event.id in protectedMatches) return
         val mode = if (event.arena.ignoreFactions) TeamMode.SOLO else event.teamMode
@@ -272,6 +298,7 @@ class KothService(
     }
 
     private fun activateEvent(event: KothEvent, cfg: EnthusiaKothConfig) {
+        check(event.isPrivateTest || checkRewardedStart(event.arena, event.source)) { "Rewarded start readiness changed" }
         event.state = EventState.ACTIVE
         initializeProtection(event)
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
@@ -288,6 +315,7 @@ class KothService(
     }
 
     private fun activateQueuedEvent(event: KothEvent, cfg: EnthusiaKothConfig, recovered: Boolean) {
+        check(checkRewardedStart(event.arena, event.source)) { "Rewarded queued start readiness changed" }
         event.state = EventState.ACTIVE
         initializeProtection(event)
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
@@ -354,6 +382,10 @@ class KothService(
         }
 
         protectedMatches[event.id]?.let(::refreshProtection)
+        if (progressionMatches[event.id]?.enabled == true && !event.isPrivateTest) {
+            val participants=matchParticipants.getOrPut(event.id) { mutableMapOf() }
+            playersInZone.forEach { player -> participants.putIfAbsent(player.uniqueId,teamFor(player,event)?.storageKey() ?: "unknown") }
+        }
         val teamsInZone = resolveTeams(playersInZone, event)
         event.scoringParticipation.observe(teamsInZone)
         val previousScores = event.scores.toMap()
@@ -524,14 +556,20 @@ class KothService(
                 runCompletionStep(event, "verified progression") {
                     val protection = protectedMatches[event.id]
                     val qualified = winner?.let { event.scoringParticipation.eligible(it, policy.contributionPercent) }.orEmpty()
-                    val contributions = event.scoringParticipation.snapshot().flatMap { (team, ledger) -> ledger.map { (id, seconds) ->
+                    val scored = event.scoringParticipation.snapshot().flatMap { (team, ledger) -> ledger.map { (id, seconds) ->
                         MatchContribution(id, team.storageKey(), seconds, team == winner && id in qualified &&
                             protection != null && id !in protection.invalidPlayers && id !in protection.ineligibleAccounts)
                     } }
+                    val scoredIds=scored.map { it.player }.toSet()
+                    val contributions=scored + matchParticipants[event.id].orEmpty().filterKeys { it !in scoredIds }
+                        .map { (id,team) -> MatchContribution(id,team,0,false) }
                     progressionSink?.complete(VerifiedMatch(event.id, event.arena.id, event.arena.family, event.source.name,
                         clock.instant(), winner?.storageKey(), winner?.let { protection?.opponentGroups(it) }.orEmpty(),
                         contributions, winner?.let { protection?.oppositionSeconds(it) } ?: 0,
-                        protection?.allianceChanged ?: true, protection?.audit() ?: "PROTECTION_REQUIRED"), policy)
+                        protection?.allianceChanged ?: true, "protectionPolicy=${protection?.config}; ${protection?.audit() ?: "PROTECTION_REQUIRED"}",
+                        winner?.let { protection?.evidence(it) } ?: ContestEvidence(),
+                        winner?.let { protection?.side(it) }.orEmpty(), matchArenaIdentities[event.id] ?: event.arena.id), policy)
+                    contributions.map { it.player }.distinct().forEach { id -> Bukkit.getPlayer(id)?.sendMessage("Your KOTH result is available in /ekoth results.") }
                 }
             }
             event.paymentReceipt?.let { receipt ->
@@ -590,6 +628,8 @@ class KothService(
     private fun cleanupEvent(event: KothEvent) {
         protectedMatches.remove(event.id)
         progressionMatches.remove(event.id)
+        matchArenaIdentities.remove(event.id)
+        matchParticipants.remove(event.id)
         recipientBudgets.remove(event.id)
         event.clearScores()
         event.currentController = null
@@ -696,6 +736,7 @@ class KothService(
         teamMode: TeamMode = TeamMode.SOLO,
     ): Boolean {
         if (conflicts(arena)) return false
+        if (!checkRewardedStart(arena, kind)) return false
         val cfg = cfgLoader()
         if (!cfg.locks.state.allows(kind)) return false
         val now = clock.instant()
@@ -830,6 +871,7 @@ class KothService(
 
     private fun startDurableActivation(next: QueuedEvent, arena: KothArena, recovered: Boolean): Boolean {
         if (conflicts(arena)) return false
+        if (!checkRewardedStart(arena, next.startSource)) return false
         val cfg = cfgLoader()
         if (!cfg.locks.state.allows(next.startSource)) return false
         val activationId = next.activationId ?: return false

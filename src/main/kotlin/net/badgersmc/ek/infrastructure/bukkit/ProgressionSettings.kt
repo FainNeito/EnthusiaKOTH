@@ -29,6 +29,21 @@ class ProgressionSettings(private val plugin: JavaPlugin) {
                     RewardPackage(id, y.getLong("pool-cents"), y.getString("packages.$id.lore-definition", "")!!, y.getInt("package-units"))
                 }, guildXpCommand = y.getString("guild-xp-command", "")!!,
                 minimumRosterAgeSeconds = y.getLong("minimum-roster-age-seconds", 0),
+                integrity = IntegrityPolicy(
+                    requireContest=y.getBoolean("integrity.require-contest",false),
+                    minimumControlChanges=y.getInt("integrity.minimum-control-changes",1),
+                    minimumOpposingScoreSeconds=y.getInt("integrity.minimum-opposing-score-seconds",30),
+                    minimumReciprocalCombatSeconds=y.getInt("integrity.minimum-reciprocal-combat-seconds",10),
+                    holdSuspicious=y.getBoolean("integrity.hold-suspicious",false),
+                    patternWindowHours=y.getInt("integrity.pattern-window-hours",24),
+                    patternMinimumMatches=y.getInt("integrity.pattern-minimum-matches",3),
+                    playerDailyCents=y.getLong("integrity.player-daily-cents",0),
+                    playerDailyUnits=y.getInt("integrity.player-daily-units",0),
+                    sideDailyCents=y.getLong("integrity.side-daily-cents",0),
+                    sideDailyUnits=y.getInt("integrity.side-daily-units",0),
+                    requireReadiness=y.getBoolean("integrity.require-readiness",false),
+                    acceptedArenas=y.getStringList("integrity.accepted-arenas").toSet(),
+                ),
             ).also { it.validate() }
         }.getOrElse { plugin.logger.severe("Invalid progression.yml: progression disabled: ${it.message}"); ProgressionPolicy() }
     }

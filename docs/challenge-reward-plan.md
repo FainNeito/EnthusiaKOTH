@@ -48,3 +48,7 @@ Use isolated TEST KOTH/provider storage and disposable templates. Private/admin 
 Strict SnakeYAML 2.2 parsing with duplicate keys rejected passed. Parsed candidate equals the canonical resource exactly: stable four challenge IDs/metrics, progression disabled, zero budgets, empty packages/XP and blank tags/exclusive templates. Reviewed all keys against ProgressionSettings and ProgressionPolicy; compared IDs/metrics with the pinned Advancements ekoth tree. Whitespace validation passed. This is configuration/documentation evidence; no new gameplay tests or full build are claimed. Hosted PR verification is separate.
 
 No server files, provider registries, ownership rows, GUI layouts, source defaults or Advancements tree changed.
+
+## Match integrity additions
+
+The canonical inactive candidate now includes `integrity`: contest and hold enforcement false, readiness false, all daily currency/item limits zero, and no accepted arenas. See [match-integrity-verification.md](match-integrity-verification.md) for frozen review commands, UTC reservation semantics and definition readiness limitations. The earlier verification above describes the PR #7 snapshot; defaults and GUIs changed subsequently for INT-001..007. TEST must calibrate these controls and accept arena centers before activation. Configured LoreItems definitions cannot currently pass enforced readiness because V1 has no read-only definition-query API.

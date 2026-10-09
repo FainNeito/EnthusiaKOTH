@@ -29,7 +29,7 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
         s.execute("CREATE TABLE IF NOT EXISTS koth_guild_changes(id INTEGER PRIMARY KEY AUTOINCREMENT,at INTEGER,player TEXT,guild TEXT,kind TEXT)")
         s.execute("CREATE INDEX IF NOT EXISTS koth_guild_change_player ON koth_guild_changes(player,at)")
         s.execute("CREATE TABLE IF NOT EXISTS koth_claim_reviews(id INTEGER PRIMARY KEY AUTOINCREMENT,claim TEXT,actor TEXT,at INTEGER,action TEXT,reason TEXT)")
-    } }
+    }; SqlMatchIntegrity.init(c) }
 
     override fun complete(match: VerifiedMatch) = complete(match, policy())
 
@@ -43,12 +43,15 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
                 s.setString(1, match.eventId.toString()); s.setString(2, match.arena)
                 s.executeQuery().use { it.next() && it.getInt(1) == 1 }
             }
-            val valid = accepted && match.winner != null && match.source in setOf("SCHEDULED", "PLAYER_COMMAND", "GUI", "FLARE") &&
+            val valid = (!cfg.integrity.requireContest || cfg.integrity.contested(match.evidence)) && accepted && match.winner != null && match.source in setOf("SCHEDULED", "PLAYER_COMMAND", "GUI", "FLARE") &&
                 !match.relationChanged && match.oppositionSeconds >= cfg.minimumOppositionSeconds
             val note = if (valid) "VERIFIED; ${match.detail}" else "NO_CHALLENGE_CREDIT; ${match.detail}"
             val recipients = match.contributions.filter { it.eligible && it.seconds >= cfg.minimumScoringSeconds &&
                 (cfg.minimumRosterAgeSeconds == 0L || rosterAge(c, it.player, match.at)?.let { age -> age >= cfg.minimumRosterAgeSeconds } == true)
             }.distinctBy { it.player }
+            val frozen = match.copy(detail=match.detail.take(16000),contributions=match.contributions.distinctBy { it.player }.map { entry -> entry.copy(eligible=valid && recipients.any { it.player==entry.player }) })
+            val flags = SqlMatchIntegrity.flags(c,frozen,cfg)
+            val held = valid && cfg.integrity.holdSuspicious && flags.isNotEmpty()
             val eligibleIds = recipients.map { it.player }.toSet()
             val inserted = c.prepareStatement("INSERT OR IGNORE INTO koth_matches VALUES(?,?,?,?,?,?,?)").use { s ->
                 s.setString(1, match.eventId.toString()); s.setString(2, match.arena); s.setString(3, match.family)
@@ -59,16 +62,26 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
             c.prepareStatement("INSERT INTO koth_match_players VALUES(?,?,?,?,?)").use { s ->
                 match.contributions.distinctBy { it.player }.forEach { p ->
                     s.setString(1, match.eventId.toString()); s.setString(2, p.player.toString()); s.setString(3, p.guild)
-                    s.setLong(4, p.seconds); s.setInt(5, if (valid && p.player in eligibleIds) 1 else 0)
+                    s.setLong(4, p.seconds); s.setInt(5, if (valid && !held && p.player in eligibleIds) 1 else 0)
                     s.addBatch()
                 }; s.executeBatch()
             }
             c.prepareStatement("INSERT INTO koth_match_sides VALUES(?,?)").use { s ->
                 match.opponents.forEach { s.setString(1, match.eventId.toString()); s.setString(2, it); s.addBatch() }; s.executeBatch()
             }
-            if (!valid) return@transaction
-            val cents = RewardPool.split(cfg.poolCents, recipients)
-            val units = RewardPool.split(cfg.packageUnits.toLong(), recipients)
+            if (!valid) {
+                SqlMatchIntegrity.record(c,frozen,cfg,"REJECTED",flags)
+                return@transaction
+            }
+            SqlMatchIntegrity.record(c,frozen,cfg,if(held) "HELD" else "APPROVED",flags)
+            if(held) return@transaction
+            award(c,frozen,cfg,recipients)
+        }
+        revision.incrementAndGet()
+    }
+
+    private fun award(c:Connection,match:VerifiedMatch,cfg:ProgressionPolicy,recipients:List<MatchContribution>) {
+            val (cents,units) = SqlMatchIntegrity.allocate(c,match,cfg,recipients)
             cents.forEach { (player, amount) ->
                 if (cfg.packages.isEmpty()) {
                     if (amount > 0) claim(c, "event:${match.eventId}:$player:money", player, "MONEY", "", amount)
@@ -105,8 +118,6 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
                 claim(c,"event:${match.eventId}:guild-xp",UUID.fromString(match.winner.substringAfter(':')),
                     "GUILD_XP",cfg.guildXpCommand.replace("{GUILD_UUID}",match.winner.substringAfter(':')),1)
             }
-        }
-        revision.incrementAndGet()
     }
 
     private fun claim(c: Connection,id:String,player:UUID,kind:String,value:String,amount:Long) {
@@ -182,6 +193,16 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
     } }
     fun report(id:String):List<String> = source.connection.use { c ->
         buildList {
+            c.prepareStatement("SELECT status,flags,snapshot,identity FROM koth_match_decisions WHERE event=?").use { s -> s.setString(1,id); s.executeQuery().use { r ->
+                if(r.next()) {
+                    val (match,policy)=MatchSnapshotCodec.decode(r.getString(3))
+                    add("Decision=${r.getString(1)}; flags=${r.getString(2)}; arenaIdentity=${r.getString(4)}; frozenArenaIdentity=${match.arenaIdentity}")
+                    add("Evidence=${match.evidence}; frozen policy=$policy; winner side=${match.winnerSide}")
+                }
+            } }
+            c.prepareStatement("SELECT actor,decision,reason FROM koth_match_reviews WHERE event=? ORDER BY at LIMIT 100").use { s -> s.setString(1,id); s.executeQuery().use { r ->
+                while(r.next()) add("Staff review: ${r.getString(1)} ${r.getString(2)} ${r.getString(3)}")
+            } }
             c.prepareStatement("SELECT player,guild,seconds,eligible FROM koth_match_players WHERE event=? ORDER BY seconds DESC LIMIT 100").use { s ->
                 s.setString(1,id); s.executeQuery().use { while(it.next()) add("${it.getString(1)} ${it.getString(2)} ${it.getLong(3)}s eligible=${it.getInt(4)==1}") }
             }
@@ -200,6 +221,60 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
             } }
         }
     }
+    fun arenaIdentity(alias:String,geometry:String):String = transaction { c -> SqlMatchIntegrity.arena(c,alias,geometry) }.also { revision.incrementAndGet() }
+
+    fun decisions():List<MatchDecision> = source.connection.use { c -> c.createStatement().use { s ->
+        s.executeQuery("SELECT event,status,flags FROM koth_match_decisions WHERE status='HELD' ORDER BY rowid LIMIT 100").use { r -> buildList {
+            while(r.next()) add(MatchDecision(r.getString(1),r.getString(2),r.getString(3).split(',').filter(String::isNotBlank),"Awaiting staff review"))
+        } }
+    } }
+
+    /** Permission belongs to the command adapter. Neither caller-supplied policy nor player can award. */
+    fun reviewMatch(id:String,actor:String,approve:Boolean,reason:String):Boolean {
+        require(actor.isNotBlank() && reason.isNotBlank())
+        val changed=transaction { c ->
+            val snapshot=c.prepareStatement("SELECT snapshot FROM koth_match_decisions WHERE event=? AND status='HELD'").use { s ->
+                s.setString(1,id); s.executeQuery().use { if(it.next()) it.getString(1) else null }
+            } ?: return@transaction false
+            val (match,cfg)=MatchSnapshotCodec.decode(snapshot)
+            check(match.eventId.toString()==id)
+            val status=if(approve) "APPROVED" else "REJECTED"
+            c.prepareStatement("UPDATE koth_match_decisions SET status=? WHERE event=? AND status='HELD'").use { s ->
+                s.setString(1,status); s.setString(2,id); check(s.executeUpdate()==1)
+            }
+            if(approve) {
+                match.contributions.filter { it.eligible }.forEach { p -> c.prepareStatement("UPDATE koth_match_players SET eligible=1 WHERE event=? AND player=?").use { s ->
+                    s.setString(1,id); s.setString(2,p.player.toString()); s.executeUpdate()
+                } }
+                award(c,match,cfg,match.contributions.filter { it.eligible }.distinctBy { it.player })
+            }
+            c.prepareStatement("INSERT INTO koth_match_reviews VALUES(?,?,?,?,?)").use { s ->
+                s.setString(1,id); s.setString(2,actor); s.setLong(3,Instant.now().toEpochMilli()); s.setString(4,status); s.setString(5,reason.take(1000)); s.executeUpdate()
+            }
+            true
+        }
+        if(changed) revision.incrementAndGet()
+        return changed
+    }
+
+    fun results(player:UUID,limit:Int=20):List<PlayerMatchResult> = source.connection.use { c ->
+        c.prepareStatement("SELECT m.id,m.arena,m.at,p.seconds,p.eligible,COALESCE(d.status,'LEGACY'),d.snapshot FROM koth_matches m JOIN koth_match_players p ON p.event=m.id LEFT JOIN koth_match_decisions d ON d.event=m.id WHERE p.player=? ORDER BY m.at DESC,m.id LIMIT ?").use { s ->
+            s.setString(1,player.toString()); s.setInt(2,limit.coerceIn(1,100)); s.executeQuery().use { r -> buildList {
+                while(r.next()) {
+                    val status=r.getString(6)
+                    val cfg=r.getString(7)?.let { MatchSnapshotCodec.decode(it).second }
+                    val explanation=when {
+                        status=="HELD" -> "Rewards and challenge credit await staff review."
+                        status=="REJECTED" -> "Match was not accepted for rewards or challenge credit."
+                        r.getInt(5)==0 -> "Your contribution or eligibility did not meet the frozen requirements."
+                        else -> "Verified contribution recorded; view claims for reward status."
+                    } + (cfg?.let { " Required: ${it.contributionPercent}% winning scoring share, ${it.minimumScoringSeconds}s scoring; ${it.minimumOppositionSeconds}s opposition. Daily event limits may reduce rewards." } ?: "")
+                    add(PlayerMatchResult(r.getString(1),r.getString(2),Instant.ofEpochMilli(r.getLong(3)),r.getLong(4),r.getInt(5)==1,status,explanation))
+                }
+            } }
+        }
+    }
+
     fun change(player:UUID?,guild:UUID,kind:String,at:Instant=Instant.now()) = source.connection.use { c -> c.prepareStatement("INSERT INTO koth_guild_changes(at,player,guild,kind) VALUES(?,?,?,?)").use { s ->
         s.setLong(1,at.toEpochMilli()); s.setString(2,player?.toString()); s.setString(3,guild.toString()); s.setString(4,kind); s.executeUpdate()
     } }
@@ -225,7 +300,7 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
     private fun totals(c:Connection,player:UUID):ChallengeTotals {
         var wins=0; var seconds=0L
         val days=mutableSetOf<String>(); val arenas=mutableSetOf<String>(); val groups=mutableListOf<MutableSet<String>>()
-        c.prepareStatement("SELECT m.id,m.at,m.arena,p.seconds FROM koth_matches m JOIN koth_match_players p ON p.event=m.id WHERE p.player=? AND p.eligible=1 ORDER BY m.at LIMIT 10000").use { s ->
+        c.prepareStatement("SELECT m.id,m.at,COALESCE(a.identity,d.identity,m.arena),p.seconds FROM koth_matches m JOIN koth_match_players p ON p.event=m.id LEFT JOIN koth_match_decisions d ON d.event=m.id LEFT JOIN koth_arena_aliases a ON a.alias=m.arena WHERE p.player=? AND p.eligible=1 ORDER BY m.at LIMIT 10000").use { s ->
             s.setString(1,player.toString()); s.executeQuery().use { r -> while(r.next()) {
                 wins++; seconds+=r.getLong(4); days.add(Instant.ofEpochMilli(r.getLong(2)).atZone(ZoneOffset.UTC).toLocalDate().toString()); arenas.add(r.getString(3))
                 c.prepareStatement("SELECT side FROM koth_match_sides WHERE event=?").use { q -> q.setString(1,r.getString(1)); q.executeQuery().use { sides -> while(sides.next()) {

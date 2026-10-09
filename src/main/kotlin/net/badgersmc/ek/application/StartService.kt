@@ -20,6 +20,7 @@ class StartService(
     private val arenaConflict: ((KothArena) -> Boolean)? = null,
     private val protectionReady: (TeamMode) -> Boolean = { false },
     private val onlineTeamCount: (TeamMode) -> Int = { 0 },
+    private val rewardedStartIssues: (KothArena) -> List<String> = { emptyList() },
 ) {
     private val gate = ReentrantLock()
 
@@ -40,6 +41,14 @@ class StartService(
     }
 
     private fun guardedPlayerStart(request: StartRequest, cfg: EnthusiaKothConfig, start: () -> StartResult): StartResult {
+        val issues = runCatching { rewardedStartIssues(requireNotNull(request.arena)) }.getOrElse {
+            logError("Cannot establish rewarded KOTH readiness", it)
+            return StartResult.Rejected(StartFailure.START_FAILED)
+        }
+        if (issues.isNotEmpty()) {
+            logError("Rewarded KOTH start blocked: ${issues.joinToString("; ")}", null)
+            return StartResult.Rejected(StartFailure.START_FAILED)
+        }
         val policy = cfg.fairness
         if (cfg.rewardProtection.enabled) {
             val mode = if (request.arena?.ignoreFactions == true) TeamMode.SOLO else request.teamMode

@@ -22,6 +22,14 @@ class KothListeners(
     private val command: KothCommand,
     private val lang: net.badgersmc.nexus.i18n.LangService,
 ) : Listener {
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = true)
+    fun onContestDamage(event: EntityDamageByEntityEvent) {
+        if (event.isCancelled || !event.finalDamage.isFinite() || event.finalDamage <= 0.0) return
+        val victim = event.entity as? org.bukkit.entity.Player ?: return
+        val attacker = event.damager as? org.bukkit.entity.Player
+            ?: ((event.damager as? org.bukkit.entity.Projectile)?.shooter as? org.bukkit.entity.Player) ?: return
+        kothService.recordCombat(attacker, victim)
+    }
     @EventHandler
     fun onFlareUse(event: PlayerInteractEvent) {
         if (event.action != Action.RIGHT_CLICK_BLOCK && event.action != Action.RIGHT_CLICK_AIR) return
