@@ -1,9 +1,10 @@
 package net.badgersmc.ek.application
 
+import net.badgersmc.ek.infrastructure.i18n.arenaComponent
+import net.badgersmc.ek.infrastructure.i18n.withArenaName
+import net.badgersmc.ek.infrastructure.i18n.arenaMsg
 import net.badgersmc.ek.config.EnthusiaKothConfig
 import net.badgersmc.ek.domain.KothArena
-import net.badgersmc.ek.toComponent
-import net.badgersmc.ek.toLore
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -26,8 +27,8 @@ class FlareService(
         val flare = cfgLoader().flares
         val item = ItemStack(Material.getMaterial(flare.item.material) ?: Material.REDSTONE_TORCH)
         val meta = item.itemMeta ?: return item
-        meta.displayName(flare.item.name.replace("{KOTH}", arena.name).toComponent())
-        meta.lore(flare.item.lore.map { it.replace("{KOTH}", arena.name) }.toLore())
+        meta.displayName(flare.item.name.withArenaName(arena.name))
+        meta.lore(flare.item.lore.map { it.withArenaName(arena.name) })
         meta.persistentDataContainer.set(FLARE_KOTH_KEY, PersistentDataType.STRING, arena.id)
         item.itemMeta = meta
         return item
@@ -43,7 +44,7 @@ class FlareService(
             return true
         }
         if (arena.flaresMustBePlacedOnCap && !arena.zone.containsCircular(player.location)) {
-            player.sendMessage(lang.msg("flare.not_in_region", "koth" to arena.name))
+            player.sendMessage(lang.arenaMsg("flare.not_in_region", "koth" to arena.name.arenaComponent()))
             return true
         }
         val result = startService.start(
@@ -60,7 +61,7 @@ class FlareService(
             ),
         )
         if (result is StartResult.Rejected) {
-            player.sendMessage(lang.msg(FlareUsePolicy.rejectionKey(result), "koth" to arena.name))
+            player.sendMessage(lang.arenaMsg(FlareUsePolicy.rejectionKey(result), "koth" to arena.name.arenaComponent()))
             return true
         }
 
@@ -73,12 +74,12 @@ class FlareService(
             null -> Unit
         }
 
-        player.sendMessage(lang.msg("flare.started", "koth" to arena.name))
+        player.sendMessage(lang.arenaMsg("flare.started", "koth" to arena.name.arenaComponent()))
         val location = arena.zone.center(player.world)
-        val message = lang.msg(
+        val message = lang.arenaMsg(
                 "flare.started_broadcast",
                 "player" to player.name,
-                "koth" to arena.name,
+                "koth" to arena.name.arenaComponent(),
                 "location" to "${location.blockX}, ${location.blockY}, ${location.blockZ}",
             )
         Bukkit.getOnlinePlayers().filter(notificationsEnabled).forEach { it.sendMessage(message) }

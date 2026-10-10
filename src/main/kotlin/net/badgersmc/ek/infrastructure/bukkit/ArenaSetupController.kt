@@ -1,5 +1,7 @@
 package net.badgersmc.ek.infrastructure.bukkit
 
+import net.badgersmc.ek.infrastructure.i18n.arenaComponent
+import net.badgersmc.ek.infrastructure.i18n.arenaMsg
 import io.papermc.paper.event.player.AsyncChatEvent
 import net.badgersmc.ek.application.*
 import net.badgersmc.ek.config.PositionConfig
@@ -56,8 +58,8 @@ class ArenaSetupController(
     private data class DisplayNamePrompt(val token: UUID, val draft: ArenaSetupDraft)
     private val displayNamePrompts = ConcurrentHashMap<UUID, DisplayNamePrompt>()
     private val wandKey = NamespacedKey(plugin, "arena-setup-wand")
-    private fun text(key: String, vararg values: Pair<String, String>) = lang.msg("setup.$key", *values)
-    private fun tell(player: Player, key: String, vararg values: Pair<String, String>) = player.sendMessage(text(key, *values))
+    private fun text(key: String, vararg values: Pair<String, Any?>) = lang.arenaMsg("setup.$key", *values)
+    private fun tell(player: Player, key: String, vararg values: Pair<String, Any?>) = player.sendMessage(text(key, *values))
     private fun allowed(player: Player): Boolean {
         if (player.hasPermission("enthusiakoth.admin")) return true
         player.sendMessage(lang.msg("command.error.no_permission")); return false
@@ -104,7 +106,7 @@ class ArenaSetupController(
         return true
     }
 
-    private fun icon(material: Material, key: String, value: String = "", lore: String = "click") = ItemStack(material).apply {
+    private fun icon(material: Material, key: String, value: Any? = "", lore: String = "click") = ItemStack(material).apply {
         editMeta { meta -> meta.displayName(text(key, "value" to value)); meta.lore(listOf(text(lore))) }
     }
 
@@ -113,7 +115,7 @@ class ArenaSetupController(
         val ids = all.keys.sorted().drop(page * 45).take(45)
         val holder = ArenaSetupHolder(player.uniqueId, null, ids, page)
         val inv = Bukkit.createInventory(holder, 54, text("list-title")); holder.backing = inv
-        ids.forEachIndexed { i, id -> inv.setItem(i, icon(if (all.getValue(id).enabled) Material.LIME_DYE else Material.GRAY_DYE, "arena", net.badgersmc.ek.domain.ArenaName.resolve(id, all.getValue(id).displayName), "edit-hint").apply { editMeta { it.lore(listOf(text("arena-id", "value" to id), text("edit-hint"))) } }) }
+        ids.forEachIndexed { i, id -> inv.setItem(i, icon(if (all.getValue(id).enabled) Material.LIME_DYE else Material.GRAY_DYE, "arena", net.badgersmc.ek.domain.ArenaName.resolve(id, all.getValue(id).displayName).arenaComponent(), "edit-hint").apply { editMeta { it.lore(listOf(text("arena-id", "value" to id), text("edit-hint"))) } }) }
         if (page > 0) inv.setItem(45, icon(Material.ARROW, "previous"))
         inv.setItem(49, icon(Material.ANVIL, "create", lore = "create-hint"))
         if (all.size > (page + 1) * 45) inv.setItem(53, icon(Material.ARROW, "next"))
@@ -123,8 +125,8 @@ class ArenaSetupController(
     private fun editor(player: Player, draft: ArenaSetupDraft, page: ArenaSetupPage = ArenaSetupPage.AREA) {
         val a = draft.arena
         val holder = ArenaSetupHolder(player.uniqueId, draft, editorPage = page)
-        val inv = Bukkit.createInventory(holder, 54, text("editor-title", "value" to net.badgersmc.ek.domain.ArenaName.resolve(draft.id, a.displayName))); holder.backing = inv
-        inv.setItem(13, icon(Material.NAME_TAG, "display-name", net.badgersmc.ek.domain.ArenaName.resolve(draft.id, a.displayName), if (page == ArenaSetupPage.AREA) "display-name-hint" else "review-hint").apply { editMeta { it.lore(listOf(text("arena-id", "value" to draft.id), text(if (page == ArenaSetupPage.AREA) "display-name-hint" else "review-hint"))) } })
+        val inv = Bukkit.createInventory(holder, 54, text("editor-title", "value" to net.badgersmc.ek.domain.ArenaName.resolve(draft.id, a.displayName).arenaComponent())); holder.backing = inv
+        inv.setItem(13, icon(Material.NAME_TAG, "display-name", net.badgersmc.ek.domain.ArenaName.resolve(draft.id, a.displayName).arenaComponent(), if (page == ArenaSetupPage.AREA) "display-name-hint" else "review-hint").apply { editMeta { it.lore(listOf(text("arena-id", "value" to draft.id), text(if (page == ArenaSetupPage.AREA) "display-name-hint" else "review-hint"))) } })
         inv.setItem(0, icon(Material.PAPER, "page-${page.name.lowercase()}", "${a.family} | ${a.world}", "draft-hint"))
         if (page == ArenaSetupPage.AREA) {
             inv.setItem(10, icon(Material.WOODEN_AXE, "boundary", a.worldGuardRegion ?: if (draft.boundaryReady) "Native selection" else "Not selected", "boundary-hint"))
