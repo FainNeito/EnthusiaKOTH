@@ -124,6 +124,7 @@ class DiscordWebhookService internal constructor(
     private val transport: WebhookTransport = HttpWebhookTransport(),
     queueCapacity: Int = 32,
     private val templates: () -> Map<DiscordMessageType, DiscordEmbedTemplate> = { DiscordEmbedDefaults.templates },
+    private val startRoleId: () -> String = { "" },
 ) {
     private data class LiveMessage(val url: String, @Volatile var messageId: String? = null,
         @Volatile var unavailable: Boolean = false, @Volatile var ended: Boolean = false)
@@ -180,7 +181,9 @@ class DiscordWebhookService internal constructor(
     private fun announcement(type: DiscordMessageType, values: Map<String, String>) {
         if (!canSend()) return
         val template = template(type)
-        if (template.enabled) enqueue(WebhookDelivery(DiscordEmbedRenderer.render(template, values), WebhookDeliveryKind.IMPORTANT, url = webhookUrl()))
+        if (template.enabled) enqueue(WebhookDelivery(
+            DiscordEmbedRenderer.render(template, values, startRoleId = if (type == DiscordMessageType.START) startRoleId() else ""),
+            WebhookDeliveryKind.IMPORTANT, url = webhookUrl()))
     }
     private fun terminal(eventId: UUID, type: DiscordMessageType, values: Map<String, String>) {
         val template = template(type)
