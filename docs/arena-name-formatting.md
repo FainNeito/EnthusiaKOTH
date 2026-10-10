@@ -1,0 +1,23 @@
+# Arena name formatting (NAME-005..008)
+
+Base: fetched canonical main e2e720cc1d108260e05b768a4d4275c430d8ce74. This repository has no project-local EARS/state helpers; requirements and evidence are maintained manually.
+
+- NAME-005: When staff save an arena name, the system shall accept legacy ampersand/section color and decoration codes, RGB `&#RRGGBB` / `§#RRGGBB`, expanded `&x&R&R&G&G&B&B` / section equivalents, and readable Unicode emojis including joined sequences, flags and skin tones.
+- NAME-006: When displaying that name in Minecraft, the system shall render its color/decorations as a scoped component in chat, bossbars, holograms, sidebars, menus, schedules and flare items. Name formatting shall not alter adjacent template text. Discord shall receive plain text with emojis, without Minecraft codes.
+- NAME-007: When validating a name, the system shall limit it to 64 visible grapheme clusters and 1024 raw UTF-16 units, reject multiline/control/bidi text, malformed RGB codes, unsupported markup and formatting-only names, and leave the draft unchanged on rejection.
+- NAME-008: When loading or saving a formatted name, the system shall preserve its raw trimmed string while retaining all previous ID, schedule, reward, progression, revision/save and prompt safeguards.
+
+Acceptance: focused policy, renderer, template-boundary, persistence and display regression checks, full Java 21/Paper 1.21.11 build, manual source review and an updated interactive schematic. Native Java/Bedrock glyph availability, TEST activation and production remain separate gates. No upload or restart is authorized by this task.
+
+## Evidence
+
+The prior NAME-004 plain-text restriction is superseded by NAME-005..007; stable identity and persistence requirements remain in force.
+
+- Spec: recorded before implementation against fetched main above; no project-local EARS/state helpers exist.
+- Prove: three new policy cases ran against the old engine; acceptance and visible-length cases failed, rejection case passed (3 run, 2 failures). This is observed regression evidence, not fabricated historical proof.
+- Engine: bounded pure name policy retains raw saved text; dedicated Adventure legacy/RGB components are inserted after Nexus's normal parsed-template pass. Default/custom bossbars, holograms, legacy sidebars, menus, staff/schedule labels, announcements and flare lore use scoped components. Discord strips only recognized name formatting, retaining emojis and ordinary ampersands.
+- Arch: verified the actual Nexus v2.1.1 LangService bytecode and tested against that runtime. It stringifies placeholder values, so direct Component arguments are unsafe; the adapter replaces unique temporary markers after its normal resolver pass, preserving prefix/global resolvers and other values. Domain validation has no Bukkit/Adventure dependency. No companion exports, provider APIs, IDs, PDC, schedule keys, reward substitutions, progression identities or notification audiences changed.
+- Refine: clean Java 21/Paper 1.21.11 `clean test shadowJar` passed, then source review corrected a scheduled-warning call and added a real-Nexus warning regression. Final `test shadowJar` passed with **351 passed, 2 provider-only skips, zero failures**. Cases cover both RGB syntaxes/legacy styles, literal ampersands, joined/flag emojis, 64 visible-character limits, malformed codes/hidden controls, YAML save/clear, scoped template suffixes, actual Nexus prefix/global resolvers, default/custom bossbar and flare/sidebar conversion, duplicate-label ownership and mocked Discord transport. Existing private-input, atomic-failure and permission tests remain green. Provider contract tasks were not rerun because their APIs/adapters are unchanged; no real webhook was sent.
+- Manual source review found no outstanding issue in changed paths. No independent review or client acceptance is claimed. Hosted checks and merge are tracked by the resulting PR.
+- Updated private [interactive preview](https://enthusia-koth-setup-preview.awareyak.chatgpt.site/cleanup.html) published from clean pushed preview source `74838783e79f2f1894d85cfcdc2ce32768e00138`. Name prompt, example entry, explicit save and chat/bossbar/Discord examples verified at 390×844: no horizontal overflow, buttons at least 49px. Native deployment succeeded; owner session can open it. Owner sign-in required; actual mobile sign-in is unverified. Obfuscation is disclosed as unanimated; browser emoji appearance is illustrative.
+- TEST deferred: save/reopen/restart colored names; Java/Bedrock supported glyphs/resource-pack fonts; chat, bosses, inventory titles/lore and sidebar appearance; private invalid/cancel/permission behavior. This task performs no server upload, restart or activation.

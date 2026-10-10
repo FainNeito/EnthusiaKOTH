@@ -20,6 +20,7 @@ Reconciled 2026-10-09 against fetched canonical main `2ad0b693caaaf2ce5011579152
 ## Remaining integration and configuration
 
 - [x] NAME-001..004: optional arena display names in Area setup, atomic persistence and player presentation, with stable IDs for schedules/stats/challenges and duplicate-label-safe display ownership. See [arena-names.md](arena-names.md) for source/local evidence and deferred TEST acceptance.
+- [x] NAME-005..008: color/hex/emoji arena labels, scoped Minecraft rendering, plain Discord labels and visible-character validation. See [arena-name-formatting.md](arena-name-formatting.md) for local/source evidence and deferred native glyph acceptance.
 
 - [x] Implement flow cleanup: enchanted wooden selection axe, compact /ekoth hub/help, Area → Rules → Review with save/discard guards, consistent progression navigation and owner-registered /rewards KOTH menu API. See flow-cleanup.md for local/source proof and remaining TEST gates.
 - [ ] Merge matching EnthusiaTags navigation PR and verify both installed versions before TEST acceptance of /rewards → KOTH.

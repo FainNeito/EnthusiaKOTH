@@ -1,5 +1,7 @@
 package net.badgersmc.ek.infrastructure.bukkit
 
+import net.badgersmc.ek.infrastructure.i18n.arenaComponent
+import net.badgersmc.ek.infrastructure.i18n.arenaMsg
 import net.badgersmc.ek.application.CancellationReason
 import net.badgersmc.ek.application.FlareService
 import net.badgersmc.ek.application.KothService
@@ -216,7 +218,7 @@ class KothCommand(
                 ?: "Scheduled"
             val item = ItemStack(if (active) Material.GLOWSTONE_DUST else Material.REDSTONE_TORCH)
             item.itemMeta = item.itemMeta?.apply {
-                displayName(lang.msg(if (active) "command.gui.item_name_active" else "command.gui.item_name_inactive", "id" to (arenas()[id]?.name ?: id)))
+                displayName(lang.arenaMsg(if (active) "command.gui.item_name_active" else "command.gui.item_name_inactive", "id" to (arenas()[id]?.name ?: id).arenaComponent()))
                 lore(
                     listOf(
                         lang.msg(if (active) "command.gui.lore_active_yes" else "command.gui.lore_active_no", "status" to active.toString()),
@@ -252,7 +254,7 @@ class KothCommand(
         val resolved = scheduleService.occurrencesForDate(now.toLocalDate())
         val grouped = resolved.groupBy { it.arenaId }
         grouped.forEach { (arenaId, occurrences) ->
-            sender.sendMessage(lang.msg("command.schedule.entry", "name" to (arenas()[arenaId]?.name ?: arenaId)))
+            sender.sendMessage(lang.arenaMsg("command.schedule.entry", "name" to (arenas()[arenaId]?.name ?: arenaId).arenaComponent()))
             occurrences.forEach { occurrence ->
                 val time = occurrence.instant.atZone(cfg.schedule.zone).format(DateTimeFormatter.ofPattern("HH:mm"))
                 sender.sendMessage(lang.msg("command.schedule.entry_time", "time" to time))
@@ -284,7 +286,7 @@ class KothCommand(
     private fun arenaInfo(sender: CommandSender, id: String?) {
         if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
         val arena = cfgLoader().arenas[id] ?: run { sender.sendMessage(lang.msg("staff.error.arena")); return }
-        sender.sendMessage(lang.msg("staff.info", "value" to "${net.badgersmc.ek.domain.ArenaName.resolve(id!!, arena.displayName)} (ID: $id) | ${arena.family} | enabled=${arena.enabled} | ${arena.world} ${arena.center.x}, ${arena.center.y}, ${arena.center.z}"))
+        sender.sendMessage(lang.arenaMsg("staff.info", "value" to net.badgersmc.ek.domain.ArenaName.resolve(id!!, arena.displayName).arenaComponent().append(Component.text(" (ID: $id) | ${arena.family} | enabled=${arena.enabled} | ${arena.world} ${arena.center.x}, ${arena.center.y}, ${arena.center.z}"))))
         sender.sendMessage(lang.msg("staff.info", "value" to "duration=${arena.durationSeconds}s | capture=${arena.captureSeconds}s | leave=${arena.leaveBehavior} | inventory=${arena.keepInventory} | XP=${arena.keepExperience}"))
         sender.sendMessage(lang.msg("staff.info", "value" to "region=${arena.worldGuardRegion ?: "native"} | radius=${arena.radius} | schedule=${arena.schedule} | ${cfgLoader().timezone.id}"))
         sender.sendMessage(lang.msg("staff.info", "value" to "money=${cfgLoader().rewards[arena.rewardFamily ?: arena.family]} | fixed=${arena.rewards} | chance=${arena.chancedRewards}"))
@@ -395,7 +397,7 @@ class KothCommand(
     private fun sendStartResult(sender: CommandSender, arenaId: String, result: StartResult, fromGui: Boolean) {
         when (result) {
             is StartResult.Started -> sender.sendMessage(
-                lang.msg(if (fromGui) "command.success.started_from_gui" else "command.success.started", "arena" to (arenas()[arenaId]?.name ?: arenaId)),
+                lang.arenaMsg(if (fromGui) "command.success.started_from_gui" else "command.success.started", "arena" to (arenas()[arenaId]?.name ?: arenaId).arenaComponent()),
             )
             is StartResult.Rejected -> when (result.failure) {
                 StartFailure.STARTER_COOLDOWN -> sender.sendMessage(lang.msg("command.error.starter_cooldown"))
@@ -448,8 +450,8 @@ class KothCommand(
             return
         }
         val flare = flareService.createFlare(arena).apply { this.amount = amount.coerceAtLeast(1) }
-        sender.sendMessage(lang.msg("command.error.flare_given", "player" to target.name, "amount" to flare.amount.toString(), "koth" to arena.name))
-        target.sendMessage(lang.msg("command.error.flare_received", "amount" to flare.amount.toString(), "koth" to arena.name))
+        sender.sendMessage(lang.arenaMsg("command.error.flare_given", "player" to target.name, "amount" to flare.amount.toString(), "koth" to arena.name.arenaComponent()))
+        target.sendMessage(lang.arenaMsg("command.error.flare_received", "amount" to flare.amount.toString(), "koth" to arena.name.arenaComponent()))
         target.inventory.addItem(flare).values.forEach { target.world.dropItem(target.location, it) }
     }
 
@@ -471,7 +473,11 @@ class KothCommand(
             return
         }
         val event = kothService.activeEvent
-        sender.sendMessage(lang.msg("staff.active-list", "value" to kothService.allEvents().joinToString(", ") { "${it.arena.name} (${it.arena.id})" }))
+        val activeNames = kothService.allEvents().foldIndexed(Component.empty()) { index, names, active ->
+            names.append(Component.text(if (index == 0) "" else ", "))
+                .append(active.arena.name.arenaComponent()).append(Component.text(" (${active.arena.id})"))
+        }
+        sender.sendMessage(lang.arenaMsg("staff.active-list", "value" to activeNames))
         val line = lang.msg("command.status.line")
         sender.sendMessage(line)
         sender.sendMessage(lang.msg("command.status.header"))

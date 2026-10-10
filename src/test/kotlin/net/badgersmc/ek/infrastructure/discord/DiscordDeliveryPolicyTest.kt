@@ -16,6 +16,22 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 
 class DiscordDeliveryPolicyTest {
+    @Test fun `formatted arena name reaches Discord as plain text with emojis`() {
+        val delivered = CountDownLatch(1)
+        var payload = ""
+        val service = DiscordWebhookService(
+            plugin = mockk<JavaPlugin>(relaxed = true), webhookUrl = { "https://example.invalid/webhook" },
+            enabled = { true }, guilds = mockk<LumaGuildsAdapter>(relaxed = true),
+            transport = WebhookTransport { _, body -> payload = body; delivered.countDown(); WebhookResponse(204) },
+        )
+        try {
+            service.sendStart("&#12ABEF&lSummit 🧑🏽‍🚀", "1, 2, 3")
+            assertTrue(delivered.await(2, TimeUnit.SECONDS))
+            assertTrue(payload.contains("Summit 🧑🏽‍🚀"))
+            assertFalse(payload.contains("&#12ABEF"))
+            assertFalse(payload.contains("&l"))
+        } finally { service.shutdown() }
+    }
     @Test
     fun `rate limit delay cannot be bypassed by enqueue while request is in flight`() {
         val started = CountDownLatch(1)

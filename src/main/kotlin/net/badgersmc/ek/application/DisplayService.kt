@@ -1,5 +1,8 @@
 package net.badgersmc.ek.application
 
+import net.badgersmc.ek.infrastructure.i18n.arenaComponent
+import net.badgersmc.ek.infrastructure.i18n.arenaLegacyText
+import net.badgersmc.ek.infrastructure.i18n.arenaMsg
 import net.badgersmc.ek.config.DisplayConfig
 import net.badgersmc.ek.domain.KothEvent
 import net.kyori.adventure.bossbar.BossBar
@@ -32,13 +35,13 @@ class DisplayService(
                  settings: DisplayConfig = DisplayConfig(), event: KothEvent? = null, displayName: String = kothName) {
         val text = if (settings.bossbarTitle.isNotBlank()) net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(
             settings.bossbarTitle,
-            net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("koth_name", displayName),
+            net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.component("koth_name", displayName.arenaComponent()),
             net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("capper", capper ?: "None"),
             net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("time", timeLeft),
             net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("contested", if (contested) "Contested" else ""),
-        ) else if (capper != null) lang.msg("bossbar.format_with_capper", "koth_name" to displayName,
+        ) else if (capper != null) lang.arenaMsg("bossbar.format_with_capper", "koth_name" to displayName.arenaComponent(),
             "capper" to capper, "contested" to if (contested) lang.msg("bossbar.contested") else Component.empty(), "time" to timeLeft)
-        else lang.msg("bossbar.format_no_capper", "koth_name" to displayName, "time" to timeLeft)
+        else lang.arenaMsg("bossbar.format_no_capper", "koth_name" to displayName.arenaComponent(), "time" to timeLeft)
         val desired = audience.mapTo(mutableSetOf()) { it.uniqueId }
         if (settings.bossbar) {
             val state = bars.getOrPut(kothName) { Bar(BossBar.bossBar(text, progress.coerceIn(0f, 1f), BossBar.Color.RED, BossBar.Overlay.PROGRESS), emptySet(), isPublic) }
@@ -74,7 +77,7 @@ class DisplayService(
             val objective = board.owned.getObjective("ekoth") ?: board.owned.registerNewObjective("ekoth", org.bukkit.scoreboard.Criteria.DUMMY, text).also { it.displaySlot = DisplaySlot.SIDEBAR }
             objective.displayName(text)
             board.owned.entries.toList().forEach(board.owned::resetScores)
-            objective.getScore("$displayName: $timeLeft").score = 2
+            objective.getScore("${displayName.arenaLegacyText()}§r: $timeLeft").score = 2
             objective.getScore("${capper ?: "None"}${if (contested) " (contested)" else ""}").score = 1
         }
     }

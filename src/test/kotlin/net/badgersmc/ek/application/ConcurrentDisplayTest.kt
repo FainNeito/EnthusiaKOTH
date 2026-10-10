@@ -31,8 +31,8 @@ class ConcurrentDisplayTest {
         display.showKoth("a", null, "10s", false, .5f, listOf(player), true, format, displayName = "Summit")
         display.showKoth("b", null, "10s", false, .5f, listOf(player), true, format, displayName = "Summit")
         assertEquals(2, shown.size); assertNotSame(shown[0], shown[1])
-        display.showKoth("a", null, "9s", false, .6f, listOf(player), true, format, displayName = "Crimson Summit")
-        assertEquals("Crimson Summit 9s", net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(shown[0].name()))
+        display.showKoth("a", null, "9s", false, .6f, listOf(player), true, format, displayName = "&#FFAA00Crimson Summit 🏆")
+        assertEquals("Crimson Summit 🏆 9s", net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(shown[0].name()))
         display.clear("a")
         verify(exactly = 1) { player.hideBossBar(shown[0]) }
         verify(exactly = 0) { player.hideBossBar(shown[1]) }

@@ -25,7 +25,7 @@ class ArenaNamePolicyTest {
     @Test fun `invalid input leaves the existing draft intact`() {
         val draft = ArenaSetupDraft("capture", "revision", false, ArenaConfig(displayName = "Summit"), true)
         val before = draft.arena
-        for (raw in listOf("A".repeat(65), "two\nlines", "name\t", "<red>Hill", "&cHill", "§cHill", "hidden\u200Bname")) {
+        for (raw in listOf("A".repeat(65), "two\nlines", "name\t", "<red>Hill", "&#12Hill", "&x&1Hill", "hidden\u200Bname")) {
             val error = assertThrows(SetupException::class.java) { service().setName(draft, raw) }
             assertEquals(SetupIssue.NAME, error.issue)
             assertEquals(before, draft.arena)
@@ -53,10 +53,10 @@ class ArenaNamePolicyTest {
 """)
         val store = FileArenaSetupStore(file)
         val original = store.read()
-        store.write("capture", original.arenas.getValue("capture").copy(displayName = "Crimson Summit"), original.revision)
+        store.write("capture", original.arenas.getValue("capture").copy(displayName = "&#FFAA00&lSummit 🧑🏽‍🚀"), original.revision)
         val renamed = store.read()
         assertEquals(setOf("capture", "score"), renamed.arenas.keys)
-        assertEquals("Crimson Summit", renamed.arenas.getValue("capture").displayName)
+        assertEquals("&#FFAA00&lSummit 🧑🏽‍🚀", renamed.arenas.getValue("capture").displayName)
         assertEquals("Summit", renamed.arenas.getValue("score").displayName)
         assertEquals(listOf("18:00"), renamed.arenas.getValue("capture").schedule)
         assertEquals(listOf("reward {KOTH}"), renamed.arenas.getValue("capture").rewards)
@@ -66,7 +66,7 @@ class ArenaNamePolicyTest {
         assertEquals("untouched", yaml.getString("arenas.capture.custom-key"))
         assertEquals("capture", ArenaName.resolve("capture", store.read().arenas.getValue("capture").displayName))
     }
-    @Test fun `invalid configured names fail explicitly rather than allowing formatting`() {
+    @Test fun `invalid configured names fail explicitly rather than allowing executable markup`() {
         val yaml = YamlConfiguration().apply { set("arenas.capture.display-name", "<click:run_command:/op>Summit") }
         assertThrows(IllegalArgumentException::class.java) { net.badgersmc.ek.infrastructure.bukkit.ArenaConfigLoader.load(yaml) }
     }

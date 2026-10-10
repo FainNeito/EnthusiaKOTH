@@ -1,5 +1,7 @@
 package net.badgersmc.ek.di
 
+import net.badgersmc.ek.infrastructure.i18n.arenaComponent
+import net.badgersmc.ek.infrastructure.i18n.arenaMsg
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import net.badgersmc.ek.EnthusiaKothPlugin
@@ -349,9 +351,9 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         warningSink = { arenaId, minutes ->
             Bukkit.getOnlinePlayers().filter(notificationPreferences::enabled).forEach { player ->
                 player.sendMessage(
-                    langService.msg(
+                    langService.arenaMsg(
                         "koth.warning_minutes",
-                        "koth_name" to (arenas()[arenaId]?.name ?: arenaId),
+                        "koth_name" to (arenas()[arenaId]?.name ?: arenaId).arenaComponent(),
                         "minutes" to minutes.toString(),
                     ),
                 )

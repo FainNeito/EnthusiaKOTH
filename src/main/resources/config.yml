@@ -104,7 +104,8 @@ rules:
 
 arenas:
   capture:
-    # Optional visible name. Blank keeps the stable arena ID. Plain text, 64 characters max.
+    # Optional visible name. Blank keeps the stable arena ID. Up to 64 visible characters.
+    # Colors &c / &#FFAA00, legacy decorations and emojis are supported; e.g. "&#FFAA00&lSummit 🏆".
     display-name: ""
     enabled: true
     keep-inventory: false

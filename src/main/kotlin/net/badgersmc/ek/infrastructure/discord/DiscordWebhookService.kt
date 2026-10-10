@@ -173,8 +173,8 @@ class DiscordWebhookService internal constructor(
         val color = if (contested) 0xE74C3C else 0xF1C40F
         val status = if (contested) "⚔️ Contested! Multiple groups fighting!" else "🟢 Stable capture"
         val capperName = if (capper != null) resolveName(capper) else "Nobody"
-        return json.embed(color, "🏆 KOTH — $kothName") {
-            field("KOTH", kothName, inline = true)
+        return json.embed(color, "🏆 KOTH — ${net.badgersmc.ek.domain.ArenaName.plain(kothName)}") {
+            field("KOTH", net.badgersmc.ek.domain.ArenaName.plain(kothName), inline = true)
             field("Currently Capped By", capperName, inline = true)
             field("Time Left", timeLeft, inline = true)
             field("Status", status, inline = false)
@@ -187,23 +187,23 @@ class DiscordWebhookService internal constructor(
         val name = resolveName(winner)
         val verb = if (contested) "fought off the competition and captured" else "captured"
         return json.embed(color, "🎉 KOTH Captured!") {
-            field("KOTH", kothName, inline = true)
+            field("KOTH", net.badgersmc.ek.domain.ArenaName.plain(kothName), inline = true)
             field("Captured By", name, inline = true)
-            field("Result", "$name $verb $kothName!", inline = false)
+            field("Result", "$name $verb ${net.badgersmc.ek.domain.ArenaName.plain(kothName)}!", inline = false)
             timestamp()
         }
     }
 
     private fun buildStartEmbed(kothName: String, location: String): String =
         json.embed(0x3498DB, "🔥 KOTH Started!") {
-            field("KOTH", kothName, inline = true)
+            field("KOTH", net.badgersmc.ek.domain.ArenaName.plain(kothName), inline = true)
             field("Location", location, inline = true)
             timestamp()
         }
 
     private fun buildPreStartEmbed(kothName: String, minutes: Int): String =
         json.embed(0xF39C12, "⏰ KOTH Starting Soon") {
-            field("KOTH", kothName, inline = true)
+            field("KOTH", net.badgersmc.ek.domain.ArenaName.plain(kothName), inline = true)
             field("Starts In", "$minutes minute${if (minutes == 1) "" else "s"}", inline = true)
             timestamp()
         }

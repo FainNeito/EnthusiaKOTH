@@ -5,7 +5,7 @@ Base: canonical main `23dba1b`. SPEAR is recorded here; this repository has no p
 - NAME-001: When an arena has a display name, player-facing chat, displays and arena menus shall show that name. Missing or blank names shall fall back to the existing ID.
 - NAME-002: When staff change a name through Area > Arena name, the editor shall retain it as an unsaved draft until Save. Cancel, timeout, stale replies and revoked permission shall not apply input to another draft.
 - NAME-003: When saved, the name shall persist atomically alongside existing settings without changing IDs, schedules, reward-command substitutions, statistics, challenges or active-display ownership.
-- NAME-004: Names shall be plain, single-line text, trimmed and at most 64 characters. Invalid names shall be rejected without changing the draft. Duplicate display names shall remain separate arenas.
+- NAME-004: Historical plain-text policy, superseded by [NAME-005..008](arena-name-formatting.md). Names remain single-line and trimmed; duplicate display names remain separate arenas.
 
 Acceptance: local policy/persistence/display/controller checks and source review; interactive preview is schematic. TEST installation, native client rendering and production activation remain separate gates.
 
@@ -13,7 +13,7 @@ Acceptance: local policy/persistence/display/controller checks and source review
 
 Open `/ekoth setup <id>` → Area → Arena name. Enter a private chat reply, then Save. `cancel` keeps the previous name; `-` restores the ID. Invalid input returns to the editor with the draft intact. Review shows the name and internal ID.
 
-YAML alternative: `arenas.capture.display-name: "Crimson Summit"`. Missing/blank names use the ID. Invalid configured names fail with their exact configuration path. Formatting codes, tags, control characters and invisible format characters are rejected. The editor reserves `cancel` and `-` as input actions.
+YAML alternative: `arenas.capture.display-name: "&#FFAA00&lSummit 🏆"`. Missing/blank names use the ID. Legacy `&c` / `§c`, RGB `&#RRGGBB` / `§#RRGGBB`, expanded RGB, decoration/reset codes and emojis are supported. Limit: 64 visible grapheme clusters and 1024 raw UTF-16 units. Invalid configured names fail with their exact configuration path. Unsupported markup, malformed RGB, formatting-only names and hidden controls are rejected; emoji joins are permitted. The editor reserves `cancel` and `-` as input actions. Discord receives plain text; Minecraft glyph availability depends on the client font/resource pack.
 
 ## SPEAR evidence
 
