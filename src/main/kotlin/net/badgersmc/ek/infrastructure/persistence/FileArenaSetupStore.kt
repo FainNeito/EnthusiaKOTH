@@ -34,6 +34,7 @@ class FileArenaSetupStore(
             val root = "arenas.$id"
             fun put(key: String, value: Any?) = config.set("$root.$key", value)
             put("enabled", arena.enabled); put("family", arena.family); put("world", arena.world)
+            put("display-name", net.badgersmc.ek.domain.ArenaName.parse(arena.displayName))
             put("worldguard-region", arena.worldGuardRegion ?: "")
             put("center.x", arena.center.x); put("center.y", arena.center.y); put("center.z", arena.center.z)
             put("protected-region.corner-1.x", arena.protectedRegion.corner1.x)

@@ -65,6 +65,7 @@ data class ArenaConfig(
     val keepInventory: Boolean = false,
     val keepExperience: Boolean = true,
     val rewardFamily: String? = null,
+    val displayName: String? = null,
 )
 
 data class PositionConfig(val x: Double = 0.0, val y: Double = 80.0, val z: Double = 0.0)

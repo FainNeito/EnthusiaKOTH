@@ -351,7 +351,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
                 player.sendMessage(
                     langService.msg(
                         "koth.warning_minutes",
-                        "koth_name" to arenaId,
+                        "koth_name" to (arenas()[arenaId]?.name ?: arenaId),
                         "minutes" to minutes.toString(),
                     ),
                 )
@@ -362,7 +362,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             val discord = config().discord
             discord.preStartPingMinutes.takeIf { discord.enabled } ?: 0
         },
-        discordWarningSink = discordWebhook::sendPreStart,
+        discordWarningSink = { arenaId, minutes -> discordWebhook.sendPreStart(arenas()[arenaId]?.name ?: arenaId, minutes) },
     )
     val keepInventoryListener = net.badgersmc.ek.infrastructure.bukkit.KeepInventoryListener(
         activeEvent = { kothService.activeEvent },

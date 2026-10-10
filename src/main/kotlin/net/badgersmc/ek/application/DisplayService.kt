@@ -29,16 +29,16 @@ class DisplayService(
 
     fun showKoth(kothName: String, capper: String?, timeLeft: String, contested: Boolean,
                  progress: Float, audience: Collection<Player>, isPublic: Boolean,
-                 settings: DisplayConfig = DisplayConfig(), event: KothEvent? = null) {
+                 settings: DisplayConfig = DisplayConfig(), event: KothEvent? = null, displayName: String = kothName) {
         val text = if (settings.bossbarTitle.isNotBlank()) net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(
             settings.bossbarTitle,
-            net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("koth_name", kothName),
+            net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("koth_name", displayName),
             net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("capper", capper ?: "None"),
             net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("time", timeLeft),
             net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.unparsed("contested", if (contested) "Contested" else ""),
-        ) else if (capper != null) lang.msg("bossbar.format_with_capper", "koth_name" to kothName,
+        ) else if (capper != null) lang.msg("bossbar.format_with_capper", "koth_name" to displayName,
             "capper" to capper, "contested" to if (contested) lang.msg("bossbar.contested") else Component.empty(), "time" to timeLeft)
-        else lang.msg("bossbar.format_no_capper", "koth_name" to kothName, "time" to timeLeft)
+        else lang.msg("bossbar.format_no_capper", "koth_name" to displayName, "time" to timeLeft)
         val desired = audience.mapTo(mutableSetOf()) { it.uniqueId }
         if (settings.bossbar) {
             val state = bars.getOrPut(kothName) { Bar(BossBar.bossBar(text, progress.coerceIn(0f, 1f), BossBar.Color.RED, BossBar.Overlay.PROGRESS), emptySet(), isPublic) }
@@ -74,7 +74,7 @@ class DisplayService(
             val objective = board.owned.getObjective("ekoth") ?: board.owned.registerNewObjective("ekoth", org.bukkit.scoreboard.Criteria.DUMMY, text).also { it.displaySlot = DisplaySlot.SIDEBAR }
             objective.displayName(text)
             board.owned.entries.toList().forEach(board.owned::resetScores)
-            objective.getScore("$kothName: $timeLeft").score = 2
+            objective.getScore("$displayName: $timeLeft").score = 2
             objective.getScore("${capper ?: "None"}${if (contested) " (contested)" else ""}").score = 1
         }
     }

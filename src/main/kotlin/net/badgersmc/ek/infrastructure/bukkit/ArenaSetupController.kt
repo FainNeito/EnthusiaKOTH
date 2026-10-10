@@ -28,7 +28,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 enum class ArenaSetupPage(val slots: Set<Int>) {
-    AREA(setOf(10, 11, 12, 16, 22, 24, 25)), RULES(setOf(14, 15, 19, 20, 21, 23)), REVIEW(setOf(34));
+    AREA(setOf(10, 11, 12, 13, 16, 22, 24, 25)), RULES(setOf(14, 15, 19, 20, 21, 23)), REVIEW(setOf(34));
     fun accepts(slot: Int) = slot in slots || slot in setOf(45, 46, 47, 48, 49)
 }
 
@@ -53,6 +53,8 @@ class ArenaSetupController(
     private val previews = mutableMapOf<UUID, BukkitTask>()
     private val selectionPreviews = mutableMapOf<UUID, BukkitTask>()
     private val pendingNames = ConcurrentHashMap<UUID, UUID>()
+    private data class DisplayNamePrompt(val token: UUID, val draft: ArenaSetupDraft)
+    private val displayNamePrompts = ConcurrentHashMap<UUID, DisplayNamePrompt>()
     private val wandKey = NamespacedKey(plugin, "arena-setup-wand")
     private fun text(key: String, vararg values: Pair<String, String>) = lang.msg("setup.$key", *values)
     private fun tell(player: Player, key: String, vararg values: Pair<String, String>) = player.sendMessage(text(key, *values))
@@ -111,7 +113,7 @@ class ArenaSetupController(
         val ids = all.keys.sorted().drop(page * 45).take(45)
         val holder = ArenaSetupHolder(player.uniqueId, null, ids, page)
         val inv = Bukkit.createInventory(holder, 54, text("list-title")); holder.backing = inv
-        ids.forEachIndexed { i, id -> inv.setItem(i, icon(if (all.getValue(id).enabled) Material.LIME_DYE else Material.GRAY_DYE, "arena", id, "edit-hint")) }
+        ids.forEachIndexed { i, id -> inv.setItem(i, icon(if (all.getValue(id).enabled) Material.LIME_DYE else Material.GRAY_DYE, "arena", net.badgersmc.ek.domain.ArenaName.resolve(id, all.getValue(id).displayName), "edit-hint").apply { editMeta { it.lore(listOf(text("arena-id", "value" to id), text("edit-hint"))) } }) }
         if (page > 0) inv.setItem(45, icon(Material.ARROW, "previous"))
         inv.setItem(49, icon(Material.ANVIL, "create", lore = "create-hint"))
         if (all.size > (page + 1) * 45) inv.setItem(53, icon(Material.ARROW, "next"))
@@ -121,7 +123,8 @@ class ArenaSetupController(
     private fun editor(player: Player, draft: ArenaSetupDraft, page: ArenaSetupPage = ArenaSetupPage.AREA) {
         val a = draft.arena
         val holder = ArenaSetupHolder(player.uniqueId, draft, editorPage = page)
-        val inv = Bukkit.createInventory(holder, 54, text("editor-title", "value" to draft.id)); holder.backing = inv
+        val inv = Bukkit.createInventory(holder, 54, text("editor-title", "value" to net.badgersmc.ek.domain.ArenaName.resolve(draft.id, a.displayName))); holder.backing = inv
+        inv.setItem(13, icon(Material.NAME_TAG, "display-name", net.badgersmc.ek.domain.ArenaName.resolve(draft.id, a.displayName), if (page == ArenaSetupPage.AREA) "display-name-hint" else "review-hint").apply { editMeta { it.lore(listOf(text("arena-id", "value" to draft.id), text(if (page == ArenaSetupPage.AREA) "display-name-hint" else "review-hint"))) } })
         inv.setItem(0, icon(Material.PAPER, "page-${page.name.lowercase()}", "${a.family} | ${a.world}", "draft-hint"))
         if (page == ArenaSetupPage.AREA) {
             inv.setItem(10, icon(Material.WOODEN_AXE, "boundary", a.worldGuardRegion ?: if (draft.boundaryReady) "Native selection" else "Not selected", "boundary-hint"))
@@ -204,6 +207,7 @@ class ArenaSetupController(
                         draft.arena = a.copy(center = position(player))
                     }
                     12 -> { preview(player, draft); return@guarded }
+                    13 -> { requestDisplayName(player, draft); return@guarded }
                     14 -> draft.arena = a.copy(durationSeconds = (a.durationSeconds + if (right) -60 else 60).coerceIn(15, 86400))
                     15 -> draft.arena = a.copy(captureSeconds = (a.captureSeconds + if (right) -15 else 15).coerceIn(1, 86400))
                     16 -> draft.arena = a.copy(radius = (a.radius + if (right) -1 else 1).coerceIn(.5, 256.0))
@@ -246,7 +250,18 @@ class ArenaSetupController(
         if (event.view.topInventory.holder is ArenaSetupHolder) event.isCancelled = true
     }
 
+    private fun requestDisplayName(player: Player, draft: ArenaSetupDraft) {
+        pendingNames.remove(player.uniqueId)
+        val request = DisplayNamePrompt(UUID.randomUUID(), draft)
+        displayNamePrompts[player.uniqueId] = request
+        player.closeInventory(); tell(player, "display-name-prompt")
+        plugin.server.scheduler.runTaskLater(plugin, Runnable {
+            if (displayNamePrompts.remove(player.uniqueId, request) && player.isOnline) tell(player, "name-expired")
+        }, 1200L)
+    }
+
     private fun requestName(player: Player) {
+        displayNamePrompts.remove(player.uniqueId)
         player.closeInventory(); tell(player, "name-prompt")
         val token = UUID.randomUUID(); pendingNames[player.uniqueId] = token
         plugin.server.scheduler.runTaskLater(plugin, Runnable {
@@ -269,6 +284,21 @@ class ArenaSetupController(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun chat(event: AsyncChatEvent) {
         val id = event.player.uniqueId
+        val request = displayNamePrompts[id]
+        if (request != null) {
+            event.isCancelled = true
+            val raw = PlainTextComponentSerializer.plainText().serialize(event.message())
+            plugin.server.scheduler.runTask(plugin, Runnable {
+                val player = event.player
+                if (!displayNamePrompts.remove(id, request) || !player.isOnline || !allowed(player) || drafts[id] !== request.draft) return@Runnable
+                guarded(player) {
+                    val input = raw.trim()
+                    if (!input.equals("cancel", true)) service.setName(request.draft, if (input == "-") null else raw)
+                }
+                editor(player, request.draft)
+            })
+            return
+        }
         val token = pendingNames[id] ?: return
         event.isCancelled = true
         val name = PlainTextComponentSerializer.plainText().serialize(event.message()).trim()
@@ -404,7 +434,7 @@ class ArenaSetupController(
     }
     private fun clear(player: Player) {
         drafts.remove(player.uniqueId); firstCorners.remove(player.uniqueId); selectionWorlds.remove(player.uniqueId)
-        selecting.remove(player.uniqueId); pendingNames.remove(player.uniqueId); previews.remove(player.uniqueId)?.cancel(); removeWands(player)
+        selecting.remove(player.uniqueId); pendingNames.remove(player.uniqueId); displayNamePrompts.remove(player.uniqueId); previews.remove(player.uniqueId)?.cancel(); removeWands(player)
         selectionPreviews.remove(player.uniqueId)?.cancel()
     }
     @EventHandler fun quit(event: PlayerQuitEvent) = clear(event.player)
@@ -415,5 +445,5 @@ class ArenaSetupController(
     @EventHandler fun drop(event: PlayerDropItemEvent) {
         if (event.itemDrop.itemStack.itemMeta?.persistentDataContainer?.has(wandKey, PersistentDataType.STRING) == true) event.isCancelled = true
     }
-    fun shutdown() { previews.values.forEach { it.cancel() }; selectionPreviews.values.forEach { it.cancel() }; selectionPreviews.clear(); Bukkit.getOnlinePlayers().forEach(::clear); pendingNames.clear() }
+    fun shutdown() { previews.values.forEach { it.cancel() }; selectionPreviews.values.forEach { it.cancel() }; selectionPreviews.clear(); Bukkit.getOnlinePlayers().forEach(::clear); pendingNames.clear(); displayNamePrompts.clear() }
 }

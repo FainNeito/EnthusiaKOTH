@@ -78,7 +78,7 @@ class StaffSettingsController(
     private fun root(d: StaffSettingsDraft) = "arenas.${d.arenaId}"
     private fun render(player: Player, d: StaffSettingsDraft, page: StaffSettingsPage) {
         val holder = StaffSettingsHolder(player.uniqueId, d, page)
-        val inv = Bukkit.createInventory(holder, 54, text("title", "value" to (d.arenaId ?: "Global"))); holder.backing = inv
+        val inv = Bukkit.createInventory(holder, 54, text("title", "value" to (d.arenaId?.let { "${arenas()[it]?.name ?: it} ($it)" } ?: "Global"))); holder.backing = inv
         fun item(slot: Int, material: Material, key: String, value: Any? = "", lore: List<net.kyori.adventure.text.Component> = listOf(text("click"))) { inv.setItem(slot, icon(material, key, value, lore)) }
         when (page) {
             StaffSettingsPage.HOME -> {
@@ -155,7 +155,7 @@ class StaffSettingsController(
             arena.copy(schedule = arenaTimes)
         }
         return schedule.previewUpcoming(config, candidates).map {
-            text("occurrence", "value" to "${it.instant.atZone(zone).format(DateTimeFormatter.ofPattern("EEE MM-dd HH:mm xxx"))} | ${it.arenaId} | ${it.teamMode}")
+            text("occurrence", "value" to "${it.instant.atZone(zone).format(DateTimeFormatter.ofPattern("EEE MM-dd HH:mm xxx"))} | ${candidates[it.arenaId]?.name ?: it.arenaId} (${it.arenaId}) | ${it.teamMode}")
         }
     }
     @EventHandler fun click(event: InventoryClickEvent) {

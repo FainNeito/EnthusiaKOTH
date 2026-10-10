@@ -112,7 +112,7 @@ class ArenaSetupControllerTest {
         val retained = field.get(ui) as MutableMap<UUID, ArenaSetupDraft>
         retained[id] = draft
         val before = draft.arena
-        for ((page, hidden) in listOf(ArenaSetupPage.AREA to 14, ArenaSetupPage.REVIEW to 23, ArenaSetupPage.RULES to 10)) {
+        for ((page, hidden) in listOf(ArenaSetupPage.AREA to 14, ArenaSetupPage.REVIEW to 23, ArenaSetupPage.RULES to 10, ArenaSetupPage.REVIEW to 13, ArenaSetupPage.RULES to 13)) {
             val holder = ArenaSetupHolder(id, draft, editorPage = page)
             val top = mockk<Inventory>(relaxed = true)
             val event = mockk<InventoryClickEvent>(relaxed = true)
@@ -128,5 +128,94 @@ class ArenaSetupControllerTest {
         }
         verify(exactly = 0) { service.save(any()) }
         verify(exactly = 0) { player.openInventory(any<Inventory>()) }
+    }
+
+    private fun retain(draft: ArenaSetupDraft) {
+        val field = ArenaSetupController::class.java.getDeclaredField("drafts").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        (field.get(ui) as MutableMap<UUID, ArenaSetupDraft>)[id] = draft
+    }
+    private fun request(draft: ArenaSetupDraft) {
+        every { player.hasPermission("enthusiakoth.admin") } returns true
+        every { player.isOnline } returns true
+        retain(draft)
+        val top = mockk<Inventory>(relaxed = true)
+        val holder = ArenaSetupHolder(id, draft)
+        every { top.holder } returns holder
+        every { player.openInventory.topInventory } returns top
+        val click = mockk<InventoryClickEvent>(relaxed = true)
+        every { click.view.topInventory } returns top
+        every { click.clickedInventory } returns top
+        every { click.whoClicked } returns player
+        every { click.rawSlot } returns 13
+        every { plugin.server.scheduler.runTask(plugin, any<Runnable>()) } answers { secondArg<Runnable>().run(); mockk(relaxed = true) }
+        ui.click(click)
+        verify { player.closeInventory() }
+        verify { lang.msg("setup.display-name-prompt", *anyVararg()) }
+    }
+    private fun reply(): io.papermc.paper.event.player.AsyncChatEvent = mockk<io.papermc.paper.event.player.AsyncChatEvent>(relaxed = true).also {
+        every { it.player } returns player
+        every { it.message() } returns Component.text("Crimson Summit")
+    }
+    @Test fun `private name reply cannot mutate a replaced draft`() {
+        val original = ArenaSetupDraft("hill", "revision", false, ArenaConfig(), true)
+        request(original)
+        retain(original.copy(id = "other"))
+        val chat = reply(); ui.chat(chat)
+        verify { chat.isCancelled = true }
+        verify(exactly = 0) { service.setName(any(), any()) }
+    }
+    @Test fun `revoked permission blocks queued private name reply`() {
+        request(ArenaSetupDraft("hill", "revision", false, ArenaConfig(), true))
+        val task = slot<Runnable>()
+        every { plugin.server.scheduler.runTask(plugin, capture(task)) } returns mockk(relaxed = true)
+        val chat = reply(); ui.chat(chat)
+        every { player.hasPermission("enthusiakoth.admin") } returns false
+        task.captured.run()
+        verify { chat.isCancelled = true }
+        verify(exactly = 0) { service.setName(any(), any()) }
+    }
+    @Test fun `expired private name prompt restores normal chat without applying reply`() {
+        val timeout = slot<Runnable>()
+        every { plugin.server.scheduler.runTaskLater(plugin, capture(timeout), 1200L) } returns mockk(relaxed = true)
+        request(ArenaSetupDraft("hill", "revision", false, ArenaConfig(), true))
+        timeout.captured.run()
+        val chat = reply(); ui.chat(chat)
+        verify(exactly = 0) { chat.isCancelled = any() }
+        verify(exactly = 0) { service.setName(any(), any()) }
+    }
+    @Test fun `private name reply edits only its draft and returns to the editor without saving`() {
+        val draft = ArenaSetupDraft("hill", "revision", false, ArenaConfig(), true)
+        ui = spyk(ui, recordPrivateCalls = true)
+        every { ui["editor"](player, draft, ArenaSetupPage.AREA) } returns Unit
+        every { service.setName(draft, any()) } answers { draft.arena = draft.arena.copy(displayName = secondArg()) }
+        request(draft)
+        val chat = reply(); ui.chat(chat)
+        verify { chat.isCancelled = true }
+        verify { service.setName(draft, "Crimson Summit") }
+        verify { ui["editor"](player, draft, ArenaSetupPage.AREA) }
+        Assertions.assertEquals("Crimson Summit", draft.arena.displayName)
+        verify(exactly = 0) { service.save(any()) }
+    }
+    @Test fun `cancel clear and invalid replies retain explicit save semantics`() {
+        val draft = ArenaSetupDraft("hill", "revision", false, ArenaConfig(displayName = "Summit"), true)
+        ui = spyk(ui, recordPrivateCalls = true)
+        every { ui["editor"](player, draft, ArenaSetupPage.AREA) } returns Unit
+        request(draft)
+        val cancel = reply(); every { cancel.message() } returns Component.text("cancel")
+        ui.chat(cancel)
+        verify(exactly = 0) { service.setName(any(), any()) }
+        Assertions.assertEquals("Summit", draft.arena.displayName)
+        request(draft)
+        val clear = reply(); every { clear.message() } returns Component.text("-")
+        ui.chat(clear)
+        verify { service.setName(draft, null) }
+        request(draft)
+        every { service.setName(draft, "<red>Bad") } throws SetupException(SetupIssue.NAME)
+        val invalid = reply(); every { invalid.message() } returns Component.text("<red>Bad")
+        ui.chat(invalid)
+        verify { lang.msg("setup.error.name", *anyVararg()) }
+        verify(exactly = 3) { ui["editor"](player, draft, ArenaSetupPage.AREA) }
+        verify(exactly = 0) { service.save(any()) }
     }
 }

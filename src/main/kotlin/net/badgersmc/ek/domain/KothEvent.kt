@@ -84,7 +84,10 @@ data class KothArena(
     val keepInventory: Boolean = false,
     val keepExperience: Boolean = true,
     val rewardFamily: String? = null,
-)
+    val displayName: String? = null,
+) {
+    val name: String get() = ArenaName.resolve(id, displayName)
+}
 
 data class TeamId(
     val mode: TeamMode,
