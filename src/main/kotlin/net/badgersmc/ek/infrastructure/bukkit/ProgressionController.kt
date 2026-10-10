@@ -174,10 +174,10 @@ class ProgressionController(
             { open(player,page,it) }, { if(page=="home") player.closeInventory() else open(player,"home") },
             if(page=="home") "Close" else "Back to KOTH")
     }
-    private fun choose(player:Player,c:ProgressionClaim) {
+    private fun choose(player:Player,c:ProgressionClaim,index:Int=0) {
         val options=store.options(c.id,player.uniqueId)
         menu(player,"Choose reward package",false,options.map { it to listOf("Same fixed event pool share", "Choice is permanent") },
-            options.indices.associateWith { { player.sendMessage(if(store.choose(c.id,player.uniqueId,options[it])) "Package selected." else "Choice unavailable."); open(player,"claims") } },0,{}, { open(player,"claims") },"Back to your rewards")
+            options.indices.associateWith { { player.sendMessage(if(store.choose(c.id,player.uniqueId,options[it])) "Package selected." else "Choice unavailable."); open(player,"claims") } },index,{ choose(player,c,it) }, { open(player,"claims") },"Back to your rewards")
     }
     private fun menu(player:Player,title:String,staff:Boolean,entries:List<Pair<String,List<String>>>,allActions:Map<Int,()->Unit>,index:Int,next:(Int)->Unit,back:()->Unit,backName:String) {
         val page=ProgressionLayout.page(index,entries.size)
