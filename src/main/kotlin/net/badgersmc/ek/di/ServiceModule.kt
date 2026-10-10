@@ -185,6 +185,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         { config().discord.enabled },
         lumaGuildsAdapter,
         templates = { config().discord.embeds },
+        startRoleId = { config().discord.startRoleId },
     )
     val zoneBorderService = ZoneBorderService(plugin)
     val restrictionService = RestrictionService(

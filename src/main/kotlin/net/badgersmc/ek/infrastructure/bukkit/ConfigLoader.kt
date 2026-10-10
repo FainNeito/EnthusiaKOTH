@@ -267,6 +267,9 @@ internal object DiscordConfigLoader {
         webhookUrl = string(config, "discord.webhook-url", ""),
         preStartPingMinutes = integer(config, "discord.pre-start-ping-minutes", 10).coerceAtLeast(0),
         liveUpdateSeconds = integer(config, "discord.live-update-seconds", 60).coerceAtLeast(1),
+        startRoleId = embedString(config, "discord.start-role-id", "").trim().also {
+            require(it.isEmpty() || it.matches(Regex("[1-9][0-9]{16,19}"))) { "discord.start-role-id must be blank or a quoted Discord role ID" }
+        },
         embeds = net.badgersmc.ek.config.DiscordMessageType.entries.associateWith { type ->
             val defaults = net.badgersmc.ek.config.DiscordEmbedDefaults.templates.getValue(type)
             val path = "discord.embeds.${type.key}"

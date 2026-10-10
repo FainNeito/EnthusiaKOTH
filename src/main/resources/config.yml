@@ -74,6 +74,8 @@ reminders:
 discord:
   enabled: false
   webhook-url: ""
+  # Optional quoted role ID. Only public start announcements ping this role.
+  start-role-id: ""
   pre-start-ping-minutes: 10
   live-update-seconds: 60
   # Live status creates one message per event and edits it; lifecycle announcements remain separate.

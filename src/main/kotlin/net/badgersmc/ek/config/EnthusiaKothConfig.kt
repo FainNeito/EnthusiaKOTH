@@ -77,6 +77,7 @@ data class DiscordConfig(
     val preStartPingMinutes: Int = 10,
     val liveUpdateSeconds: Int = 60,
     val embeds: Map<DiscordMessageType, DiscordEmbedTemplate> = DiscordEmbedDefaults.templates,
+    val startRoleId: String = "",
 )
 data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
 data class FamilyRulesConfig(val rules: Map<String, RuleSet> = emptyMap())

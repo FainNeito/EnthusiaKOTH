@@ -9,7 +9,8 @@ import java.time.Instant
 internal object DiscordEmbedRenderer {
     private val placeholder = Regex("\\{([a-z_]+)}")
 
-    fun render(template: DiscordEmbedTemplate, values: Map<String, String>, now: Instant = Instant.now()): String {
+    fun render(template: DiscordEmbedTemplate, values: Map<String, String>, now: Instant = Instant.now(), startRoleId: String = ""): String {
+        val role = startRoleId.takeIf { it.matches(Regex("[1-9][0-9]{16,19}")) }
         var remaining = 6000
         fun text(raw: String, limit: Int): String {
             val expanded = placeholder.replace(raw) { values[it.groupValues[1]] ?: it.value }
@@ -35,7 +36,11 @@ internal object DiscordEmbedRenderer {
             if (template.timestamp) addProperty("timestamp", now.toString())
         }
         return JsonObject().apply {
-            add("allowed_mentions", JsonObject().apply { add("parse", JsonArray()) })
+            add("allowed_mentions", JsonObject().apply {
+                add("parse", JsonArray())
+                if (role != null) add("roles", JsonArray().apply { add(role) })
+            })
+            if (role != null) addProperty("content", "<@&$role>")
             add("embeds", JsonArray().apply { add(embed) })
         }.toString()
     }
