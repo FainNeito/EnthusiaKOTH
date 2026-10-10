@@ -16,7 +16,7 @@ dependencies:
       required: false
       join-classpath: true
     EnthusiaTags:
-      load: BEFORE
+      load: OMIT
       required: false
       join-classpath: true
     LumaGuilds:

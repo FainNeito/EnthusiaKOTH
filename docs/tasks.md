@@ -57,3 +57,12 @@ Evidence: priorities-verification.md, arena-setup-verification.md, expansion-ver
 - [ ] Merge companion LoreItems definition query into its authoritative main and verify the later installed runtime before enabling item readiness. Unsupported providers block starts without creating a probe item.
 - [ ] TEST calibration: contest boundaries, holds/restart/review permissions, budgets across allied aliases/UTC rollover, renamed/copied/displaced hills, delayed preflight failure/refunds and Java/Bedrock result menus. No server testing performed here.
 - [x] Update network PR #171 to merged integrity source and verify public/local combined build at `2708f8f`. Follow-up readiness pin/head checks and maintainer merge remain separate gates.
+
+## FORMAT-001 Menu presentation
+Spec: WHEN KOTH progression is browsed THE SYSTEM SHALL use the production rewards frame and 21 reserved content slots without changing provider-owned claims or advancement evidence.
+Proof: frame/page mapping regression; existing owner and permission tests retained.
+Engine: infrastructure presentation only. SPEAR helpers absent in this repository; this task records the phases explicitly.
+
+FORMAT-001 Prove: observed compilation regression for missing ProgressionLayout in format-red.log. Engine: framed 21-slot mapping with 45 Back, 46 Tags, 47 Previous, 49 Page, 51 Next, 52 Rewards, 53 Close. Advancements guidance opens no grant path. Arch: presentation remains in Bukkit infrastructure; existing ProgressionClaims/SQL/projection unchanged. Refine: full verification pending.
+FORMAT-001 Refine: clean test/shadowJar passes; final mapped-action regression passes; existing owner/permission/claim suites retained. No server upload or production activation. Mobile preview uses illustrative items; native Java/Bedrock acceptance pending.
+FORMAT-001 Package-choice refinement: choices now pass their page into the same menu. ProgressionPackagePagingTest drives the actual private menu/navigation with item presentation stubbed because standalone Paper has no registry; 23 options expose a second page with the last two actions, and navigation never calls SQL choose. Focused proof and final full test/shadowJar pass:333 total,331 pass,2 provider-only skips. No historical runtime red claim for this refinement.
