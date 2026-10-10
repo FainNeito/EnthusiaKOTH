@@ -311,7 +311,7 @@ class KothService(
             lang.arenaMsg("koth.begin", "koth_name" to event.arena.name.arenaComponent(), "location" to locString(event.arena.zone)),
         )
         if (!event.isPrivateTest) {
-            discordWebhook.sendStart(event.arena.name, locString(event.arena.zone))
+            discordWebhook.sendStart(event.id, event.arena.name, locString(event.arena.zone))
             if (cfg.display.zoneBorder) zoneBorderService.show(event.arena.zone, event.id.toString())
         }
     }
@@ -331,7 +331,7 @@ class KothService(
         }
         if (!recovered && !event.isPrivateTest) {
             runActivationStep(event, "Discord start notification") {
-                discordWebhook.sendStart(event.arena.name, locString(event.arena.zone))
+                discordWebhook.sendStart(event.id, event.arena.name, locString(event.arena.zone))
             }
         } else if (recovered) {
             logger(
@@ -437,7 +437,7 @@ class KothService(
             val last = discordLastUpdates[event.id]
             if (last == null || now.epochSecond - last >= cfg.discord.liveUpdateSeconds) {
                 discordLastUpdates[event.id] = now.epochSecond
-                discordWebhook.sendLiveUpdate(event.arena.name, event.currentController, contested, timeLeft)
+                discordWebhook.sendLiveUpdate(event.id, event.arena.name, event.currentController, contested, timeLeft)
             }
         }
     }
@@ -613,10 +613,15 @@ class KothService(
 
         if (winner != null && !event.isPrivateTest) {
             runCompletionStep(event, "Discord capture notification") {
-                discordWebhook.sendCapture(event.arena.name, winner, wasContested)
+                discordWebhook.sendCapture(event.id, event.arena.name, winner, wasContested)
             }
             runCompletionStep(event, "firework celebration") {
                 fireworkService.celebrate(event.arena.zone)
+            }
+        }
+        if (winner == null && !event.isPrivateTest) {
+            runCompletionStep(event, "Discord no-winner notification") {
+                discordWebhook.sendNoWinner(event.id, event.arena.name)
             }
         }
         processQueue()
@@ -1060,6 +1065,17 @@ class KothService(
         lastCancellationRefundPending = !refunded
         event.state = EventState.CANCELLED
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CANCELLED, reason = reason.name)
+        if (!event.isPrivateTest) {
+            runCompletionStep(event, "Discord cancellation notification") {
+                discordWebhook.sendCancelled(event.id, event.arena.name, when (reason) {
+                    CancellationReason.ADMINISTRATIVE -> "Stopped by staff"
+                    CancellationReason.RELOAD -> "Plugin reloaded"
+                    CancellationReason.PLUGIN_DISABLE -> "Server or plugin stopped"
+                    CancellationReason.ACTIVATION_FAILURE -> "Unable to start the event"
+                    else -> "Event cancelled"
+                })
+            }
+        }
         cleanupEvent(event)
         if (advanceQueue) processQueue()
         return true

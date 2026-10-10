@@ -261,13 +261,51 @@ private object RewardConfigLoader {
     }
 }
 
-private object DiscordConfigLoader {
+internal object DiscordConfigLoader {
     fun load(config: FileConfiguration) = net.badgersmc.ek.config.DiscordConfig(
         enabled = boolean(config, "discord.enabled", false),
         webhookUrl = string(config, "discord.webhook-url", ""),
         preStartPingMinutes = integer(config, "discord.pre-start-ping-minutes", 10).coerceAtLeast(0),
         liveUpdateSeconds = integer(config, "discord.live-update-seconds", 60).coerceAtLeast(1),
+        embeds = net.badgersmc.ek.config.DiscordMessageType.entries.associateWith { type ->
+            val defaults = net.badgersmc.ek.config.DiscordEmbedDefaults.templates.getValue(type)
+            val path = "discord.embeds.${type.key}"
+            require(!config.contains(path) || config.isConfigurationSection(path)) { "$path must be a mapping" }
+            val colorText = embedString(config, "$path.color", "#%06X".format(defaults.color)).removePrefix("#")
+            require(colorText.matches(Regex("[0-9a-fA-F]{6}"))) { "$path.color must be a six-digit hex color" }
+            val fields = if (config.contains("$path.fields")) {
+                val list = config.getList("$path.fields") ?: throw IllegalArgumentException("$path.fields must be a list")
+                require(list.size <= 25) { "$path.fields must have at most 25 fields" }
+                list.mapIndexed { index, value ->
+                    val row = value as? Map<*, *> ?: throw IllegalArgumentException("$path.fields[$index] must be a mapping")
+                    val name = row["name"] as? String ?: throw IllegalArgumentException("$path.fields[$index].name must be text")
+                    val content = row["value"] as? String ?: throw IllegalArgumentException("$path.fields[$index].value must be text")
+                    require(name.isNotBlank() && content.isNotBlank()) { "$path.fields[$index] must have a name and value" }
+                    require(name.length <= 256 && content.length <= 1024) { "$path.fields[$index] exceeds Discord field limits" }
+                    val inline = row["inline"] ?: false
+                    require(inline is Boolean) { "$path.fields[$index].inline must be true or false" }
+                    net.badgersmc.ek.config.DiscordEmbedField(name, content, inline)
+                }
+            } else defaults.fields
+            val title = embedString(config, "$path.title", defaults.title)
+            val description = embedString(config, "$path.description", defaults.description)
+            require(title.isNotBlank() && title.length <= 256) { "$path.title must contain 1..256 characters" }
+            require(description.length <= 4096) { "$path.description exceeds 4096 characters" }
+            net.badgersmc.ek.config.DiscordEmbedTemplate(
+                enabled = embedBoolean(config, "$path.enabled", defaults.enabled), title = title,
+                description = description, color = colorText.toInt(16), fields = fields,
+                timestamp = embedBoolean(config, "$path.timestamp", defaults.timestamp),
+            )
+        },
     )
+    private fun embedString(config: FileConfiguration, path: String, default: String): String {
+        require(!config.contains(path) || config.isString(path)) { "$path must be text" }
+        return config.getString(path) ?: default
+    }
+    private fun embedBoolean(config: FileConfiguration, path: String, default: Boolean): Boolean {
+        require(!config.contains(path) || config.isBoolean(path)) { "$path must be true or false" }
+        return if (config.contains(path)) config.getBoolean(path) else default
+    }
 }
 
 private object PrivateTestingConfigLoader {
