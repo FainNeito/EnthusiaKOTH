@@ -69,14 +69,17 @@ class KothCommand(
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (args.isEmpty()) {
-            sendHelp(sender)
+            if (sender is Player && progression != null && sender.hasPermission("enthusiakoth.command")) progression.command(sender,arrayOf("home"))
+            else sendHelp(sender)
             return true
         }
         when (args[0].lowercase()) {
+            "help" -> sendHelp(sender, args.getOrNull(1).equals("all", true))
             "history", "reports", "readiness", "reconcile", "holds", "reviewmatch", "claims", "challenges", "eligibility", "results" -> progression?.command(sender,args.mapIndexed { i,s -> if(i==0) s.lowercase() else s }.toTypedArray())
             "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
+                if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return true }
                 if (args.getOrNull(1) == "cancel") settings?.cancel(sender)
-                else settings?.open(sender, args.getOrNull(1), when(args[0].lowercase()) {
+                else if(setup?.releaseForManagement(sender) != false) settings?.open(sender, args.getOrNull(1), when(args[0].lowercase()) {
                     "schedules" -> StaffSettingsPage.SCHEDULE; "rewards" -> StaffSettingsPage.REWARDS
                     "displays" -> StaffSettingsPage.DISPLAYS; else -> StaffSettingsPage.HOME
                 })
@@ -96,7 +99,9 @@ class KothCommand(
             "lock" -> lock(sender, args.getOrNull(1) ?: "")
             "arena" -> arena(sender, args)
             "setup", "editor" -> if (sender is Player) {
-                if (args.getOrNull(1) == "cancel") setup?.cancel(sender) else setup?.open(sender, args.getOrNull(1))
+                if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return true }
+                if (args.getOrNull(1) == "cancel") setup?.cancel(sender)
+                else if(settings?.releaseForSetup(sender) != false) setup?.open(sender, args.getOrNull(1))
             } else sender.sendMessage(lang.msg("command.error.not_a_player"))
             "wand" -> if (sender is Player) setup?.giveWand(sender) else sender.sendMessage(lang.msg("command.error.not_a_player"))
             "notifications", "messages" -> {
@@ -164,8 +169,16 @@ class KothCommand(
         return mutableListOf()
     }
 
-    private fun sendHelp(sender: CommandSender) {
+    private fun sendHelp(sender: CommandSender, detailed:Boolean = false) {
         sender.sendMessage(lang.msg("command.help.header"))
+        if(!detailed) {
+            sender.sendMessage(Component.text("/ekoth - Events and KOTH menu"))
+            sender.sendMessage(Component.text("/rewards > KOTH - Challenges and earned rewards"))
+            sender.sendMessage(Component.text("/ekoth schedule - Upcoming events"))
+            if(sender.hasPermission("enthusiakoth.admin")) sender.sendMessage(Component.text("/ekoth setup - Area > Rules > Review"))
+            sender.sendMessage(Component.text("/ekoth help all - All commands"))
+            return
+        }
         listOf("gui", "schedule", "top", "stats").forEach { sender.sendMessage(lang.msg("command.help.$it")) }
         sender.sendMessage(lang.msg("command.help.notifications"))
         if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {

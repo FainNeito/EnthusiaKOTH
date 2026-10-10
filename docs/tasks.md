@@ -19,6 +19,9 @@ Reconciled 2026-10-09 against fetched canonical main `2ad0b693caaaf2ce5011579152
 
 ## Remaining integration and configuration
 
+- [x] Implement flow cleanup: enchanted wooden selection axe, compact /ekoth hub/help, Area → Rules → Review with save/discard guards, consistent progression navigation and owner-registered /rewards KOTH menu API. See flow-cleanup.md for local/source proof and remaining TEST gates.
+- [ ] Merge matching EnthusiaTags navigation PR and verify both installed versions before TEST acceptance of /rewards → KOTH.
+
 - [ ] Merge owning [network PR #171](https://github.com/BadgersMC/enthusia-network/pull/171) after current-head checks; account lacks merge access. Integrity pin head `2708f8f` passed public Build `37892096786` and local `buildAll` including Display. Recheck the latest pin/head before merge; trusted private Display-inclusive release build remains a separate gate.
 - [ ] Reconcile old server config by key. Preserve real arenas/assets and active Advancements pilot; disable TEST Discord guild-role writes and legacy payouts before loading candidates.
 - [ ] Accept arena identities/geometry and attainable challenge requirements; draft relics require four distinct arenas.

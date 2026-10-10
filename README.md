@@ -20,7 +20,9 @@ The repository's bundled default config is newer than the live snapshot and enab
 
 ## Player commands
 
-The main command is `/ekoth`.
+The main command is `/ekoth`; it opens a compact menu for events, schedules, standings and rewards. `/ekoth help` shows primary entry points; `/ekoth help all` lists the existing commands.
+
+With the matching EnthusiaTags update, open **`/rewards` → KOTH** for **Challenges**, **Your rewards** and **Match results**. `/rewards koth [challenges|claims|results]` is a shortcut. KOTH still verifies and pays its own claims; this navigation does not duplicate reward definitions or bypass eligibility. Missing/disabled/incompatible KOTH providers show an unavailable message. Existing `/ekoth challenges`, `/ekoth claims` and `/ekoth results` remain usable.
 
 Ordinary player-facing subcommands implemented by the plugin include:
 
@@ -173,8 +175,10 @@ Staff can create and configure arena geometry and basic rules entirely in game:
 /ekoth setup
 ```
 
-Choose **Create arena**, type its name privately in chat, then use the editor.
-**Arena boundary** gives a tagged selection wand: left-click the first block,
+Choose **Create arena**, type its name privately in chat, then follow **Area → Rules → Review**.
+**Area** contains boundary, center, radius, preview, full height and optional WorldGuard binding. **Rules** contains times, inventory/XP, leaving behavior and enabled state. **Review** summarizes the draft and validation issues. Hidden controls cannot change values.
+
+**Arena boundary** gives a tagged, enchanted wooden axe: left-click the first block,
 right-click the opposite corner. Select the intended vertical extent, or click
 **Extend native arena to full world height** after selection. Alternatively,
 **Choose existing WorldGuard region** binds a region without changing its flags.
@@ -188,7 +192,7 @@ until Save. Closing keeps the draft; Cancel, `/ekoth setup cancel`, logout or pl
 disable discard it. Saves are blocked while any event or queued start exists and
 reject stale drafts after another configuration change. New arenas are disabled,
 unscheduled and have an isolated zero-money reward family with no reward commands.
-Rewards, schedules and advanced family rules still require deliberate configuration.
+After saving, **Review → Advanced settings** groups schedules, payouts and displays; its **Back to area setup** button returns to geometry. Save or discard changes before switching editors. Payout commands and advanced family configuration retain their existing semantics; progression budgets, templates and challenge difficulty remain deliberately inactive until TEST.
 
 Shortcuts: `/ekoth arena create <name> [capture|moving|conquest]`,
 `/ekoth setup <name>`, `/ekoth editor <name>` and `/ekoth wand`.
