@@ -118,6 +118,7 @@ class ConfigLoader(private val plugin: JavaPlugin) {
                 keepInventory = arenaConfig.keepInventory,
                 keepExperience = arenaConfig.keepExperience,
                 rewardFamily = arenaConfig.rewardFamily,
+                displayName = arenaConfig.displayName,
             )
         }.toMap()
     }
@@ -212,6 +213,8 @@ internal object ArenaConfigLoader {
                 captureSpeedBonuses = captureBonuses(arena, "capture-speed-bonuses"),
                 keepInventory = boolean(arena, "keep-inventory", false),
                 keepExperience = boolean(arena, "keep-experience", true),
+                displayName = try { net.badgersmc.ek.domain.ArenaName.parse(arena.getString("display-name")) }
+                    catch (error: IllegalArgumentException) { throw IllegalArgumentException("Invalid arenas.$id.display-name: ${error.message}", error) },
                 rewardFamily = arena.getString("reward-family")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() },
             )
         }

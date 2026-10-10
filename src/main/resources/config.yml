@@ -104,6 +104,8 @@ rules:
 
 arenas:
   capture:
+    # Optional visible name. Blank keeps the stable arena ID. Plain text, 64 characters max.
+    display-name: ""
     enabled: true
     keep-inventory: false
     keep-experience: true

@@ -306,10 +306,10 @@ class KothService(
         discordLastUpdates.remove(event.id)
         sendEventMessage(
             event,
-            lang.msg("koth.begin", "koth_name" to event.arena.id, "location" to locString(event.arena.zone)),
+            lang.msg("koth.begin", "koth_name" to event.arena.name, "location" to locString(event.arena.zone)),
         )
         if (!event.isPrivateTest) {
-            discordWebhook.sendStart(event.arena.id, locString(event.arena.zone))
+            discordWebhook.sendStart(event.arena.name, locString(event.arena.zone))
             if (cfg.display.zoneBorder) zoneBorderService.show(event.arena.zone, event.id.toString())
         }
     }
@@ -324,12 +324,12 @@ class KothService(
         runActivationStep(event, if (recovered) "recovery start announcement" else "start announcement") {
             sendEventMessage(
                 event,
-                lang.msg("koth.begin", "koth_name" to event.arena.id, "location" to locString(event.arena.zone)),
+                lang.msg("koth.begin", "koth_name" to event.arena.name, "location" to locString(event.arena.zone)),
             )
         }
         if (!recovered && !event.isPrivateTest) {
             runActivationStep(event, "Discord start notification") {
-                discordWebhook.sendStart(event.arena.id, locString(event.arena.zone))
+                discordWebhook.sendStart(event.arena.name, locString(event.arena.zone))
             }
         } else if (recovered) {
             logger(
@@ -372,7 +372,7 @@ class KothService(
                     event,
                     lang.msg(
                         "koth.reminder",
-                        "koth_name" to event.arena.id,
+                        "koth_name" to event.arena.name,
                         "capper" to (capperName(event) ?: "None"),
                         "time_left" to formatTime(event.endsAt.epochSecond - now.epochSecond),
                     ),
@@ -428,13 +428,14 @@ class KothService(
             !event.isPrivateTest,
             cfg.display,
             event,
+            arena.name,
         )
 
         if (!event.isPrivateTest && cfg.discord.enabled && cfg.discord.liveUpdateSeconds > 0) {
             val last = discordLastUpdates[event.id]
             if (last == null || now.epochSecond - last >= cfg.discord.liveUpdateSeconds) {
                 discordLastUpdates[event.id] = now.epochSecond
-                discordWebhook.sendLiveUpdate(event.arena.id, event.currentController, contested, timeLeft)
+                discordWebhook.sendLiveUpdate(event.arena.name, event.currentController, contested, timeLeft)
             }
         }
     }
@@ -449,7 +450,7 @@ class KothService(
                 lang.msg(
                     "koth.enter",
                     "entered" to teamName(team),
-                    "koth_name" to arena.id,
+                    "koth_name" to arena.name,
                     "captime" to formatTime(arena.captureSeconds.toLong()),
                 ),
                 captureOnly = true,
@@ -466,7 +467,7 @@ class KothService(
             lang.msg(
                 "koth.leave",
                 "left" to teamName(controller),
-                "koth_name" to event.arena.id,
+                "koth_name" to event.arena.name,
                 "time_left" to formatTime(event.arena.captureSeconds.toLong()),
             ),
             captureOnly = true,
@@ -496,7 +497,7 @@ class KothService(
                 lang.msg(
                     "koth.capping",
                     "capping" to teamName(controller),
-                    "koth_name" to arena.id,
+                    "koth_name" to arena.name,
                     "time_left" to formatTime(secondsLeft.toLong()),
                 ),
                 captureOnly = true,
@@ -586,7 +587,7 @@ class KothService(
                 runCompletionStep(event, "winner announcement") {
                     sendEventMessage(
                         event,
-                        lang.msg("koth.capture", "captured" to teamName(winner), "koth_name" to event.arena.id),
+                        lang.msg("koth.capture", "captured" to teamName(winner), "koth_name" to event.arena.name),
                     )
                 }
                 if (!event.isPrivateTest) {
@@ -601,7 +602,7 @@ class KothService(
                 }
             } else {
                 runCompletionStep(event, "no-winner announcement") {
-                    sendEventMessage(event, lang.msg("koth.no_winner", "koth_name" to event.arena.id))
+                    sendEventMessage(event, lang.msg("koth.no_winner", "koth_name" to event.arena.name))
                 }
             }
         } finally {
@@ -610,7 +611,7 @@ class KothService(
 
         if (winner != null && !event.isPrivateTest) {
             runCompletionStep(event, "Discord capture notification") {
-                discordWebhook.sendCapture(event.arena.id, winner, wasContested)
+                discordWebhook.sendCapture(event.arena.name, winner, wasContested)
             }
             runCompletionStep(event, "firework celebration") {
                 fireworkService.celebrate(event.arena.zone)
@@ -1050,7 +1051,7 @@ class KothService(
         if (events[event.id] !== event || event.state in setOf(EventState.COMPLETED, EventState.CANCELLED, EventState.ENDING)) return false
         lastCancellationRefundPending = false
         if (announce) {
-            runCatching { sendEventMessage(event, lang.msg("koth.ended", "koth_name" to event.arena.id)) }
+            runCatching { sendEventMessage(event, lang.msg("koth.ended", "koth_name" to event.arena.name)) }
                 .onFailure { logger("KOTH '${event.arena.id}' cancellation announcement failed", it) }
         }
         val refunded = refundPayment(event, reason)

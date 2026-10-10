@@ -16,7 +16,7 @@ data class ArenaSetupDraft(
     var arena: ArenaConfig,
     var boundaryReady: Boolean,
 )
-enum class SetupIssue { ID, EXISTS, MISSING, FAMILY, WORLD, BOUNDARY, GEOMETRY, TIMING, OUTSIDE, REGION, BUSY, STALE, IO }
+enum class SetupIssue { NAME, ID, EXISTS, MISSING, FAMILY, WORLD, BOUNDARY, GEOMETRY, TIMING, OUTSIDE, REGION, BUSY, STALE, IO }
 class SetupException(val issue: SetupIssue) : RuntimeException(issue.name)
 
 /** Pure draft policy; Bukkit geometry, storage and rendering are adapters. */
@@ -48,8 +48,14 @@ class ArenaSetupService(
         draft.boundaryReady = true
     }
 
+    fun setName(draft: ArenaSetupDraft, raw: String?) {
+        val name = try { net.badgersmc.ek.domain.ArenaName.parse(raw) } catch (_: IllegalArgumentException) { throw SetupException(SetupIssue.NAME) }
+        draft.arena = draft.arena.copy(displayName = name)
+    }
+
     fun issues(draft: ArenaSetupDraft): List<SetupIssue> = buildList {
         val a = draft.arena
+        if (runCatching { net.badgersmc.ek.domain.ArenaName.parse(a.displayName) }.isFailure) add(SetupIssue.NAME)
         if (!worldExists(a.world)) add(SetupIssue.WORLD)
         if (!draft.boundaryReady) add(SetupIssue.BOUNDARY)
         val points = listOf(a.center, a.protectedRegion.corner1, a.protectedRegion.corner2)

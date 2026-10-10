@@ -25,6 +25,18 @@ class ConcurrentDisplayTest {
         display = DisplayService(mockk<JavaPlugin>(relaxed = true), lang)
     }
     @AfterEach fun cleanup() = unmockkAll()
+    @Test fun `matching display names remain independently owned and renaming reuses the same bar`() {
+        val shown = mutableListOf<BossBar>(); every { player.showBossBar(capture(shown)) } just Runs
+        val format = DisplayConfig(bossbarTitle = "<koth_name> <time>")
+        display.showKoth("a", null, "10s", false, .5f, listOf(player), true, format, displayName = "Summit")
+        display.showKoth("b", null, "10s", false, .5f, listOf(player), true, format, displayName = "Summit")
+        assertEquals(2, shown.size); assertNotSame(shown[0], shown[1])
+        display.showKoth("a", null, "9s", false, .6f, listOf(player), true, format, displayName = "Crimson Summit")
+        assertEquals("Crimson Summit 9s", net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(shown[0].name()))
+        display.clear("a")
+        verify(exactly = 1) { player.hideBossBar(shown[0]) }
+        verify(exactly = 0) { player.hideBossBar(shown[1]) }
+    }
     @Test fun `clearing one arena removes only its own bar`() {
         val shown = mutableListOf<BossBar>(); every { player.showBossBar(capture(shown)) } just Runs
         display.showKoth("a", null, "10s", false, .5f, listOf(player), true)

@@ -26,8 +26,8 @@ class FlareService(
         val flare = cfgLoader().flares
         val item = ItemStack(Material.getMaterial(flare.item.material) ?: Material.REDSTONE_TORCH)
         val meta = item.itemMeta ?: return item
-        meta.displayName(flare.item.name.replace("{KOTH}", arena.id).toComponent())
-        meta.lore(flare.item.lore.map { it.replace("{KOTH}", arena.id) }.toLore())
+        meta.displayName(flare.item.name.replace("{KOTH}", arena.name).toComponent())
+        meta.lore(flare.item.lore.map { it.replace("{KOTH}", arena.name) }.toLore())
         meta.persistentDataContainer.set(FLARE_KOTH_KEY, PersistentDataType.STRING, arena.id)
         item.itemMeta = meta
         return item
@@ -43,7 +43,7 @@ class FlareService(
             return true
         }
         if (arena.flaresMustBePlacedOnCap && !arena.zone.containsCircular(player.location)) {
-            player.sendMessage(lang.msg("flare.not_in_region", "koth" to arenaId))
+            player.sendMessage(lang.msg("flare.not_in_region", "koth" to arena.name))
             return true
         }
         val result = startService.start(
@@ -60,7 +60,7 @@ class FlareService(
             ),
         )
         if (result is StartResult.Rejected) {
-            player.sendMessage(lang.msg(FlareUsePolicy.rejectionKey(result), "koth" to arenaId))
+            player.sendMessage(lang.msg(FlareUsePolicy.rejectionKey(result), "koth" to arena.name))
             return true
         }
 
@@ -73,12 +73,12 @@ class FlareService(
             null -> Unit
         }
 
-        player.sendMessage(lang.msg("flare.started", "koth" to arenaId))
+        player.sendMessage(lang.msg("flare.started", "koth" to arena.name))
         val location = arena.zone.center(player.world)
         val message = lang.msg(
                 "flare.started_broadcast",
                 "player" to player.name,
-                "koth" to arenaId,
+                "koth" to arena.name,
                 "location" to "${location.blockX}, ${location.blockY}, ${location.blockZ}",
             )
         Bukkit.getOnlinePlayers().filter(notificationsEnabled).forEach { it.sendMessage(message) }
