@@ -174,26 +174,39 @@ class ProgressionController(
             { open(player,page,it) }, { if(page=="home") player.closeInventory() else open(player,"home") },
             if(page=="home") "Close" else "Back to KOTH")
     }
-    private fun choose(player:Player,c:ProgressionClaim) {
+    private fun choose(player:Player,c:ProgressionClaim,index:Int=0) {
         val options=store.options(c.id,player.uniqueId)
         menu(player,"Choose reward package",false,options.map { it to listOf("Same fixed event pool share", "Choice is permanent") },
-            options.indices.associateWith { { player.sendMessage(if(store.choose(c.id,player.uniqueId,options[it])) "Package selected." else "Choice unavailable."); open(player,"claims") } },0,{}, { open(player,"claims") },"Back to your rewards")
+            options.indices.associateWith { { player.sendMessage(if(store.choose(c.id,player.uniqueId,options[it])) "Package selected." else "Choice unavailable."); open(player,"claims") } },index,{ choose(player,c,it) }, { open(player,"claims") },"Back to your rewards")
     }
     private fun menu(player:Player,title:String,staff:Boolean,entries:List<Pair<String,List<String>>>,allActions:Map<Int,()->Unit>,index:Int,next:(Int)->Unit,back:()->Unit,backName:String) {
-        val page=index.coerceAtMost((entries.size-1).coerceAtLeast(0)/28)
+        val page=ProgressionLayout.page(index,entries.size)
         val actions=mutableMapOf<Int,()->Unit>()
-        entries.drop(page*28).take(28).indices.forEach { slot -> allActions[page*28+slot]?.let { actions[slot]=it } }
-        if(page>0) actions[45]={ next(page-1) }
-        if((page+1)*28<entries.size) actions[53]={ next(page+1) }
-        actions[49]=back
-        if(Bukkit.getPluginManager().getPlugin("EnthusiaTags")?.isEnabled==true) actions[48]={ player.performCommand("rewards") }
+        val visible=entries.drop(page*21).take(21)
+        actions.putAll(ProgressionLayout.actions(allActions,page,entries.size))
+        if(page>0) actions[47]={ next(page-1) }
+        if(page+1<ProgressionLayout.pages(entries.size)) actions[51]={ next(page+1) }
+        actions[45]=back
+        actions[53]={ player.closeInventory() }
+        if(Bukkit.getPluginManager().getPlugin("EnthusiaTags")?.isEnabled==true) {
+            actions[46]={ player.performCommand("tags") }
+            actions[52]={ player.performCommand("rewards") }
+        }
         val holder=ProgressionMenu(player.uniqueId,staff,actions)
-        holder.backing=Bukkit.createInventory(holder,54,Component.text("$title - ${page+1}"))
-        entries.drop(page*28).take(28).forEachIndexed { slot,(name,lines) -> holder.backing.setItem(slot,item(Material.PAPER,name,lines)) }
-        if(page>0) holder.backing.setItem(45,item(Material.ARROW,"Previous",emptyList()))
-        if((page+1)*28<entries.size) holder.backing.setItem(53,item(Material.ARROW,"Next",emptyList()))
-        holder.backing.setItem(49,item(Material.ARROW,backName,emptyList()))
-        if(48 in actions) holder.backing.setItem(48,item(Material.CHEST,"Back to /rewards",emptyList()))
+        holder.backing=Bukkit.createInventory(holder,54,Component.text(title))
+        for(slot in 0 until 54) if(slot<18 || slot>=45 || slot%9==0 || slot%9==8)
+            holder.backing.setItem(slot,item(if(slot in 9..17) Material.GRAY_STAINED_GLASS_PANE else Material.BLACK_STAINED_GLASS_PANE," ",emptyList()))
+        listOf(3,5).forEach { holder.backing.setItem(it,item(Material.ORANGE_STAINED_GLASS_PANE," ",emptyList())) }
+        holder.backing.setItem(4,item(Material.BOOK,title,listOf("Provider-owned KOTH progress and rewards")))
+        holder.backing.setItem(10,item(Material.KNOWLEDGE_BOOK,"Advancements",listOf("Open Minecraft Advancements (default L).", "KOTH milestones appear in the KOTH tab when enabled.","Verified KOTH records determine progress.")))
+        visible.forEachIndexed { offset,(name,lines) -> holder.backing.setItem(ProgressionLayout.slots[offset],item(Material.PAPER,name,lines)) }
+        if(page>0) holder.backing.setItem(47,item(Material.ARROW,"Previous",emptyList()))
+        if(page+1<ProgressionLayout.pages(entries.size)) holder.backing.setItem(51,item(Material.ARROW,"Next",emptyList()))
+        holder.backing.setItem(45,item(Material.ARROW,backName,emptyList()))
+        holder.backing.setItem(49,item(Material.PAPER,"Page "+(page+1)+" / "+ProgressionLayout.pages(entries.size),emptyList()))
+        holder.backing.setItem(53,item(Material.BARRIER,"Close",emptyList()))
+        if(46 in actions) holder.backing.setItem(46,item(Material.NAME_TAG,"Tags",emptyList()))
+        if(52 in actions) holder.backing.setItem(52,item(Material.CHEST,"Rewards",emptyList()))
         player.openInventory(holder.backing)
     }
     private fun label(value:String)=value.lowercase().split('_','-').joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
