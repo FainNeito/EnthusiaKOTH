@@ -97,3 +97,10 @@ Full Advancements local renderer tests pass after the polling quality refinement
 Hosted results, merged commits and canonical build hashes are recorded in the
 delivery bundle. Multiplayer, genuine signature, model rendering and real
 provider delivery remain pending until they are observed on TEST.
+# Flow cleanup acceptance (pending TEST)
+
+- Create/edit with Area → Rules → Review; navigate without losing changes, close/reopen, save/discard, switch to/from advanced settings with and without edits. Repeat with active/queued events and another staff configuration save.
+- Enchanted wooden axe: visible glint, first/second corner and private particles; ordinary axes unaffected, no block breaking/dropping, no overwritten inventory slot. Check WorldEdit coexistence on Java and Bedrock.
+- /ekoth hub and concise help; /rewards KOTH entry, challenges, earned claims, package return, results and empty/inactive states. All original commands remain available.
+- Both actual plugins required for the Tags portal. Disable/re-enable either plugin, replace provider, revoke permissions or close the menu between click and next tick. No queued action may act on a different player/menu.
+- Ensure normal Tags categories, native reward claims and anti-abuse ownership are unchanged; queued items remain distinguished from delivery, uncertain payouts require staff review, and exclusive rewards remain one recipient ever.

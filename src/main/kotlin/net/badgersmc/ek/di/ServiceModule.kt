@@ -400,9 +400,10 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         plugin, staffSettingsService, ::config, ::arenas, scheduleService, { reload() }, langService,
     ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
     private val progressionController = net.badgersmc.ek.infrastructure.bukkit.ProgressionController(
-        progressionStore,progressionSettings,progressionClaims,kothService,::config,::arenas,worldGuardRegionService,lumaGuildsAdapter,
+        progressionStore,progressionSettings,progressionClaims,kothService,::config,::arenas,worldGuardRegionService,lumaGuildsAdapter,plugin,
     ).also {
         plugin.server.pluginManager.registerEvents(it,plugin)
+        plugin.server.servicesManager.register(net.badgersmc.ek.api.KothRewardsMenuV1::class.java,it,plugin,org.bukkit.plugin.ServicePriority.Normal)
         plugin.server.scheduler.runTaskTimer(plugin,Runnable { runCatching { progressionClaims.dispatchGuildClaims() }
             .onFailure { error -> plugin.logger.severe("Guild reward dispatch failed: ${error.message}") } },200L,200L)
     }

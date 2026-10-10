@@ -64,6 +64,12 @@ class StaffSettingsController(
         if (!allowed(player)) return
         drafts.remove(player.uniqueId); prompts.remove(player.uniqueId); player.closeInventory(); player.sendMessage(text("discarded"))
     }
+    fun releaseForSetup(player: Player): Boolean {
+        val draft = drafts[player.uniqueId] ?: return true
+        if (draft.changes.isNotEmpty()) { player.sendMessage(text("save-first")); return false }
+        drafts.remove(player.uniqueId); prompts.remove(player.uniqueId)
+        return true
+    }
     fun shutdown() { drafts.clear(); prompts.clear() }
     @EventHandler fun quit(event: PlayerQuitEvent) { drafts.remove(event.player.uniqueId); prompts.remove(event.player.uniqueId) }
     private fun icon(material: Material, key: String, value: Any? = "", lore: List<net.kyori.adventure.text.Component> = listOf(text("click"))) = ItemStack(material).apply {
@@ -111,7 +117,7 @@ class StaffSettingsController(
                 item(16, Material.PAPER, "draft", d.changes.size, listOf(text("draft-hint")))
             }
         }
-        item(45, Material.BARRIER, "cancel"); item(48, Material.ARROW, "back"); item(49, Material.EMERALD, "save")
+        item(45, Material.BARRIER, "cancel"); item(47, Material.WOODEN_AXE, "area-setup"); item(48, Material.ARROW, "back"); item(49, Material.EMERALD, "save")
         player.openInventory(inv)
     }
     private fun moneyValue(d: StaffSettingsDraft, mode: String): Any {
@@ -164,11 +170,14 @@ class StaffSettingsController(
                 val d = holder.draft
                 when (slot) {
                     45 -> { cancel(player); return@guard }
+                    47 -> { if(releaseForSetup(player)) player.performCommand("ekoth setup" + (d.arenaId?.let { " $it" } ?: "")); return@guard }
                     48 -> { render(player, d, StaffSettingsPage.HOME); return@guard }
                     49 -> {
                         service.save(d); drafts.remove(player.uniqueId); prompts.remove(player.uniqueId)
                         try { applySaved() } catch (error: Exception) { player.sendMessage(text("saved-reload-failed")); plugin.logger.severe("Staff settings saved but reload failed: ${error.message}"); player.closeInventory(); return@guard }
-                        player.sendMessage(text("saved")); player.closeInventory(); return@guard
+                        player.sendMessage(text("saved"))
+                        if(d.arenaId != null) player.performCommand("ekoth setup ${d.arenaId}") else player.closeInventory()
+                        return@guard
                     }
                 }
                 when (holder.page) {

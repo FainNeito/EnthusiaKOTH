@@ -2,6 +2,7 @@ package net.badgersmc.ek.infrastructure.bukkit
 
 import io.mockk.*
 import net.badgersmc.ek.application.*
+import net.badgersmc.ek.config.ArenaConfig
 import net.badgersmc.nexus.i18n.LangService
 import net.kyori.adventure.text.Component
 import org.bukkit.NamespacedKey
@@ -101,5 +102,31 @@ class ArenaSetupControllerTest {
         ui.breakBlock(breaking); verify { breaking.isCancelled = true }
         val dropping = mockk<PlayerDropItemEvent>(relaxed = true); every { dropping.itemDrop.itemStack } returns tagged()
         ui.drop(dropping); verify { dropping.isCancelled = true }
+    }
+    @Test fun `hidden timing and review controls cannot mutate retained drafts`() {
+        every { player.hasPermission("enthusiakoth.admin") } returns true
+        every { player.isOnline } returns true
+        val draft = ArenaSetupDraft("hill", "revision", false, ArenaConfig(durationSeconds = 300), true)
+        val field = ArenaSetupController::class.java.getDeclaredField("drafts").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val retained = field.get(ui) as MutableMap<UUID, ArenaSetupDraft>
+        retained[id] = draft
+        val before = draft.arena
+        for ((page, hidden) in listOf(ArenaSetupPage.AREA to 14, ArenaSetupPage.REVIEW to 23, ArenaSetupPage.RULES to 10)) {
+            val holder = ArenaSetupHolder(id, draft, editorPage = page)
+            val top = mockk<Inventory>(relaxed = true)
+            val event = mockk<InventoryClickEvent>(relaxed = true)
+            every { top.holder } returns holder
+            every { player.openInventory.topInventory } returns top
+            every { event.view.topInventory } returns top
+            every { event.clickedInventory } returns top
+            every { event.whoClicked } returns player
+            every { event.rawSlot } returns hidden
+            every { plugin.server.scheduler.runTask(plugin, any<Runnable>()) } answers { secondArg<Runnable>().run(); mockk(relaxed = true) }
+            ui.click(event)
+            Assertions.assertEquals(before, draft.arena)
+        }
+        verify(exactly = 0) { service.save(any()) }
+        verify(exactly = 0) { player.openInventory(any<Inventory>()) }
     }
 }

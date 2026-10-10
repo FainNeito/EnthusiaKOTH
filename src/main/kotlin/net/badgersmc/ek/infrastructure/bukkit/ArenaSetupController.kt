@@ -8,6 +8,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.*
 import org.bukkit.entity.Player
+import org.bukkit.enchantments.Enchantment
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -26,7 +27,12 @@ import org.bukkit.scheduler.BukkitTask
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-class ArenaSetupHolder(val owner: UUID, val draft: ArenaSetupDraft?, val ids: List<String> = emptyList(), val page: Int = 0, val regions: Boolean = false) : InventoryHolder {
+enum class ArenaSetupPage(val slots: Set<Int>) {
+    AREA(setOf(10, 11, 12, 16, 22, 24, 25)), RULES(setOf(14, 15, 19, 20, 21, 23)), REVIEW(setOf(34));
+    fun accepts(slot: Int) = slot in slots || slot in setOf(45, 46, 47, 48, 49)
+}
+
+class ArenaSetupHolder(val owner: UUID, val draft: ArenaSetupDraft?, val ids: List<String> = emptyList(), val page: Int = 0, val regions: Boolean = false, val editorPage: ArenaSetupPage = ArenaSetupPage.AREA) : InventoryHolder {
     lateinit var backing: Inventory
     override fun getInventory() = backing
 }
@@ -88,6 +94,14 @@ class ArenaSetupController(
         clear(player); player.closeInventory(); tell(player, "discarded")
     }
 
+    /** Prevent simultaneous geometry/settings drafts from overwriting each other. */
+    fun releaseForManagement(player: Player): Boolean {
+        val draft = drafts[player.uniqueId] ?: return true
+        if (draft.creating || snapshot().arenas[draft.id] != draft.arena) { tell(player, "save-first"); return false }
+        clear(player)
+        return true
+    }
+
     private fun icon(material: Material, key: String, value: String = "", lore: String = "click") = ItemStack(material).apply {
         editMeta { meta -> meta.displayName(text(key, "value" to value)); meta.lore(listOf(text(lore))) }
     }
@@ -104,31 +118,49 @@ class ArenaSetupController(
         player.openInventory(inv)
     }
 
-    private fun editor(player: Player, draft: ArenaSetupDraft) {
+    private fun editor(player: Player, draft: ArenaSetupDraft, page: ArenaSetupPage = ArenaSetupPage.AREA) {
         val a = draft.arena
-        val holder = ArenaSetupHolder(player.uniqueId, draft)
+        val holder = ArenaSetupHolder(player.uniqueId, draft, editorPage = page)
         val inv = Bukkit.createInventory(holder, 54, text("editor-title", "value" to draft.id)); holder.backing = inv
-        inv.setItem(0, icon(Material.PAPER, "summary", "${a.family} | ${a.world}", "draft-hint"))
-        inv.setItem(10, icon(Material.WOODEN_AXE, "boundary", a.worldGuardRegion ?: if (draft.boundaryReady) "${a.protectedRegion.corner1} / ${a.protectedRegion.corner2}" else "?", "boundary-hint"))
-        inv.setItem(11, icon(Material.COMPASS, "center", "${a.center.x}, ${a.center.y}, ${a.center.z}", "center-hint"))
-        inv.setItem(12, icon(Material.END_ROD, "preview", lore = "preview-hint"))
-        inv.setItem(14, icon(Material.CLOCK, "duration", a.durationSeconds.toString(), "adjust-minute"))
-        inv.setItem(15, icon(Material.CLOCK, "capture", a.captureSeconds.toString(), "adjust-capture"))
-        inv.setItem(16, icon(Material.TARGET, "radius", a.radius.toString(), "adjust-radius"))
-        inv.setItem(19, icon(Material.CHEST, "inventory", a.keepInventory.toString()))
-        inv.setItem(20, icon(Material.EXPERIENCE_BOTTLE, "experience", a.keepExperience.toString(), "experience-hint"))
-        inv.setItem(21, icon(Material.REPEATER, "leave", a.leaveBehavior))
-        inv.setItem(22, icon(Material.SCAFFOLDING, "height", lore = "height-hint"))
-        inv.setItem(23, icon(Material.LEVER, "enabled", a.enabled.toString(), "enable-hint"))
-        if (draft.creating) inv.setItem(24, icon(Material.NETHER_STAR, "family", a.family))
-        inv.setItem(25, icon(Material.MAP, "bind-region", lore = "bind-region-hint"))
-        if (!draft.creating) inv.setItem(34, icon(Material.WRITABLE_BOOK, "manage", lore = "manage-hint"))
+        inv.setItem(0, icon(Material.PAPER, "page-${page.name.lowercase()}", "${a.family} | ${a.world}", "draft-hint"))
+        if (page == ArenaSetupPage.AREA) {
+            inv.setItem(10, icon(Material.WOODEN_AXE, "boundary", a.worldGuardRegion ?: if (draft.boundaryReady) "Native selection" else "Not selected", "boundary-hint"))
+            inv.setItem(11, icon(Material.COMPASS, "center", "${a.center.x}, ${a.center.y}, ${a.center.z}", "center-hint"))
+            inv.setItem(12, icon(Material.END_ROD, "preview", lore = "preview-hint"))
+            inv.setItem(16, icon(Material.TARGET, "radius", a.radius.toString(), "adjust-radius"))
+            inv.setItem(22, icon(Material.SCAFFOLDING, "height", lore = "height-hint"))
+            if (draft.creating) inv.setItem(24, icon(Material.NETHER_STAR, "family", a.family))
+            inv.setItem(25, icon(Material.MAP, "bind-region", lore = "bind-region-hint"))
+        }
+        if (page == ArenaSetupPage.RULES) {
+            inv.setItem(14, icon(Material.CLOCK, "duration", a.durationSeconds.toString(), "adjust-minute"))
+            inv.setItem(15, icon(Material.CLOCK, "capture", a.captureSeconds.toString(), "adjust-capture"))
+            inv.setItem(19, icon(Material.CHEST, "inventory", a.keepInventory.toString()))
+            inv.setItem(20, icon(Material.EXPERIENCE_BOTTLE, "experience", a.keepExperience.toString(), "experience-hint"))
+            inv.setItem(21, icon(Material.REPEATER, "leave", a.leaveBehavior))
+            inv.setItem(23, icon(Material.LEVER, "enabled", a.enabled.toString(), "enable-hint"))
+        }
+        if (page == ArenaSetupPage.REVIEW) {
+            inv.setItem(10, icon(Material.PAPER, "summary", "${a.family} | ${a.world}", "review-hint"))
+            inv.setItem(11, icon(Material.TARGET, "radius", a.radius.toString(), "review-hint"))
+            inv.setItem(12, icon(Material.COMPASS, "center", "${a.center.x}, ${a.center.y}, ${a.center.z}", "review-hint"))
+            inv.setItem(14, icon(Material.CLOCK, "duration", a.durationSeconds.toString(), "review-hint"))
+            inv.setItem(15, icon(Material.CLOCK, "capture", a.captureSeconds.toString(), "review-hint"))
+            inv.setItem(19, icon(Material.CHEST, "inventory", a.keepInventory.toString(), "review-hint"))
+            inv.setItem(20, icon(Material.EXPERIENCE_BOTTLE, "experience", a.keepExperience.toString(), "review-hint"))
+            inv.setItem(21, icon(Material.REPEATER, "leave", a.leaveBehavior, "review-hint"))
+            inv.setItem(23, icon(Material.LEVER, "enabled", a.enabled.toString(), "review-hint"))
+            if (!draft.creating) inv.setItem(34, icon(Material.WRITABLE_BOOK, "manage", lore = "manage-hint"))
+        }
         val issues = service.issues(draft)
         inv.setItem(31, ItemStack(if (issues.isEmpty()) Material.LIME_DYE else Material.RED_DYE).apply {
             editMeta { meta -> meta.displayName(text(if (issues.isEmpty()) "ready" else "not-ready"))
                 meta.lore(issues.map { text("error.${it.name.lowercase()}") } + text("reward-hint")) }
         })
         inv.setItem(45, icon(Material.BARRIER, "cancel", lore = "cancel-hint"))
+        ArenaSetupPage.entries.forEachIndexed { i, tab ->
+            inv.setItem(46 + i, icon(if (tab == page) Material.LIME_DYE else Material.ARROW, "tab-${tab.name.lowercase()}", lore = "tab-hint"))
+        }
         inv.setItem(49, icon(Material.EMERALD, "save", lore = "save-hint"))
         player.openInventory(inv)
     }
@@ -163,6 +195,7 @@ class ArenaSetupController(
                     }
                     return@guarded
                 }
+                if (!holder.editorPage.accepts(slot)) return@guarded
                 val a = draft.arena
                 when (slot) {
                     10 -> { giveWand(player); return@guarded }
@@ -187,18 +220,24 @@ class ArenaSetupController(
                     23 -> draft.arena = a.copy(enabled = !a.enabled)
                     24 -> if (draft.creating) { val choices = listOf("capture", "moving", "conquest", "score"); draft.arena = a.copy(family = choices[(choices.indexOf(a.family) + 1) % choices.size]) }
                     25 -> { regionList(player, draft, 0); return@guarded }
-                    34 -> if (!draft.creating) { player.performCommand("ekoth manage ${draft.id}"); return@guarded }
+                    34 -> if (!draft.creating) {
+                        if (snapshot().arenas[draft.id] != draft.arena) { tell(player, "save-first"); return@guarded }
+                        clear(player); player.performCommand("ekoth manage ${draft.id}"); return@guarded
+                    }
                     45 -> { cancel(player); return@guarded }
+                    46, 47, 48 -> { editor(player, draft, ArenaSetupPage.entries[slot - 46]); return@guarded }
                     49 -> {
                         service.save(draft); clear(player)
                         try { applySaved() } catch (error: Exception) {
                             plugin.logger.severe("Arena draft saved but runtime reload failed: ${error.message}")
                             tell(player, "saved-reload-failed"); player.closeInventory(); return@guarded
                         }
-                        tell(player, "saved", "value" to draft.id); list(player, 0); return@guarded
+                        tell(player, "saved", "value" to draft.id)
+                        val fresh = service.begin(draft.id, player.world.name, position(player))
+                        drafts[player.uniqueId] = fresh; editor(player, fresh, ArenaSetupPage.REVIEW); return@guarded
                     }
                 }
-                editor(player, draft)
+                editor(player, draft, holder.editorPage)
             }
         })
     }
@@ -247,8 +286,12 @@ class ArenaSetupController(
         removeWands(player)
         val slot = player.inventory.firstEmpty()
         if (slot < 0) { tell(player, "inventory-full"); return }
-        val wand = icon(Material.BLAZE_ROD, "wand", draft.id, "wand-hint")
-        wand.editMeta { it.persistentDataContainer.set(wandKey, PersistentDataType.STRING, player.uniqueId.toString()) }
+        val wand = icon(Material.WOODEN_AXE, "wand", draft.id, "wand-hint")
+        wand.editMeta {
+            it.addEnchant(Enchantment.UNBREAKING, 1, true)
+            it.addItemFlags(ItemFlag.HIDE_ENCHANTS)
+            it.persistentDataContainer.set(wandKey, PersistentDataType.STRING, player.uniqueId.toString())
+        }
         player.inventory.setItem(slot, wand)
         firstCorners.remove(player.uniqueId); selectionWorlds.remove(player.uniqueId); selecting.add(player.uniqueId)
         selectionPreviews.remove(player.uniqueId)?.cancel()
