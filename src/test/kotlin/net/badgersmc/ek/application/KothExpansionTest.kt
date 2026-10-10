@@ -18,6 +18,7 @@ class KothExpansionTest {
     private val messages = mutableListOf<KothLifecycleEvent>()
     private val stats = mockk<SqlStatsRepository>(relaxed = true)
     private val display = mockk<DisplayService>(relaxed = true)
+    private val discord = mockk<net.badgersmc.ek.infrastructure.discord.DiscordWebhookService>(relaxed = true)
     private var now = Instant.parse("2026-10-08T16:00:00Z")
     private val clock = object : Clock() { override fun getZone() = ZoneOffset.UTC; override fun withZone(zone: ZoneId) = this; override fun instant() = now }
     private val guild = TeamId(TeamMode.GUILD, UUID.randomUUID())
@@ -36,7 +37,7 @@ class KothExpansionTest {
     private fun service(capacity: Int = 2, sink: (KothLifecycleEvent) -> Unit = messages::add, queue: EventQueueStore = InMemoryEventQueueStore(), arenas: Map<String, KothArena> = emptyMap()) = KothService(
         cfgLoader = { EnthusiaKothConfig(maxConcurrentEvents = capacity, display = DisplayConfig(false)) },
         stats = stats, economy = mockk(relaxed = true), guilds = mockk(relaxed = true), displayService = display,
-        fireworkService = mockk(relaxed = true), discordWebhook = mockk(relaxed = true), zoneBorderService = mockk(relaxed = true),
+        fireworkService = mockk(relaxed = true), discordWebhook = discord, zoneBorderService = mockk(relaxed = true),
         lang = mockk<LangService>(relaxed = true).also { every { it.msg(any(), *anyVararg()) } returns Component.empty() },
         arenaResolver = { arenas[it] }, queueStore = queue, clock = clock, logger = { _, _ -> }, lifecycleSink = sink,
     )
@@ -82,6 +83,24 @@ class KothExpansionTest {
         s.activeEvent!!.scores[TeamId(TeamMode.GUILD, UUID.randomUUID())] = 2.0
         now = now.plusSeconds(60); s.tick(); assertNull(messages.last().snapshot.winner)
         verify(exactly = 0) { stats.recordTimedWin(any(), any(), any(), any()) }
+        verify(exactly = 1) { discord.sendNoWinner(any(), "a") }
+        verify(exactly = 0) { discord.sendCapture(any(), any(), any(), any()) }
+    }
+    @Test fun `public cancellation sends terminal webhook while private events send none`() {
+        val s = service(); s.startEvent(arena("a")); val id = s.activeEvent!!.id
+        assertTrue(s.forceEnd(announce = false))
+        verify(exactly = 1) { discord.sendCancelled(id, "a", "Stopped by staff") }
+        clearMocks(discord)
+        s.startPrivateTest(arena("p"), UUID.randomUUID(), EnthusiaKothConfig(), TeamMode.SOLO, PrivateTestAccess.OWNER_ONLY, false)
+        s.forceEnd(announce = false)
+        verify { discord wasNot Called }
+    }
+    @Test fun `private event expiry sends no terminal webhook`() {
+        val s = service()
+        assertTrue(s.startPrivateTest(arena("p"), UUID.randomUUID(), EnthusiaKothConfig(), TeamMode.SOLO, PrivateTestAccess.OWNER_ONLY, false))
+        now = now.plusSeconds(180); s.tick()
+        assertTrue(s.allEvents().isEmpty())
+        verify { discord wasNot Called }
     }
     @Test fun `observer exceptions cannot strand activation cancellation or completion`() {
         val s = service(sink = { throw IllegalStateException("observer") }); assertTrue(s.startEvent(arena("a")))

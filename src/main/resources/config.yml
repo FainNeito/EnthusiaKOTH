@@ -76,6 +76,67 @@ discord:
   webhook-url: ""
   pre-start-ping-minutes: 10
   live-update-seconds: 60
+  # Live status creates one message per event and edits it; lifecycle announcements remain separate.
+  # Plain-text placeholders: {arena}, {location}, {capper}, {winner}, {time_left},
+  # {status}, {reason}, {minutes}, {event_id}. Discord supports Markdown and emojis.
+  # Hex colors must be quoted. Empty fields: [] removes fields; omitted keys use defaults.
+  embeds:
+    pre-start:
+      enabled: true
+      title: "⏰ KOTH Starting Soon"
+      description: ""
+      color: "#F39C12"
+      timestamp: true
+      fields:
+        - {name: "KOTH", value: "{arena}", inline: true}
+        - {name: "Starts In", value: "{minutes} minute(s)", inline: true}
+    start:
+      enabled: true
+      title: "🔥 KOTH Started!"
+      description: ""
+      color: "#3498DB"
+      timestamp: true
+      fields:
+        - {name: "KOTH", value: "{arena}", inline: true}
+        - {name: "Location", value: "{location}", inline: true}
+    live:
+      enabled: true
+      title: "🏆 KOTH — {arena}"
+      description: ""
+      color: "#F1C40F"
+      timestamp: true
+      fields:
+        - {name: "KOTH", value: "{arena}", inline: true}
+        - {name: "Currently Capped By", value: "{capper}", inline: true}
+        - {name: "Time Left", value: "{time_left}", inline: true}
+        - {name: "Status", value: "{status}"}
+    winner:
+      enabled: true
+      title: "🎉 KOTH Captured!"
+      description: ""
+      color: "#2ECC71"
+      timestamp: true
+      fields:
+        - {name: "KOTH", value: "{arena}", inline: true}
+        - {name: "Captured By", value: "{winner}", inline: true}
+        - {name: "Result", value: "{winner} captured {arena}!"}
+    cancelled:
+      enabled: true
+      title: "🛑 KOTH Cancelled"
+      description: ""
+      color: "#E67E22"
+      timestamp: true
+      fields:
+        - {name: "KOTH", value: "{arena}", inline: true}
+        - {name: "Reason", value: "{reason}"}
+    no-winner:
+      enabled: true
+      title: "⌛ KOTH Ended — No Winner"
+      description: "{arena} ended without a winner."
+      color: "#95A5A6"
+      timestamp: true
+      fields:
+        - {name: "KOTH", value: "{arena}", inline: true}
 
 display:
   zone-border: true
