@@ -252,6 +252,7 @@ class DiscordWebhookService internal constructor(
                     if (delivery.terminal && !delivery.finalized) {
                         if (editable && message!!.messageId != null) {
                             val response = transport.edit(delivery.url, message.messageId!!, delivery.payload)
+                            if (response.statusCode in 200..299) delivery = delivery.copy(announce = false)
                             retryDelay = if (response.statusCode in 200..299) null else DiscordRetryPolicy.delayFor(response, delivery.attempts)
                             if (retryDelay == null && response.statusCode !in 200..299) warn("final status edit failed with HTTP ${response.statusCode}")
                         }

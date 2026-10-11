@@ -78,7 +78,8 @@ discord:
   start-role-id: ""
   pre-start-ping-minutes: 10
   live-update-seconds: 60
-  # Live status creates one message per event and edits it; lifecycle announcements remain separate.
+  # Live status edits one message per event, including its final result.
+  # Results post separately only when no live message can be finalized.
   # Plain-text placeholders: {arena}, {location}, {capper}, {winner}, {time_left},
   # {status}, {reason}, {minutes}, {event_id}. Discord supports Markdown and emojis.
   # Hex colors must be quoted. Empty fields: [] removes fields; omitted keys use defaults.

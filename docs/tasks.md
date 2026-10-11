@@ -20,8 +20,10 @@ Reconciled 2026-10-09 against fetched canonical main `2ad0b693caaaf2ce5011579152
 ## Remaining integration and configuration
 
 - [x] HOOK-001..005: configurable Discord embeds, cancellation/no-winner messages and event-owned editable live status implemented; local tests/manual review passed. Hosted checks/source delivery are recorded on the PR; see [discord-webhooks.md](discord-webhooks.md). Real Discord acceptance remains separate.
-- [ ] Accept real Discord create/edit/terminal delivery on isolated TEST with an explicitly authorized test webhook; no real post is part of local tests.
-- [x] HOOK-006..007: optional start-only Discord role mention with explicit allowlist; local tests and manual review passed. See [discord-start-role.md](discord-start-role.md). TEST role config is saved; activation and real notification acceptance remain pending.
+- [x] User confirmed TEST webhook delivery, start role ping and live updates editing the same message on 2026-10-10. The winner flow exposed duplicate result output.
+- [x] HOOK-006..007: optional start-only Discord role mention with explicit allowlist; local tests and manual review passed. See [discord-start-role.md](discord-start-role.md). TEST notification acceptance confirmed by user.
+- [x] HOOK-008..009: finalize one live message and post a result only as fallback; see [discord-single-result.md](discord-single-result.md) for regression evidence.
+- [ ] Accept corrected winner/cancellation/no-winner output on TEST after installing the correction; current server acceptance applies to the previous build.
 
 - [x] NAME-001..004: optional arena display names in Area setup, atomic persistence and player presentation, with stable IDs for schedules/stats/challenges and duplicate-label-safe display ownership. See [arena-names.md](arena-names.md) for source/local evidence and deferred TEST acceptance.
 - [x] NAME-005..008: color/hex/emoji arena labels, scoped Minecraft rendering, plain Discord labels and visible-character validation. See [arena-name-formatting.md](arena-name-formatting.md) for local/source evidence and deferred native glyph acceptance.
