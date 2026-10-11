@@ -25,6 +25,9 @@ class PlaceholderResolverTest {
         assertEquals("moving", resolver.resolve(player, "NEXT_KOTH"))
         assertEquals("15m 0s", resolver.resolve(player, "nextkothtime"))
         assertEquals("15m 0s", resolver.resolve(player, "NEXT_KOTH_TIME"))
+        assertEquals("capture", resolver.resolve(player, "current_name"))
+        assertEquals("moving", resolver.resolve(player, "next_name"))
+        assertEquals("capture", resolver.resolve(null, "capture_name"))
     }
 
     @Test
@@ -77,6 +80,47 @@ class PlaceholderResolverTest {
         assertEquals("True", resolver.resolve(participant, "is_active"))
         assertEquals("False", resolver.resolve(secondPlayer, "is_active"))
         assertEquals("None", resolver.resolve(secondPlayer, "currentkoth"))
+    }
+
+    @Test fun `capture fields use earned score rather than the event timer`() {
+        var state = ActivePlaceholderState("capture", "Guild One", now.plusSeconds(125),
+            "§6Summit 🏆§r", 180, 90.25)
+        val resolver = resolver(active = { state })
+        assertEquals("§6Summit 🏆§r", resolver.resolve(null, "current_name"))
+        assertEquals("50.1", resolver.resolve(null, "current_capture_progress"))
+        assertEquals("1m 30s", resolver.resolve(null, "capture_capture_timeleft"))
+        assertEquals("90", resolver.resolve(null, "CURRENT_CAPTURE_SECONDSLEFT"))
+        assertEquals("2m 5s", resolver.resolve(null, "current_timeleft"))
+        state = state.copy(capturedSeconds = 999.0)
+        assertEquals("100.0", resolver.resolve(null, "current_capture_progress"))
+        assertEquals("0s", resolver.resolve(null, "current_capture_timeleft"))
+        state = state.copy(capturedSeconds = Double.NaN)
+        assertEquals("0.0", resolver.resolve(null, "current_capture_progress"))
+        assertEquals("180", resolver.resolve(null, "current_capture_secondsleft"))
+    }
+
+    @Test fun `no target and hidden events give explicit safe capture values`() {
+        val unsupported = resolver()
+        assertEquals("N/A", unsupported.resolve(player, "current_capture_progress"))
+        assertEquals("N/A", unsupported.resolve(player, "current_capture_timeleft"))
+        val hidden = resolver(active = { null }, next = null)
+        assertEquals("0", hidden.resolve(null, "current_capture_progress"))
+        assertEquals("0", hidden.resolve(null, "capture_capture_secondsleft"))
+        assertEquals("Not Active", hidden.resolve(null, "capture_capture_timeleft"))
+        assertEquals("None", hidden.resolve(null, "current_name"))
+        assertEquals("None", hidden.resolve(null, "next_name"))
+    }
+
+    @Test fun `arena state supplier does not fall back to hidden singleton and matches longest ID`() {
+        val resolver = PlaceholderResolver(Clock.fixed(now, ZoneOffset.UTC),
+            { ActivePlaceholderState("hill", "Public", now.plusSeconds(20)) }, { null },
+            { listOf("hill", "hill_name") }, { 0 }, { _, _ -> 0 }, { emptyMap() }, { null }, { null },
+            arenaState = { id, _ -> if (id == "hill_name") ActivePlaceholderState(id, "Other", now.plusSeconds(10), captureTargetSeconds = 100, capturedSeconds = 20.0) else null },
+            arenaName = { "§6$it§r" })
+        assertEquals("§6hill_name§r", resolver.resolve(null, "HILL_NAME_NAME"))
+        assertEquals("20.0", resolver.resolve(null, "hill_name_capture_progress"))
+        assertEquals("Not Active", resolver.resolve(null, "hill_timeleft"))
+        assertEquals("0", resolver.resolve(null, "hill_capture_progress"))
     }
 
     private fun resolver(

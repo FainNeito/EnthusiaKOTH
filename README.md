@@ -232,6 +232,7 @@ The current live snapshot has KOTH reward money values at 0 and no enabled arena
 KOTH wins are stored in SQLite-backed statistics storage. `/ekoth top` pages through ranked wins and `/ekoth stats` exposes individual win totals. The code also contains migration support for older YAML statistics.
 
 PlaceholderAPI integration exposes KOTH state/stat information for other server displays.
+Formatted arena labels and capture progress/countdowns are documented in [display-placeholders.md](docs/display-placeholders.md). Existing ID and event-timer placeholders retain their meanings.
 
 ## Scheduling
 

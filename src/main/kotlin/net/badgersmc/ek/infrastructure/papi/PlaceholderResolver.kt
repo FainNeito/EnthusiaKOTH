@@ -3,11 +3,16 @@ package net.badgersmc.ek.infrastructure.papi
 import java.time.Clock
 import java.time.Instant
 import java.util.UUID
+import java.util.Locale
+import kotlin.math.ceil
 
 data class ActivePlaceholderState(
     val arenaId: String,
     val capper: String?,
     val endsAt: Instant,
+    val formattedName: String = arenaId,
+    val captureTargetSeconds: Int? = null,
+    val capturedSeconds: Double = 0.0,
 )
 
 class PlaceholderResolver(
@@ -21,6 +26,7 @@ class PlaceholderResolver(
     private val playerName: (UUID) -> String?,
     private val guildName: (UUID) -> String?,
     private val arenaState: ((String, UUID?) -> ActivePlaceholderState?)? = null,
+    private val arenaName: (String) -> String = { it },
 ) {
     fun resolve(playerId: UUID?, rawParams: String): String {
         val params = rawParams.trim()
@@ -32,6 +38,10 @@ class PlaceholderResolver(
             "currentkoth", "current_koth" -> return active?.arenaId ?: "None"
             "current_capper", "currentcapper" -> return active?.capper ?: "None"
             "current_timeleft", "currenttimeleft" -> return active?.let { formatTime(it.endsAt.epochSecond - clock.instant().epochSecond) } ?: "Not Active"
+            "current_name" -> return active?.formattedName ?: "None"
+            "next_name" -> return nextEvent()?.first?.let(arenaName) ?: "None"
+            "current_capture_progress", "current_capture_timeleft", "current_capture_secondsleft" ->
+                return captureValue(active, normalized.removePrefix("current_"))
             "nextkoth", "next_koth" -> return nextEvent()?.first ?: "None"
             "nextkothtime", "next_koth_time" -> return nextEvent()?.second ?: "0s"
             "wins" -> return playerId?.let { totalWins("solo:$it").toString() } ?: "0"
@@ -60,16 +70,31 @@ class PlaceholderResolver(
             }
         }
 
-        val arena = arenaIds().firstOrNull { id ->
+        val arena = arenaIds().sortedByDescending { it.length }.firstOrNull { id ->
             params.length > id.length && params.startsWith(id, ignoreCase = true) && params[id.length] == '_'
         } ?: return ""
-        val arenaActive = arenaState?.invoke(arena, playerId) ?: active?.takeIf { it.arenaId.equals(arena, true) }
+        val arenaActive = if (arenaState != null) arenaState.invoke(arena, playerId)
+            else active?.takeIf { it.arenaId.equals(arena, true) }
         val suffix = params.substring(arena.length + 1).lowercase()
         return when (suffix) {
             "timeleft" -> if (arenaActive != null) formatTime(arenaActive.endsAt.epochSecond - clock.instant().epochSecond) else "Not Active"
             "capper" -> if (arenaActive != null) arenaActive.capper ?: "None" else "None"
             "wins" -> playerId?.let { arenaWins("solo:$it", arena).toString() } ?: "0"
+            "name" -> arenaName(arena)
+            "capture_progress", "capture_timeleft", "capture_secondsleft" -> captureValue(arenaActive, suffix)
             else -> ""
+        }
+    }
+
+    private fun captureValue(active: ActivePlaceholderState?, field: String): String {
+        if (active == null) return if (field == "capture_timeleft") "Not Active" else "0"
+        val target = active.captureTargetSeconds?.coerceAtLeast(1)?.toDouble() ?: return "N/A"
+        val captured = active.capturedSeconds.takeIf { it.isFinite() }?.coerceIn(0.0, target) ?: 0.0
+        val remaining = ceil(target - captured).toLong()
+        return when (field) {
+            "capture_progress" -> String.format(Locale.ROOT, "%.1f", captured / target * 100.0)
+            "capture_timeleft" -> formatTime(remaining)
+            else -> remaining.toString()
         }
     }
 

@@ -19,6 +19,9 @@ Reconciled 2026-10-09 against fetched canonical main `2ad0b693caaaf2ce5011579152
 
 ## Remaining integration and configuration
 
+- [x] PAPI-001..004: formatted current/next/arena names, controller capture percentage and capture time remaining, with private visibility and explicit no-target mode semantics. See [display-placeholders.md](display-placeholders.md).
+- [ ] Accept these placeholders in TEST displays/holograms after installation, including native RGB/emoji rendering and private/playerless visibility.
+
 - [x] HOOK-001..005: configurable Discord embeds, cancellation/no-winner messages and event-owned editable live status implemented; local tests/manual review passed. Hosted checks/source delivery are recorded on the PR; see [discord-webhooks.md](discord-webhooks.md). Real Discord acceptance remains separate.
 - [x] User confirmed TEST webhook delivery, start role ping and live updates editing the same message on 2026-10-10. The winner flow exposed duplicate result output.
 - [x] HOOK-006..007: optional start-only Discord role mention with explicit allowlist; local tests and manual review passed. See [discord-start-role.md](discord-start-role.md). TEST notification acceptance confirmed by user.

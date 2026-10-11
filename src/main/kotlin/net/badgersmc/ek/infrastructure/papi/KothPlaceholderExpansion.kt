@@ -4,6 +4,8 @@ import me.clip.placeholderapi.expansion.PlaceholderExpansion
 import net.badgersmc.ek.application.KothService
 import net.badgersmc.ek.application.ScheduleService
 import net.badgersmc.ek.domain.KothArena
+import net.badgersmc.ek.domain.KothEvent
+import net.badgersmc.ek.infrastructure.i18n.arenaLegacyText
 import net.badgersmc.ek.infrastructure.lumaguilds.LumaGuildsAdapter
 import net.badgersmc.ek.infrastructure.persistence.SqlStatsRepository
 import org.bukkit.Bukkit
@@ -23,7 +25,7 @@ class KothPlaceholderExpansion(
         activeState = state@ { playerId ->
             val event = kothService.activeEvent ?: return@state null
             if (event.isPrivateTest && (playerId == null || !event.isParticipant(playerId))) return@state null
-            ActivePlaceholderState(event.arena.id, kothService.capperName(event), event.endsAt)
+            snapshot(event)
         },
         nextEvent = scheduleService::nextEventInfo,
         arenaIds = { arenas().keys },
@@ -35,9 +37,23 @@ class KothPlaceholderExpansion(
         arenaState = state@ { id, playerId ->
             val event = kothService.eventForArena(id) ?: return@state null
             if (event.isPrivateTest && (playerId == null || !event.isParticipant(playerId))) return@state null
-            ActivePlaceholderState(event.arena.id, kothService.capperName(event), event.endsAt)
+            snapshot(event)
         },
+        arenaName = { id -> ((arenas()[id]?.name ?: id).arenaLegacyText()) + "§r" },
     )
+
+    private fun snapshot(event: KothEvent): ActivePlaceholderState {
+        val controller = event.currentController
+        val timedScore = event.arena.family.lowercase(java.util.Locale.ROOT) in setOf("score", "moving", "conquest")
+        return ActivePlaceholderState(
+            arenaId = event.arena.id,
+            capper = kothService.capperName(event),
+            endsAt = event.endsAt,
+            formattedName = event.arena.name.arenaLegacyText() + "§r",
+            captureTargetSeconds = if (timedScore) null else event.arena.captureSeconds,
+            capturedSeconds = controller?.let { event.scores[it] } ?: 0.0,
+        )
+    }
 
     override fun getIdentifier(): String = "enthusiakoth"
     override fun getAuthor(): String = "BadgersMC"
