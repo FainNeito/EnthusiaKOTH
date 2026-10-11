@@ -43,8 +43,8 @@ class DiscordMessageLifecycleTest {
             s.sendLiveUpdate(id, "Summit 🏆", null, true, "14m"); await { t.calls.size == 2 }
             s.sendLiveUpdate(id, "Summit 🏆", null, false, "13m"); await { t.calls.size == 3 }
             s.sendCapture(id, "Summit 🏆", TeamId(TeamMode.GUILD, UUID.randomUUID()), true)
-            await { t.calls.size == 5 && s.liveMessageCount() == 0 }
-            assertEquals(listOf("CREATE", "PATCH", "PATCH", "PATCH", "POST"), t.calls.map { it.method })
+            await { s.liveMessageCount() == 0 }
+            assertEquals(listOf("CREATE", "PATCH", "PATCH", "PATCH"), t.calls.map { it.method })
             assertEquals(1, t.calls.filter { it.method == "PATCH" }.map { it.id }.distinct().size)
             assertTrue(t.calls.last().payload.contains("Enthusiast"))
         } finally { s.shutdown() }
@@ -58,7 +58,7 @@ class DiscordMessageLifecycleTest {
             s.sendLiveUpdate(b, "Same", null, false, "14m"); await { t.calls.size == 4 }
             assertNotEquals(t.calls[2].id, t.calls[3].id)
             s.sendNoWinner(a, "Same"); await { s.liveMessageCount() == 1 }
-            s.sendLiveUpdate(b, "Same", null, false, "13m"); await { t.calls.size == 7 }
+            s.sendLiveUpdate(b, "Same", null, false, "13m"); await { t.calls.size == 6 }
             assertEquals(t.calls[3].id, t.calls.last().id)
         } finally { s.shutdown() }
     }
@@ -70,8 +70,8 @@ class DiscordMessageLifecycleTest {
             s.sendLiveUpdate(id, "Hill", null, false, "15m"); assertTrue(started.await(2, TimeUnit.SECONDS))
             s.sendLiveUpdate(id, "Hill", null, true, "14m")
             s.sendCancelled(id, "Hill", "Stopped by staff"); release.countDown()
-            await { s.liveMessageCount() == 0 && t.calls.size == 3 }
-            assertEquals(listOf("CREATE", "PATCH", "POST"), t.calls.map { it.method })
+            await { s.liveMessageCount() == 0 }
+            assertEquals(listOf("CREATE", "PATCH"), t.calls.map { it.method })
             assertTrue(t.calls[1].payload.contains("Stopped by staff"))
         } finally { release.countDown(); s.shutdown() }
     }
@@ -112,6 +112,55 @@ class DiscordMessageLifecycleTest {
             s.sendLiveUpdate(id, "Hill", null, false, "15m"); await { t.calls.size == 1 }
             s.sendCancelled(id, "Hill", "Stopped by staff"); await { s.liveMessageCount() == 0 && t.calls.size == 2 }
             assertEquals("PATCH", t.calls.last().method)
+        } finally { s.shutdown() }
+    }
+    @Test fun `missing live message posts one result`() {
+        val t = Transport(); val s = service(t)
+        try {
+            s.sendNoWinner(UUID.randomUUID(), "Hill"); await { t.calls.size == 1 }
+            assertEquals(listOf("POST"), t.calls.map { it.method })
+        } finally { s.shutdown() }
+    }
+    @Test fun `failed final edit falls back to one announcement`() {
+        val t = Transport(); val s = service(t); val id = UUID.randomUUID()
+        try {
+            s.sendLiveUpdate(id, "Hill", null, false, "15m"); await { t.calls.size == 1 }
+            t.editResult = { WebhookResponse(404) }
+            s.sendNoWinner(id, "Hill"); await { s.liveMessageCount() == 0 }
+            assertEquals(listOf("CREATE", "PATCH", "POST"), t.calls.map { it.method })
+        } finally { s.shutdown() }
+    }
+    @Test fun `rate limited final edit succeeds without duplicate announcement`() {
+        val t = Transport(); val s = service(t); val id = UUID.randomUUID()
+        try {
+            s.sendLiveUpdate(id, "Hill", null, false, "15m"); await { t.calls.size == 1 }
+            t.editResult = {
+                if (t.calls.count { it.method == "PATCH" } == 1) WebhookResponse(429, java.time.Duration.ofMillis(250))
+                else WebhookResponse(200)
+            }
+            s.sendNoWinner(id, "Hill"); await { s.liveMessageCount() == 0 }
+            assertEquals(listOf("CREATE", "PATCH", "PATCH"), t.calls.map { it.method })
+        } finally { s.shutdown() }
+    }
+    @Test fun `exhausted final edit retries fall back to one announcement`() {
+        val t = Transport(); val s = service(t); val id = UUID.randomUUID()
+        try {
+            s.sendLiveUpdate(id, "Hill", null, false, "15m"); await { t.calls.size == 1 }
+            t.editResult = { WebhookResponse(429, java.time.Duration.ofMillis(250)) }
+            s.sendNoWinner(id, "Hill"); await { s.liveMessageCount() == 0 }
+            assertTrue(t.calls.count { it.method == "PATCH" } > 1)
+            assertEquals(1, t.calls.count { it.method == "POST" })
+        } finally { s.shutdown() }
+    }
+    @Test fun `disabled result never posts fallback after final edit fails`() {
+        val t = Transport(); val templates = DiscordEmbedDefaults.templates.toMutableMap()
+        templates[DiscordMessageType.NO_WINNER] = templates.getValue(DiscordMessageType.NO_WINNER).copy(enabled = false)
+        val s = service(t, templates = { templates }); val id = UUID.randomUUID()
+        try {
+            s.sendLiveUpdate(id, "Hill", null, false, "15m"); await { t.calls.size == 1 }
+            t.editResult = { WebhookResponse(404) }
+            s.sendNoWinner(id, "Hill"); await { s.liveMessageCount() == 0 }
+            assertEquals(listOf("CREATE", "PATCH"), t.calls.map { it.method })
         } finally { s.shutdown() }
     }
     @Test fun `buffer coalesces live updates per event and terminal removes only its own`() {
