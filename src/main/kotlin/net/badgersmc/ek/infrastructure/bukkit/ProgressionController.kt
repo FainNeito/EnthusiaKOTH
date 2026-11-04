@@ -120,12 +120,6 @@ class ProgressionController(
                 actions[5]={ player.closeInventory(); player.performCommand("ekoth schedule") }
                 entries += "Leaderboards" to listOf("View recorded KOTH standings")
                 actions[6]={ player.closeInventory(); player.performCommand("ekoth top") }
-                if(player.hasPermission("enthusiakoth.admin")) {
-                    entries += "Arena setup" to listOf("Area > Rules > Review", "Schedules and payouts: Review > Advanced settings")
-                    actions[7]={ player.performCommand("ekoth setup") }
-                    entries += "Global settings" to listOf("Schedules and displays shared by arenas")
-                    actions[8]={ player.performCommand("ekoth manage") }
-                }
             }
             "results" -> {
                 store.results(player.uniqueId,100).forEach { result ->
