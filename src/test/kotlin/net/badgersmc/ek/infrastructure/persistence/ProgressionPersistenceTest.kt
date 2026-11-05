@@ -19,6 +19,14 @@ class ProgressionPersistenceTest {
         "guild:${UUID.randomUUID()}",setOf("guild:enemy"),listOf(MatchContribution(player,"guild:win",180,true))+others,120,false,"activity proof")
     private fun accept(ds:SQLiteDataSource,m:VerifiedMatch) { SqlRewardProtectionStore(ds).also { it.init() }.reserve(m.eventId,m.arena,
         setOf(m.winner!!),m.opponents,m.at,RewardProtectionConfig(maximumRepeatedWins=0),"verified") }
+    @Test fun `legacy Crown challenge cannot reserve or create physical relic claim`() {
+        val ds=source(); val crown=rule().copy(id="sovereign_crown",tag="crown_tag",loreDefinition="crown_definition")
+        val store=SqlProgressionStore(ds) { policy().copy(challenges=listOf(crown)) }; store.init()
+        val p=UUID.randomUUID(); val m=match(p); accept(ds,m); store.complete(m)
+        assertNull(store.exclusiveOwner("sovereign_crown"))
+        assertTrue(store.claims(p).any { it.kind=="TAG" && it.value=="crown_tag" })
+        assertFalse(store.claims(p).any { it.kind=="LORE" && it.value=="crown_definition" })
+    }
     @Test fun `no authoritative acceptance yields no claims or challenge credit`() {
         val ds=source(); SqlRewardProtectionStore(ds).init(); val store=SqlProgressionStore(ds,::policy); store.init()
         val player=UUID.randomUUID(); store.complete(match(player))
