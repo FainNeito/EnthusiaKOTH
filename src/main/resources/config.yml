@@ -29,6 +29,57 @@ fairness:
 notifications:
   capture-regions: [spawn, warzone, market]
 
+# Capture and victory cues play only to the configured capture-region audience.
+# An empty sound disables that cue. Volume: 0-1; pitch: 0.5-2.
+sounds:
+  enabled: true
+  control-cooldown-seconds: 5
+  # Softer capture-start chime. Notes use server ticks (20 ticks = 1 second).
+  capture:
+    sound: 'minecraft:block.note_block.pling'
+    volume: 0.19
+    pitch: 0.95
+    delay-ticks: 0
+  capture-accent:
+    sound: 'minecraft:block.note_block.pling'
+    volume: 0.20
+    pitch: 1.12
+    delay-ticks: 4
+  capture-accent-2:
+    sound: 'minecraft:block.amethyst_block.chime'
+    volume: 0.07
+    pitch: 1.0
+    delay-ticks: 5
+  capture-accent-3:
+    sound: ''
+    volume: 0.0
+    pitch: 1.0
+    delay-ticks: 0
+  lost:
+    sound: 'minecraft:block.note_block.bass'
+    volume: 0.35
+    pitch: 0.8
+  win:
+    sound: 'minecraft:block.note_block.bell'
+    volume: 0.45
+    pitch: 0.75
+    delay-ticks: 0
+  win-accent:
+    sound: 'minecraft:entity.player.levelup'
+    volume: 0.55
+    pitch: 1.0
+    delay-ticks: 3
+  win-accent-2:
+    sound: 'minecraft:block.note_block.bell'
+    volume: 0.38
+    pitch: 1.0
+    delay-ticks: 8
+  win-accent-3:
+    sound: 'minecraft:block.note_block.bell'
+    volume: 0.42
+    pitch: 1.25
+    delay-ticks: 13
+
 general:
   timezone: "America/New_York"
 

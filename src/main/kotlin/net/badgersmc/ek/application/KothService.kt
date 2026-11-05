@@ -85,7 +85,10 @@ class KothService(
     private val captureAudience: (KothEvent, Player) -> Boolean = { _, _ -> false },
     private val rewardedStartIssues: (KothArena) -> List<String> = { emptyList() },
     private val arenaIdentity: (KothArena) -> String = { it.id },
+    private val scheduleSound: (Long, () -> Unit) -> Unit = { _, _ -> },
 ) {
+    private val captureSoundLimiter = CaptureSoundLimiter()
+    private val captureSoundGeneration = mutableMapOf<UUID, Long>()
     private val protectedMatches = mutableMapOf<UUID, ProtectedMatch>()
     private val recipientBudgets = mutableMapOf<UUID, Int>()
     private val progressionMatches = mutableMapOf<UUID, ProgressionPolicy>()
@@ -400,6 +403,9 @@ class KothService(
         }
         if (previousController != event.currentController) lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CONTROL_CHANGED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
+        CaptureSoundPolicy.transition(previousController, event.currentController)?.let { cue ->
+            runCatching { playCaptureSound(event, cue) }.onFailure { logger("KOTH capture sound failed", it) }
+        }
         val controller = event.currentController
         protectedMatches[event.id]?.observe(teamsInZone, controller,
             controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0))
@@ -592,6 +598,7 @@ class KothService(
                         lang.arenaMsg("koth.capture", "captured" to teamName(winner), "koth_name" to event.arena.name.arenaComponent()),
                     )
                 }
+                runCompletionStep(event, "capture victory sound") { playCaptureSound(event, CaptureCue.WIN) }
                 if (!event.isPrivateTest) {
                     runCompletionStep(event, "timestamped win") { stats.recordTimedWin(event.id, winner.storageKey(), event.arena.id, clock.instant()) }
                     runCompletionStep(event, "statistics update") {
@@ -634,6 +641,8 @@ class KothService(
     }
 
     private fun cleanupEvent(event: KothEvent) {
+        captureSoundLimiter.remove(event.id)
+        captureSoundGeneration.remove(event.id)
         protectedMatches.remove(event.id)
         progressionMatches.remove(event.id)
         matchArenaIdentities.remove(event.id)
@@ -1174,6 +1183,36 @@ class KothService(
     private fun eventRecipients(event: KothEvent, captureOnly: Boolean = true): List<Player> = if (event.isPrivateTest) {
         event.participants.mapNotNull { Bukkit.getPlayer(it) }
     } else Bukkit.getOnlinePlayers().filter { notificationsEnabled(it) && (!captureOnly || captureAudience(event, it)) }
+
+    private fun playCaptureSound(event: KothEvent, cue: CaptureCue) {
+        val generation = if (cue == CaptureCue.WIN) null else
+            (captureSoundGeneration.getOrDefault(event.id, 0L) + 1L).also { captureSoundGeneration[event.id] = it }
+        val settings = cfgLoader().captureSounds
+        if (!settings.enabled) return
+        val sounds = when (cue) {
+            CaptureCue.CAPTURE -> listOf(settings.capture, settings.captureAccent, settings.captureAccent2, settings.captureAccent3)
+            CaptureCue.LOST -> listOf(settings.lost)
+            CaptureCue.WIN -> listOf(settings.win, settings.winAccent, settings.winAccent2, settings.winAccent3)
+        }.filter { it.sound.isNotBlank() && it.volume > 0f }
+        if (sounds.isEmpty()) return
+        if (cue != CaptureCue.WIN && !captureSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
+        val audience = eventRecipients(event, captureOnly = true).map { it.uniqueId }.toSet()
+        val controller = event.currentController
+        sounds.forEach { layer ->
+            val play = {
+                // A delayed note must not escape a cancelled/replaced event, changed control or audience.
+                val active = cue == CaptureCue.WIN || layer.delayTicks == 0L || (events[event.id] === event && event.state == EventState.ACTIVE &&
+                    captureSoundGeneration[event.id] == generation &&
+                    (cue != CaptureCue.CAPTURE || event.currentController == controller))
+                if (active && cfgLoader().captureSounds.enabled) eventRecipients(event, captureOnly = true)
+                    .filter { it.uniqueId in audience }.forEach { player ->
+                        runCatching { player.playSound(player.location, layer.sound, org.bukkit.SoundCategory.PLAYERS, layer.volume, layer.pitch) }
+                            .onFailure { logger("Could not play KOTH capture sound for a recipient", it) }
+                    }
+            }
+            if (layer.delayTicks == 0L) play() else scheduleSound(layer.delayTicks, play)
+        }
+    }
 
     private fun sendEventMessage(event: KothEvent, message: net.kyori.adventure.text.Component, captureOnly: Boolean = false) {
         if (event.isPrivateTest) eventRecipients(event, captureOnly).forEach { it.sendMessage(message) }

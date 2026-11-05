@@ -294,6 +294,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         notificationsEnabled = notificationPreferences::enabled,
         toggleNotifications = notificationPreferences::toggle,
         captureAudience = ::captureAudience,
+        scheduleSound = { delay, task -> plugin.server.scheduler.runTaskLater(plugin, Runnable { task() }, delay) },
     )
     val startService = StartService(
         config = { config() },
