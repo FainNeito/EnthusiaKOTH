@@ -1,7 +1,13 @@
 # Exclusive KOTH relics and activation gates
 
+The legacy physical `sovereign_crown` challenge reward is held while the Crown of
+Sorrow custody and transfer flow is developed. KOTH will not create new legacy
+Crown relic claims or dispatch existing pending ones; separately earned tags are
+unaffected. This guard does not cancel deliveries already accepted by LoreItems,
+reconcile existing items, or prevent administrators from creating other items.
+
 Each immutable challenge ID is the lifetime reward identity. Never rename
-`sovereign_blade` or `sovereign_crown` to recycle its reward. Ownership is a unique
+`sovereign_blade` or `sovereign_crown` to recycle its reward. Legacy ownership is a unique
 database row, independent of seasons, reload, account inventory or item loss.
 Back up the KOTH database; deleting/restoring it can destroy or rewind ownership.
 No GUI, advancement grant or season reset transfers ownership. First qualifying
