@@ -25,6 +25,22 @@ data class EnthusiaKothConfig(
     val maxConcurrentEvents: Int = 1,
     val seasonStart: String? = null,
     val captureNotificationRegions: List<String> = listOf("spawn", "warzone", "market"),
+    val captureSounds: CaptureSoundsConfig = CaptureSoundsConfig(),
+)
+
+data class SoundCueConfig(val sound: String, val volume: Float, val pitch: Float, val delayTicks: Long = 0)
+data class CaptureSoundsConfig(
+    val enabled: Boolean = true,
+    val cooldownSeconds: Int = 5,
+    val capture: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.pling", 0.19f, 0.95f, 0),
+    val captureAccent: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.pling", 0.20f, 1.12f, 4),
+    val captureAccent2: SoundCueConfig = SoundCueConfig("minecraft:block.amethyst_block.chime", 0.07f, 1.0f, 5),
+    val captureAccent3: SoundCueConfig = SoundCueConfig("", 0f, 1f, 0),
+    val lost: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bass", 0.35f, 0.8f),
+    val win: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bell", 0.45f, 0.75f),
+    val winAccent: SoundCueConfig = SoundCueConfig("minecraft:entity.player.levelup", 0.55f, 1f, 3),
+    val winAccent2: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bell", 0.38f, 1f, 8),
+    val winAccent3: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bell", 0.42f, 1.25f, 13),
 )
 
 data class FairnessConfig(

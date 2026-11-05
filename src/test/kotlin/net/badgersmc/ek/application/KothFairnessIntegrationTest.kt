@@ -23,11 +23,12 @@ class KothFairnessIntegrationTest {
     private val capper = mockk<Player>(relaxed = true)
     private val idle = mockk<Player>(relaxed = true)
     private val localPlayers = mutableSetOf<Player>()
+    private val delayedSounds = mutableListOf<Pair<Long, () -> Unit>>()
     private val guilds = mockk<LumaGuildsAdapter>(relaxed = true)
     private val stats = mockk<SqlStatsRepository>(relaxed = true)
     private val zone = mockk<CaptureZone>(relaxed = true)
     @BeforeEach fun setup() {
-        localPlayers.clear(); localPlayers.add(capper)
+        localPlayers.clear(); localPlayers.add(capper); delayedSounds.clear()
         mockkStatic(Bukkit::class)
         every { capper.uniqueId } returns UUID.randomUUID()
         every { idle.uniqueId } returns UUID.randomUUID()
@@ -59,6 +60,7 @@ class KothFairnessIntegrationTest {
             arenaResolver = { null }, queueStore = InMemoryEventQueueStore(), clock = Clock.fixed(now, ZoneOffset.UTC),
             logger = { _, _ -> }, notificationsEnabled = { !mute || it !== idle },
             captureAudience = { _, player -> !localAudience || player in localPlayers },
+            scheduleSound = { delay, action -> delayedSounds.add(delay to action); Unit },
         )
     }
     private fun arena() = KothArena("capture", "capture", zone, durationSeconds = 60,
@@ -96,6 +98,68 @@ class KothFairnessIntegrationTest {
         service.tick()
         verify(exactly = 1) { idle.sendMessage(Component.text("koth.capture")) }
     }
+    @Test fun `capture chime and winning fanfare are timed and only reach the capture audience`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 3), teamMode = TeamMode.GUILD))
+        service.tick()
+        assertEquals(listOf(4L, 5L), delayedSounds.map { it.first })
+        delayedSounds.sortedBy { it.first }.forEach { it.second() }
+        delayedSounds.clear()
+        service.tick(); service.tick(); service.tick()
+        assertEquals(listOf(3L, 8L, 13L), delayedSounds.map { it.first })
+        delayedSounds.sortedBy { it.first }.forEach { it.second() }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.19f, 0.95f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.amethyst_block.chime", org.bukkit.SoundCategory.PLAYERS, 0.07f, 1f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bell", org.bukkit.SoundCategory.PLAYERS, 0.45f, 0.75f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:entity.player.levelup", org.bukkit.SoundCategory.PLAYERS, 0.55f, 1f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bell", org.bukkit.SoundCategory.PLAYERS, 0.38f, 1f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bell", org.bukkit.SoundCategory.PLAYERS, 0.42f, 1.25f) }
+        verify(exactly = 0) { idle.playSound(any<org.bukkit.Location>(), any<String>(), any<org.bukkit.SoundCategory>(), any<Float>(), any<Float>()) }
+    }
+
+    @Test fun `delayed capture notes are suppressed after loss of control or audience`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        service.tick()
+        localPlayers.clear()
+        delayedSounds.forEach { it.second() }
+        verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
+        localPlayers.add(capper)
+        every { zone.containsCircular(capper.location) } returns false
+        service.tick()
+        delayedSounds.forEach { it.second() }
+        verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
+    }
+
+    @Test fun `no winner does not play the victory fanfare`() {
+        every { zone.containsCircular(capper.location) } returns false
+        val service = service()
+        assertTrue(service.startEvent(arena().copy(durationSeconds = 0), durationOverride = 0, teamMode = TeamMode.GUILD))
+        service.tick()
+        delayedSounds.forEach { it.second() }
+        verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bell", org.bukkit.SoundCategory.PLAYERS, any<Float>(), any<Float>()) }
+        verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:entity.player.levelup", org.bukkit.SoundCategory.PLAYERS, any<Float>(), any<Float>()) }
+    }
+
+    @Test fun `winning fanfare rechecks regional audience for delayed notes`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena(), teamMode = TeamMode.GUILD))
+        service.tick(); delayedSounds.clear(); service.tick()
+        assertEquals(listOf(3L, 8L, 13L), delayedSounds.map { it.first })
+        localPlayers.clear()
+        delayedSounds.forEach { it.second() }
+        verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:entity.player.levelup", org.bukkit.SoundCategory.PLAYERS, any<Float>(), any<Float>()) }
+    }
+
+    @Test fun `sound cues respect notification opt out`() {
+        val service = service(mute = true)
+        assertTrue(service.startEvent(arena(), teamMode = TeamMode.GUILD))
+        service.tick(); service.tick()
+        delayedSounds.forEach { it.second() }
+        verify(exactly = 0) { idle.playSound(any<org.bukkit.Location>(), any<String>(), any<org.bukkit.SoundCategory>(), any<Float>(), any<Float>()) }
+    }
+
     @Test fun `capture countdown and leave stay local`() {
         val service = service(localAudience = true)
         assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))

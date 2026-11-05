@@ -52,6 +52,7 @@ class ConfigLoader(private val plugin: JavaPlugin) {
             captureNotificationRegions = if (config.contains("notifications.capture-regions"))
                 strings(config, "notifications.capture-regions").map(String::trim).filter(String::isNotEmpty).distinct()
                 else listOf("spawn", "warzone", "market"),
+            captureSounds = CaptureSoundConfigLoader.load(config),
             fairness = net.badgersmc.ek.config.FairnessConfig(
                 contributorMinimumPercent = decimal(config, "fairness.contributor-minimum-percent", 10.0).let { if (it.isFinite()) it.coerceIn(0.0, 100.0) else 10.0 },
                 starterCooldownSeconds = integer(config, "fairness.starter-cooldown-seconds", 0).coerceAtLeast(0),
@@ -359,6 +360,34 @@ private object RulesConfigLoader {
             spearCooldownSeconds = integer(values, "spear-cooldown-seconds", 0).coerceAtLeast(0),
             enderPearlCooldownSeconds = integer(values, "ender-pearl-cooldown-seconds", 0).coerceAtLeast(0),
             windChargeCooldownSeconds = integer(values, "wind-charge-cooldown-seconds", 0).coerceAtLeast(0),
+        )
+    }
+}
+
+/** Empty sound names intentionally disable a specific cue. */
+internal object CaptureSoundConfigLoader {
+    fun load(config: ConfigurationSection): net.badgersmc.ek.config.CaptureSoundsConfig {
+        val defaults = net.badgersmc.ek.config.CaptureSoundsConfig()
+        fun cue(path: String, fallback: net.badgersmc.ek.config.SoundCueConfig): net.badgersmc.ek.config.SoundCueConfig {
+            val name = config.getString("sounds.$path.sound", fallback.sound)?.trim() ?: fallback.sound
+            fun bounded(key: String, default: Float, min: Double, max: Double): Float {
+                val value = decimal(config, "sounds.$path.$key", default.toDouble())
+                return if (value.isFinite()) value.coerceIn(min, max).toFloat() else default
+            }
+            return net.badgersmc.ek.config.SoundCueConfig(
+                if (name.isBlank() || name.matches(Regex("[a-z0-9_.-]+:[a-z0-9_./-]+"))) name else "",
+                bounded("volume", fallback.volume, 0.0, 1.0), bounded("pitch", fallback.pitch, 0.5, 2.0),
+                if (path == "lost") 0L else integer(config, "sounds.$path.delay-ticks", fallback.delayTicks.toInt()).coerceIn(0, 100).toLong(),
+            )
+        }
+        return net.badgersmc.ek.config.CaptureSoundsConfig(
+            enabled = boolean(config, "sounds.enabled", defaults.enabled),
+            cooldownSeconds = integer(config, "sounds.control-cooldown-seconds", defaults.cooldownSeconds).coerceIn(0, 300),
+            capture = cue("capture", defaults.capture), captureAccent = cue("capture-accent", defaults.captureAccent),
+            captureAccent2 = cue("capture-accent-2", defaults.captureAccent2), captureAccent3 = cue("capture-accent-3", defaults.captureAccent3),
+            lost = cue("lost", defaults.lost), win = cue("win", defaults.win),
+            winAccent = cue("win-accent", defaults.winAccent), winAccent2 = cue("win-accent-2", defaults.winAccent2),
+            winAccent3 = cue("win-accent-3", defaults.winAccent3),
         )
     }
 }
