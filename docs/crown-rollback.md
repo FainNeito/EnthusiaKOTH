@@ -1,6 +1,6 @@
 # Crown branch rollback to a pre-Crown KOTH binary
 
-Status: procedure plus local evidence; not rehearsed on Paper or TEST. Applies to downgrading from the Crown recovery branch to `main` at `7f43049` or earlier. This covers KOTH only. Downgrading LoreItems below its Crown custody schema is a separate procedure that does not exist yet.
+Status: procedure plus local evidence, with the drained path rehearsed on an isolated Paper server (2026-11-07); not rehearsed on TEST. Applies to downgrading from the Crown recovery branch to `main` at `7f43049` or earlier. This covers KOTH only. Downgrading LoreItems below its Crown custody schema is a separate procedure that does not exist yet.
 
 ## What a pre-Crown binary does with Crown state
 
@@ -36,4 +36,5 @@ Old binaries may have run a Crown slot as ordinary KOTH. That slot is then PLANN
 ## Evidence and gaps
 
 - Covered: the main-reader probe above; branch tests for marker persistence, failed acknowledgement replay, clear-queue refusal and restart (`KothQueueTest`); and the missed-gate behaviour after re-upgrade (`OperationalEvidenceTest`, `KothQueueTest`).
-- Not covered: a Paper downgrade and re-upgrade rehearsal with real files and a held LoreItems Crown, a LoreItems downgrade, and TEST.
+- Paper rehearsal (2026-11-07, loopback Paper 26.2-129 with real LumaGuilds, WorldGuard and PlaceholderAPI, plus a HELD LoreItems Crown): steps 1–6 were followed against real files. `main` `7f43049` enabled on the branch config, accepting the extra `crown-*` keys, and loaded the same number of queue rows as the backup (0). It kept the start and warning claims and left every `koth_crown_*` row and the LoreItems database unchanged. Re-upgrading enabled with no holds, and the Crown stayed HELD as the same instance.
+- Not covered: a downgrade with an undrainable marker, a Crown slot run as ordinary KOTH while downgraded, a LoreItems downgrade, and TEST.
