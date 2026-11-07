@@ -107,6 +107,16 @@ class OperationalEvidenceTest {
         assertEquals(at.minusSeconds(600), loaded.verifiedSnapshot()!!.evaluatedThrough)
     }
 
+    @Test fun `sub-millisecond system clock cursor still yields verified evidence after persisting`() {
+        val loaded = store()
+        loaded.save(emptyList())
+        loaded.setLastEvaluation(at.plusNanos(123_456))
+        assertEquals(at, loaded.verifiedSnapshot()!!.evaluatedThrough)
+        loaded.setLastEvaluation(at.plusSeconds(61).plusNanos(789_000))
+        assertEquals(at.plusSeconds(61), loaded.verifiedSnapshot()!!.evaluatedThrough)
+        assertEquals(at.plusSeconds(61), store().verifiedSnapshot()!!.evaluatedThrough)
+    }
+
     @Test fun `policy holds every uncertain branch and misses only after a durable closed window`() {
         val closes = at.plus(ScheduleService.MAX_CATCH_UP).plusSeconds(60)
         val after = closes.plusSeconds(1)

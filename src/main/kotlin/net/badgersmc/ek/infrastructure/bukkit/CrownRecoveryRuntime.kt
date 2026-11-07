@@ -71,7 +71,11 @@ class CrownRecoveryRuntime(private val plugin:JavaPlugin,source:DataSource,priva
         val requirements=quest?.takeIf{it.getBoolean("enabled")}?.let{CrownQuestRequirements(true,it.getInt("wins"),it.getLong("scoring-seconds"),it.getInt("distinct-days"))}
         val lead=s.getLong("minimum-announcement-seconds");require(lead>0)
         return ObservationSettings(p,lead,s.get("require-quest") as? Boolean,requirements,
-            quest?.getString("revision") ?: p.revision,s.getStringList("recovery-occurrences").toList(),s.getStringList("activity-occurrences").toList())
+            questRevision(quest?.getString("revision"),p.revision),s.getStringList("recovery-occurrences").toList(),s.getStringList("activity-occurrences").toList())
+    }
+    internal companion object {
+        /** The shipped blank quest revision falls back to the recovery revision instead of failing every winner read. */
+        fun questRevision(configured:String?,recovery:String):String=configured?.takeIf{it.isNotBlank()} ?: recovery
     }
     private fun dispatch(settings:ObservationSettings,action:()->Unit)=main {
         if(enabled() && runCatching{capture()==settings}.getOrDefault(false))action()

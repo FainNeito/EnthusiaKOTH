@@ -10,6 +10,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.UUID
 
@@ -236,7 +237,8 @@ class FileOperationalStateStore(
 
     @Synchronized override fun setLastEvaluation(value: Instant) {
         ensureScheduleLoaded()
-        evaluated = value
+        // The file stores milliseconds; a finer in-memory cursor would never match its strict readback.
+        evaluated = value.truncatedTo(ChronoUnit.MILLIS)
         val persisted = lastPersistedEvaluation
         val shouldPersist = persisted == null ||
             value.isBefore(persisted) ||
