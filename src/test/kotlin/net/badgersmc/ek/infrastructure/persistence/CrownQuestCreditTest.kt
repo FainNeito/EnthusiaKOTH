@@ -78,6 +78,27 @@ class CrownQuestCreditTest {
         val restarted=SqlCrownRecoveryEvents(ds).also{it.init();it.retireEmpty()}
         assertTrue(restarted.active().isEmpty());assertTrue(restarted.assign(binding.copy(occurrence="later")))
     }
+    @Test fun `won final releases its binding only on a final rejection`() {
+        val ds=source();setup(ds);val events=SqlCrownEventStore(ds).also{it.init()}
+        val recovery=SqlCrownRecoveryEvents(ds).also{it.init()}
+        fun completed(name:String,status:String,accepted:Int):RecoveryEventBinding {
+            val m=match();val binding=RecoveryEventBinding(name,UUID.randomUUID(),CrownTenure(UUID.randomUUID(),player,2))
+            events.plan(CrownOccurrence(name,"hill",now,CrownEventPurpose.RECOVERY_CROWN_FINAL,rules.revision))
+            assertTrue(recovery.assign(binding));assertTrue(events.start(name,m.eventId));recovery.finish(m.eventId,events)
+            seed(ds,m,status=status,accepted=accepted);return binding
+        }
+        val rejected=completed("rejected","REJECTED",1)
+        val audit=completed("audit-rejected","APPROVED",0)
+        val held=completed("held","HELD",1)
+        val approved=completed("approved","APPROVED",1)
+        val restarted=SqlCrownRecoveryEvents(ds).also{it.init();it.retireEmpty()}
+        assertEquals(setOf(held,approved),restarted.active().toSet())
+        assertTrue(restarted.assign(rejected.copy(occurrence="rejected-later")))
+        assertTrue(restarted.assign(audit.copy(occurrence="audit-later")))
+        ds.connection.use { c -> c.prepareStatement("UPDATE koth_match_decisions SET status='REJECTED' WHERE status='HELD'").use { it.executeUpdate() } }
+        restarted.retireEmpty()
+        assertFalse(restarted.active().contains(held));assertTrue(restarted.active().contains(approved))
+    }
     @Test fun `observation refuses more than one thousand current events`() {
         val ds=source();setup(ds);SqlCrownEventStore(ds).init()
         val recovery=SqlCrownRecoveryEvents(ds).also{it.init()};val ledger=SqlCrownActivityStore(ds).also{it.init()}
