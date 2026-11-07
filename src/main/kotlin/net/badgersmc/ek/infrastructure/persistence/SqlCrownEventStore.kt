@@ -183,6 +183,14 @@ class SqlCrownEventStore(private val source: DataSource) {
         }
         return SqlCrownFirstAward(source).prepare(id, questRevision, rules)
     }
+    /** Missed-occurrence CAS: only this exact never-started slot is cancelled; a start wins otherwise. */
+    fun cancelMissed(slot: CrownOccurrence): Boolean = source.connection.use { c ->
+        c.prepareStatement("""UPDATE koth_crown_occurrences SET state='CANCELLED' WHERE occurrence_id=? AND arena_id=?
+            AND scheduled_at=? AND purpose=? AND policy_revision=? AND state='PLANNED' AND match_id IS NULL""").use { s ->
+            s.setString(1, slot.occurrenceId); s.setString(2, slot.arenaId); s.setString(3, slot.scheduledAt.toString())
+            s.setString(4, slot.purpose.name); s.setString(5, slot.policyRevision); s.executeUpdate() == 1
+        }
+    }
     fun cancelPlanned(id: String): Boolean = source.connection.use { c ->
         c.prepareStatement("UPDATE koth_crown_occurrences SET state=? WHERE occurrence_id=? AND state=? AND match_id IS NULL").use { s ->
             s.setString(1, CrownOccurrenceState.CANCELLED.name); s.setString(2, id)

@@ -438,6 +438,17 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
         discordWarningSink = { arenaId, minutes -> discordWebhook.sendPreStart(arenas()[arenaId]?.name ?: arenaId, minutes) },
     )
+
+    init {
+        // Queue lock -> store lock matches the order used by persistQueue and claim checks.
+        crownRecovery.missedOccurrenceGate = { slot ->
+            kothService.withQueueEvidence { live ->
+                val decision = net.badgersmc.ek.application.MissedOccurrencePolicy.assess(
+                    slot.occurrenceId, slot.scheduledAt, clock.instant(), operationalState.verifiedSnapshot(), live)
+                decision to (decision == net.badgersmc.ek.application.MissedOccurrenceDecision.MISSED && crownEvents.cancelMissed(slot))
+            }
+        }
+    }
     val keepInventoryListener = net.badgersmc.ek.infrastructure.bukkit.KeepInventoryListener(
         activeEvent = { kothService.activeEvent },
         allEvents = kothService::allEvents,

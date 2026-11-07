@@ -593,6 +593,87 @@ class KothQueueTest {
         assertEquals(second.id, service.activeEvent?.arena?.id)
         assertTrue(queue.load().isEmpty())
     }
+    private class MissedFixture(temp: Path, name: String) {
+        val ds=org.sqlite.SQLiteDataSource().apply { url="jdbc:sqlite:${temp.resolve("$name.db")}" }
+        val events=net.badgersmc.ek.infrastructure.persistence.SqlCrownEventStore(ds).also{it.init()}
+        val recovery=net.badgersmc.ek.infrastructure.persistence.SqlCrownRecoveryEvents(ds).also{it.init()}
+        val schedule=temp.resolve("$name-schedule.dat").toFile();val queue=temp.resolve("$name-queue.dat").toFile()
+        val store=FileOperationalStateStore(schedule,queue,{ _, _ -> })
+        init { ds.connection.use { c -> c.createStatement().use { it.execute("CREATE TABLE koth_matches(id TEXT PRIMARY KEY,winner TEXT)") } } }
+        fun plan(id:String,arena:String,at:Instant):net.badgersmc.ek.infrastructure.persistence.CrownOccurrence {
+            val slot=net.badgersmc.ek.infrastructure.persistence.CrownOccurrence(id,arena,at,
+                net.badgersmc.ek.domain.CrownEventPurpose.RECOVERY_CROWN_FINAL,"test")
+            events.plan(slot)
+            assertTrue(recovery.assign(net.badgersmc.ek.infrastructure.persistence.RecoveryEventBinding(id,UUID.randomUUID(),
+                CrownTenure(UUID.randomUUID(),UUID.randomUUID(),2))))
+            return slot
+        }
+        fun gate(service:KothService,slot:net.badgersmc.ek.infrastructure.persistence.CrownOccurrence,at:Instant)=
+            service.withQueueEvidence { live ->
+                val decision=MissedOccurrencePolicy.assess(slot.occurrenceId,slot.scheduledAt,at,store.verifiedSnapshot(),live)
+                decision to (decision==MissedOccurrenceDecision.MISSED && events.cancelMissed(slot))
+            }
+    }
+
+    @Test fun `never queued Crown slot cancels only on verified evidence and a late handoff is rejected`() {
+        val f=MissedFixture(temp,"missed");val hill=arena("hill");val slot=f.plan("slot",hill.id,now)
+        val later=now.plus(ScheduleService.MAX_CATCH_UP).plusSeconds(120)
+        val service=service(f.store,LockState.UNLOCKED,mapOf(hill.id to hill),clock=Clock.fixed(later,ZoneOffset.UTC),
+            bind={ q, match -> f.events.bindScheduledMatch(q.occurrenceId!!,q.arenaId,q.scheduledAt,true,match) },
+            discard={ q -> f.events.acknowledgeDiscard(q.occurrenceId!!,q.arenaId,q.scheduledAt,q.activationId).also { if(it)f.recovery.retireEmpty() } })
+        f.store.setLastEvaluation(later)
+        // No queue file has ever been written: unknown evidence, not proof of absence.
+        assertEquals(MissedOccurrenceDecision.HOLD to false,f.gate(service,slot,later))
+        f.store.save(emptyList())
+        assertEquals(MissedOccurrenceDecision.MISSED to true,f.gate(service,slot,later))
+        f.recovery.retireEmpty();assertTrue(f.recovery.active().isEmpty())
+        // A handoff arriving after cancellation (e.g. after clock regression) loses the same CAS.
+        assertTrue(service.queueStart(hill,EventKind.SCHEDULED,now,occurrenceId="slot"));service.processQueue()
+        assertNull(service.activeEvent);assertTrue(f.store.load().isEmpty())
+        assertEquals(net.badgersmc.ek.infrastructure.persistence.CrownOccurrenceState.CANCELLED,f.events.read("slot")!!.state)
+    }
+
+    @Test fun `delayed queued start and pending claim keep a Crown slot bound`() {
+        val f=MissedFixture(temp,"delayed");val hill=arena("hill");val slot=f.plan("slot",hill.id,now)
+        val later=now.plus(Duration.ofHours(2))
+        val service=service(f.store,LockState.ALL_LOCKED,mapOf(hill.id to hill),clock=Clock.fixed(later,ZoneOffset.UTC))
+        f.store.setLastEvaluation(later)
+        assertTrue(service.queueStart(hill,EventKind.SCHEDULED,now,occurrenceId="slot"));service.processQueue()
+        assertEquals(MissedOccurrenceDecision.SCHEDULED to false,f.gate(service,slot,later))
+        val other=f.plan("other",hill.id,now.plusSeconds(60))
+        assertTrue(f.store.claim("start:other",other.scheduledAt,hill.id,TeamMode.SOLO))
+        assertEquals(MissedOccurrenceDecision.SCHEDULED to false,f.gate(service,other,later))
+        assertTrue(f.store.commit("start:other"))
+        assertEquals(MissedOccurrenceDecision.HOLD to false,f.gate(service,other,later))
+        assertEquals(2,f.recovery.active().size)
+        assertEquals(net.badgersmc.ek.infrastructure.persistence.CrownOccurrenceState.PLANNED,f.events.read("slot")!!.state)
+    }
+
+    @Test fun `started Crown slot wins the race against missed cancellation`() {
+        val f=MissedFixture(temp,"race");val slot=f.plan("slot","hill",now)
+        val match=UUID.randomUUID()
+        assertTrue(f.events.bindScheduledMatch("slot","hill",now,true,match))
+        assertFalse(f.events.cancelMissed(slot))
+        assertFalse(f.events.cancelMissed(slot.copy(policyRevision="other")))
+        val started=f.events.read("slot")!!
+        assertEquals(net.badgersmc.ek.infrastructure.persistence.CrownOccurrenceState.STARTED,started.state);assertEquals(match,started.matchId)
+        f.recovery.retireEmpty();assertEquals(1,f.recovery.active().size)
+    }
+
+    @Test fun `unsaved queue change holds missed evaluation`() {
+        val f=MissedFixture(temp,"dirty");val hill=arena("hill");val slot=f.plan("slot",hill.id,now)
+        val later=now.plus(Duration.ofHours(2))
+        val failing=object : EventQueueStore by f.store {
+            var fail=false
+            override fun save(queue: List<QueuedEvent>) { if(fail)error("injected queue write failure");f.store.save(queue) }
+        }
+        val service=service(failing,LockState.ALL_LOCKED,mapOf(hill.id to hill),clock=Clock.fixed(later,ZoneOffset.UTC))
+        f.store.setLastEvaluation(later);f.store.save(emptyList())
+        assertTrue(service.queueStart(hill,EventKind.SCHEDULED,now,occurrenceId="queued"))
+        failing.fail=true;service.processQueue()
+        assertEquals(MissedOccurrenceDecision.HOLD to false,f.gate(service,slot,later))
+    }
+
     private fun service(
         store: EventQueueStore,
         lock: LockState,

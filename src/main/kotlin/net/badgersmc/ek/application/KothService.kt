@@ -1002,6 +1002,11 @@ class KothService(
     fun queuedEvents(): List<QueuedEvent> = synchronized(this) { eventQueue.filter { it.state != QueuedEventState.COMPLETED } }
     internal fun queuedOccurrenceIds(): Set<String> = synchronized(this) { eventQueue.mapNotNull { it.occurrenceId }.toSet() }
 
+    /** Runs [block] under the queue lock so no handoff interleaves; null while the queue is unsaved. */
+    @Synchronized
+    internal fun <T> withQueueEvidence(block: (Set<String>?) -> T): T =
+        block(if (queueDirty) null else eventQueue.mapNotNull { it.occurrenceId }.toSet())
+
     @Synchronized
     fun clearQueue(): Boolean {
         // A discarded row is the durable retry record for an unacknowledged cancellation.

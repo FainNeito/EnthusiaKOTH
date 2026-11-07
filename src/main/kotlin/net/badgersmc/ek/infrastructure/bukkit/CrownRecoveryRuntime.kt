@@ -76,8 +76,30 @@ class CrownRecoveryRuntime(private val plugin:JavaPlugin,source:DataSource,priva
     private fun dispatch(settings:ObservationSettings,action:()->Unit)=main {
         if(enabled() && runCatching{capture()==settings}.getOrDefault(false))action()
     }
+    /** Set once the queue exists; evaluates evidence and runs the cancellation CAS under the queue lock. */
+    @Volatile var missedOccurrenceGate:((CrownOccurrence)->Pair<MissedOccurrenceDecision,Boolean>)?=null
+    private val heldMissed=mutableSetOf<String>()
+    /** Never-enqueued special slots are cancelled only on MISSED; retireEmpty replays the binding release. */
+    private fun reconcileMissed() {
+        val gate=missedOccurrenceGate ?: return
+        var cursor:String?=null
+        do {
+            val page=events.listOpenPage(cursor,200)
+            page.occurrences.filter{it.state==CrownOccurrenceState.PLANNED &&
+                (it.purpose==CrownEventPurpose.RECOVERY_CROWN_FINAL || it.purpose==CrownEventPurpose.HOLDER_CHALLENGE)}.forEach { slot ->
+                val (decision,cancelled)=gate(slot)
+                if(cancelled)plugin.logger.info("Crown occurrence ${slot.occurrenceId} was never queued; cancelled without award")
+                else if(decision==MissedOccurrenceDecision.HOLD && heldMissed.add(slot.occurrenceId))
+                    plugin.logger.warning("Crown occurrence ${slot.occurrenceId} is held for review: schedule/queue evidence is incomplete or inconsistent")
+            }
+            cursor=page.nextCursor
+        } while(cursor!=null)
+        bindings.retireEmpty()
+    }
     fun tick() {
-        if(!enabled() || !busy.compareAndSet(false,true))return
+        if(!enabled())return
+        runCatching{reconcileMissed()}.onFailure(::report)
+        if(!busy.compareAndSet(false,true))return
         val native=provider();if(native==null){busy.set(false);return}
         try {
             val settings=capture()
