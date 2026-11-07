@@ -302,3 +302,27 @@ events:
 # Inclusive local date; leave blank until a season has been selected.
 leaderboards:
   season-start: ""
+
+# Crown progress starts at cutover (an ISO-8601 UTC instant). Set positive
+# targets and a revision before enabling. A final also requires player consent.
+crown-quest:
+  enabled: false
+  revision: ""
+  cutover: ""
+  wins: 0
+  scoring-seconds: 0
+  distinct-days: 0
+  # Exact solo schedule ID from /ekoth schedule. Requires an advance warning.
+  first-final-occurrence: ""
+
+# Recovery remains disabled until thresholds, special occurrences and provider support are verified on TEST.
+crown-recovery:
+  enabled: false
+  revision: test-v1
+  inactivity-seconds: 0
+  minimum-opportunities: 0
+  minimum-announcement-seconds: 0
+  # Explicitly choose true or false before activation; unset prevents recovery awards.
+  require-quest: unset
+  activity-occurrences: []
+  recovery-occurrences: []

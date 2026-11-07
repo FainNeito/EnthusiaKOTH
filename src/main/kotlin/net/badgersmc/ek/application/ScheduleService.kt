@@ -31,6 +31,7 @@ class ScheduleService(
     private val logger: (String) -> Unit,
     private val discordWarningMinutes: () -> Int = { 0 },
     private val discordWarningSink: (arenaId: String, minutes: Int) -> Unit = { _, _ -> },
+    private val announceCrownFinal: (ScheduledOccurrence) -> Unit = {},
 ) {
     companion object {
         internal val MAX_CATCH_UP: Duration = Duration.ofMinutes(10)
@@ -78,6 +79,7 @@ class ScheduleService(
                     val claim = "warning:${occurrence.id}"
                     if (stateStore.claim(claim, warningAt)) {
                         warningSink(occurrence.arenaId, (warningSeconds + 59) / 60)
+                        announceCrownFinal(occurrence)
                         if (!stateStore.commit(claim)) {
                             logger("KOTH warning claim '$claim' was delivered but could not be marked committed")
                         }
