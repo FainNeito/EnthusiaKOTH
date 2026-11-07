@@ -104,10 +104,12 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
                         s.setString(4,match.eventId.toString()); s.executeUpdate() == 1
                     }
                     if (earned) {
-                        val owns = !rule.exclusive || c.prepareStatement("INSERT OR IGNORE INTO koth_exclusive_owners VALUES(?,?,?,?)").use { s ->
+                        // The old one-shot Crown issuer cannot prove safe equipment or recovery.
+                        // Keep the tag path, but never reserve or create a physical Crown claim here.
+                        val owns = rule.id != LegacyCrownClaimPolicy.CHALLENGE_ID && (!rule.exclusive || c.prepareStatement("INSERT OR IGNORE INTO koth_exclusive_owners VALUES(?,?,?,?)").use { s ->
                             s.setString(1,rule.id); s.setString(2,p.player.toString()); s.setString(3,match.eventId.toString())
                             s.setLong(4,match.at.toEpochMilli()); s.executeUpdate() == 1
-                        }
+                        })
                         // A title is earned individually; the physical relic has one lifetime owner.
                         if (rule.tag.isNotBlank()) claim(c,"challenge:${rule.id}:${p.player}:tag",p.player,"TAG",rule.tag,1)
                         if (owns && rule.loreDefinition.isNotBlank()) claim(c,"challenge:${rule.id}:${p.player}:relic",p.player,"LORE",rule.loreDefinition,1)

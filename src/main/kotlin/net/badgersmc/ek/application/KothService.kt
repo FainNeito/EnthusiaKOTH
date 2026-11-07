@@ -30,7 +30,7 @@ import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 import kotlin.math.min
 
-enum class QueuedEventState { READY, ACTIVATING, COMPLETED }
+enum class QueuedEventState { READY, ACTIVATING, COMPLETED, DISCARDED }
 
 data class QueuedEvent(
     val arenaId: String,
@@ -86,6 +86,8 @@ class KothService(
     private val rewardedStartIssues: (KothArena) -> List<String> = { emptyList() },
     private val arenaIdentity: (KothArena) -> String = { it.id },
     private val scheduleSound: (Long, () -> Unit) -> Unit = { _, _ -> },
+    private val bindScheduledMatch: (QueuedEvent, UUID) -> Boolean = { _, _ -> true },
+    private val acknowledgeDiscarded: (QueuedEvent) -> Boolean = { true },
 ) {
     private val captureSoundLimiter = CaptureSoundLimiter()
     private val captureSoundGeneration = mutableMapOf<UUID, Long>()
@@ -822,10 +824,11 @@ class KothService(
             while (true) {
                 val next = eventQueue.firstOrNull() ?: return
                 val arena = arenaResolver(next.arenaId)
-                if (next.state != QueuedEventState.COMPLETED && arena != null && conflicts(arena)) return
+                if (next.state != QueuedEventState.COMPLETED && next.state != QueuedEventState.DISCARDED && arena != null && conflicts(arena)) return
                 val before = next
                 when (next.state) {
                     QueuedEventState.COMPLETED -> if (!compactCompleted(next)) return
+                    QueuedEventState.DISCARDED -> if (!reconcileDiscarded(next)) return
                     QueuedEventState.ACTIVATING -> resumeActivating(next)
                     QueuedEventState.READY -> processReady(next)
                 }
@@ -892,6 +895,17 @@ class KothService(
         val cfg = cfgLoader()
         if (!cfg.locks.state.allows(next.startSource)) return false
         val activationId = next.activationId ?: return false
+        if (next.startSource == EventKind.SCHEDULED) {
+            val allowed = runCatching { bindScheduledMatch(next, activationId) }.getOrElse {
+                logger("Scheduled match binding unavailable for " + next.occurrenceId, it)
+                return false
+            }
+            if (!allowed) {
+                // This entry conflicts with a durable final. Retrying it would block the rest of the queue.
+                removeInvalidQueued(next)
+                return true
+            }
+        }
         val now = clock.instant()
         val event = KothEvent(
             id = activationId,
@@ -943,13 +957,24 @@ class KothService(
     }
 
     private fun removeInvalidQueued(next: QueuedEvent) {
-        eventQueue.removeAt(0)
+        val discarded=next.copy(state=QueuedEventState.DISCARDED)
+        eventQueue[0]=discarded
         if (!persistQueue()) {
-            eventQueue.add(0, next)
-            logger("Could not durably remove invalid queued KOTH '${next.arenaId}'; keeping it until the removal can be persisted", null)
+            eventQueue[0]=next
+            queueDirty=false
+            logger("Could not durably mark invalid queued KOTH '${next.arenaId}'; keeping it until the marker can be persisted", null)
             return
         }
         logger("Removing permanently invalid queued KOTH '${next.arenaId}'", null)
+        reconcileDiscarded(discarded)
+    }
+
+    private fun reconcileDiscarded(entry: QueuedEvent): Boolean {
+        val acknowledged=runCatching { acknowledgeDiscarded(entry) }.getOrElse {
+            logger("Could not reconcile discarded KOTH '${entry.arenaId}'",it);false
+        }
+        if (!acknowledged) return false
+        return compactCompleted(entry)
     }
 
     private fun scheduledClaimAllowsActivation(event: QueuedEvent): Boolean {
@@ -970,7 +995,7 @@ class KothService(
         attempts = if (event.attempts == Int.MAX_VALUE) Int.MAX_VALUE else event.attempts + 1,
         nextAttemptAt = now.plusSeconds(QUEUE_RETRY_SECONDS),
         state = QueuedEventState.READY,
-        activationId = null,
+        activationId = event.activationId,
     )
 
     fun nextQueued(): QueuedEvent? = synchronized(this) { eventQueue.firstOrNull { it.state != QueuedEventState.COMPLETED } }
@@ -979,11 +1004,25 @@ class KothService(
 
     @Synchronized
     fun clearQueue(): Boolean {
+        // A discarded row is the durable retry record for an unacknowledged cancellation.
+        if (eventQueue.any { it.state == QueuedEventState.DISCARDED }) return false
+        if (queueDirty && !persistQueue()) return false
+        // An activation that is already live must finish through the normal lifecycle.
+        if (eventQueue.any { queued -> queued.state == QueuedEventState.ACTIVATING &&
+                    queued.activationId != null && events.containsKey(queued.activationId) }) return false
         val previous = eventQueue.toList()
         eventQueue.clear()
-        if (persistQueue()) return true
-        eventQueue.addAll(previous)
-        return false
+        eventQueue.addAll(previous.filter { it.state != QueuedEventState.COMPLETED &&
+            it.startSource == EventKind.SCHEDULED && it.occurrenceId != null }
+            .map { it.copy(state = QueuedEventState.DISCARDED) })
+        if (!persistQueue()) {
+            eventQueue.clear();eventQueue.addAll(previous);queueDirty=false
+            return false
+        }
+        while (eventQueue.isNotEmpty()) {
+            if (!reconcileDiscarded(eventQueue.first())) return false
+        }
+        return true
     }
 
     private fun persistQueue(): Boolean {

@@ -2,6 +2,7 @@ package net.badgersmc.ek.infrastructure.bukkit
 
 import net.badgersmc.ek.application.PlayerEconomy
 import net.badgersmc.ek.application.ProgressionClaim
+import net.badgersmc.ek.application.LegacyCrownClaimPolicy
 import net.badgersmc.ek.infrastructure.persistence.SqlProgressionStore
 import net.enthusia.loreitems.api.v1.LoreItemsServiceV1
 import net.enthusia.loreitems.api.v1.LoreDeliveryStatus
@@ -52,6 +53,7 @@ class ProgressionClaims(private val plugin: JavaPlugin, private val store: SqlPr
         }
     }
     private fun queueLore(c: ProgressionClaim): String {
+        if (LegacyCrownClaimPolicy.isLegacyRelicClaim(c)) return "Crown delivery is held for safety verification; contact staff."
         val service = runCatching { Bukkit.getServicesManager().load(LoreItemsServiceV1::class.java) }.getOrNull() ?: return "LoreItems unavailable; claim retained."
         if (!store.transition(c.id,c.player,"PENDING","SENDING")) return "Claim already reserved."
         try {

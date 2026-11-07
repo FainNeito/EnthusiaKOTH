@@ -67,6 +67,8 @@ class KothCommand(
     private val setup: ArenaSetupController? = null,
     private val settings: StaffSettingsController? = null,
     private val progression: ProgressionController? = null,
+    private val acceptCrownSacrifice: (String, String, UUID) -> Boolean = { _, _, _ -> false },
+    private val acceptCrownBinding: (String, String, UUID) -> Boolean = { _, _, _ -> false },
 ) : CommandExecutor, TabCompleter {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
@@ -76,6 +78,19 @@ class KothCommand(
             return true
         }
         when (args[0].lowercase()) {
+            "crown" -> {
+                if (sender !is Player) sender.sendMessage(lang.msg("command.error.not_a_player"))
+                else if (!sender.hasPermission("enthusiakoth.command")) sender.sendMessage(lang.msg("command.error.no_permission"))
+                else if (args.size==4 && args[1]=="accept-binding") {
+                    sender.sendMessage(if(acceptCrownBinding(args[2],args[3],sender.uniqueId))
+                        "You accepted the binding for this recovery final. Your current helmet will be preserved."
+                        else "That recovery final is unavailable or has already started.")
+                } else if (args.size != 4 || args[1] != "accept-helmet-loss") {
+                    sender.sendMessage("Winning this Crown final permanently consumes your equipped helmet and binds the Crown. To accept before the final starts, use /koth crown accept-helmet-loss <event> <revision>.")
+                } else if (acceptCrownSacrifice(args[2], args[3], sender.uniqueId)) {
+                    sender.sendMessage("You accepted the helmet sacrifice for this Crown final.")
+                } else sender.sendMessage("That Crown final is unavailable or has already started.")
+            }
             "help" -> sendHelp(sender, args.getOrNull(1).equals("all", true))
             "history", "reports", "readiness", "reconcile", "holds", "reviewmatch", "claims", "challenges", "eligibility", "results" -> progression?.command(sender,args.mapIndexed { i,s -> if(i==0) s.lowercase() else s }.toTypedArray())
             "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
@@ -258,6 +273,7 @@ class KothCommand(
             occurrences.forEach { occurrence ->
                 val time = occurrence.instant.atZone(cfg.schedule.zone).format(DateTimeFormatter.ofPattern("HH:mm"))
                 sender.sendMessage(lang.msg("command.schedule.entry_time", "time" to time))
+                if (sender.hasPermission("enthusiakoth.admin")) sender.sendMessage("Schedule ID (" + occurrence.teamMode + "): " + occurrence.id)
             }
         }
     }

@@ -45,6 +45,77 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 class KothQueueTest {
+    @Test fun `committed cancellation replays after failure before binding retirement`() {
+        val ds=org.sqlite.SQLiteDataSource().apply { url="jdbc:sqlite:${temp.resolve("discard-replay.db")}" }
+        val events=net.badgersmc.ek.infrastructure.persistence.SqlCrownEventStore(ds).also{it.init()}
+        val recovery=net.badgersmc.ek.infrastructure.persistence.SqlCrownRecoveryEvents(ds).also{it.init()}
+        ds.connection.use { c -> c.createStatement().use { it.execute("CREATE TABLE koth_matches(id TEXT PRIMARY KEY,winner TEXT)") } }
+        val binding=net.badgersmc.ek.infrastructure.persistence.RecoveryEventBinding("slot",UUID.randomUUID(),
+            CrownTenure(UUID.randomUUID(),UUID.randomUUID(),2))
+        events.plan(net.badgersmc.ek.infrastructure.persistence.CrownOccurrence("slot","missing",now,
+            net.badgersmc.ek.domain.CrownEventPurpose.RECOVERY_CROWN_FINAL,"test"))
+        assertTrue(recovery.assign(binding))
+        val schedule=temp.resolve("replay-schedule.dat").toFile();val queue=temp.resolve("replay-queue.dat").toFile()
+        fun fileStore()=FileOperationalStateStore(schedule,queue,{ _, _ -> })
+        val store=fileStore();store.save(listOf(QueuedEvent("missing",EventKind.SCHEDULED,now,occurrenceId="slot")))
+        val first=service(store,LockState.UNLOCKED,emptyMap(),discard={ entry ->
+            assertTrue(events.acknowledgeDiscard(entry.occurrenceId!!,entry.arenaId,entry.scheduledAt,entry.activationId))
+            error("injected failure after cancellation commit")
+        })
+        first.processQueue()
+        assertEquals(net.badgersmc.ek.infrastructure.persistence.CrownOccurrenceState.CANCELLED,events.read("slot")!!.state)
+        assertEquals(listOf(binding),recovery.active());assertEquals(QueuedEventState.DISCARDED,fileStore().load().single().state)
+        val restarted=service(fileStore(),LockState.UNLOCKED,emptyMap(),discard={ entry ->
+            events.acknowledgeDiscard(entry.occurrenceId!!,entry.arenaId,entry.scheduledAt,entry.activationId).also { if(it)recovery.retireEmpty() }
+        })
+        restarted.processQueue();assertTrue(recovery.active().isEmpty());assertTrue(fileStore().load().isEmpty())
+    }
+    @Test fun `clearing scheduled queue durably marks every occurrence before acknowledgement`() {
+        val rows=listOf(QueuedEvent("a",EventKind.SCHEDULED,now,occurrenceId="a"),
+            QueuedEvent("b",EventKind.SCHEDULED,now,occurrenceId="b"))
+        val store=InMemoryEventQueueStore(rows);val observed=mutableListOf<String>()
+        val first=service(store,LockState.UNLOCKED,emptyMap(),discard={ entry ->
+            assertTrue(store.load().all { it.state==QueuedEventState.DISCARDED })
+            observed.add(entry.occurrenceId!!);entry.occurrenceId!="b"
+        })
+        assertFalse(first.clearQueue());assertEquals(listOf("a","b"),observed)
+        assertEquals(listOf("b"),store.load().map { it.occurrenceId })
+        val restarted=service(store,LockState.UNLOCKED,emptyMap(),discard={true})
+        restarted.processQueue();assertTrue(store.load().isEmpty())
+    }
+    @Test fun `failed clear marker persistence keeps scheduled queue without acknowledgements`() {
+        val rows=listOf(QueuedEvent("a",EventKind.SCHEDULED,now,occurrenceId="a"));var acknowledgements=0
+        val store=FailingQueueStore(rows,failWhen={it.singleOrNull()?.state==QueuedEventState.DISCARDED})
+        val service=service(store,LockState.UNLOCKED,emptyMap(),discard={acknowledgements++;true})
+        assertFalse(service.clearQueue());assertEquals(rows,store.load());assertEquals(0,acknowledgements)
+        assertTrue(service.clearQueue());assertEquals(1,acknowledgements);assertTrue(store.load().isEmpty())
+    }
+    @Test fun `file backed discarded marker survives restart and cannot be cleared before acknowledgement`() {
+        val schedule=temp.resolve("discard-schedule.dat").toFile();val queue=temp.resolve("discard-queue.dat").toFile()
+        fun fileStore()=FileOperationalStateStore(schedule,queue,{ _, _ -> })
+        val store=fileStore();store.save(listOf(QueuedEvent("missing",EventKind.SCHEDULED,now,occurrenceId="slot")))
+        val first=service(store,LockState.UNLOCKED,emptyMap(),discard={false});first.processQueue()
+        assertFalse(first.clearQueue())
+        val reloaded=fileStore();assertEquals(QueuedEventState.DISCARDED,reloaded.load().single().state)
+        val restarted=service(reloaded,LockState.UNLOCKED,emptyMap(),discard={true});restarted.processQueue()
+        assertTrue(fileStore().load().isEmpty())
+    }
+    @Test fun `discard marker survives failed acknowledgement and replays after restart`() {
+        val store=InMemoryEventQueueStore(listOf(QueuedEvent("missing",EventKind.SCHEDULED,now,occurrenceId="slot")))
+        val first=service(store,LockState.UNLOCKED,emptyMap(),discard={false})
+        first.processQueue()
+        assertEquals(QueuedEventState.DISCARDED,store.load().single().state)
+        val restarted=service(store,LockState.UNLOCKED,emptyMap(),discard={true})
+        restarted.processQueue();assertTrue(store.load().isEmpty())
+    }
+    @Test fun `failed discard marker write never acknowledges cancellation`() {
+        var acknowledgements=0
+        val store=FailingQueueStore(listOf(QueuedEvent("missing",EventKind.SCHEDULED,now,occurrenceId="slot")),
+            failWhen={it.singleOrNull()?.state==QueuedEventState.DISCARDED})
+        val first=service(store,LockState.UNLOCKED,emptyMap(),discard={acknowledgements++;true})
+        first.processQueue();assertEquals(0,acknowledgements);assertEquals(QueuedEventState.READY,store.load().single().state)
+        first.processQueue();assertEquals(1,acknowledgements);assertTrue(store.load().isEmpty())
+    }
     private val observer = mockk<org.bukkit.entity.Player>(relaxed = true)
     @TempDir
     lateinit var temp: Path
@@ -510,6 +581,18 @@ class KothQueueTest {
         assertTrue(service.queuedEvents().isEmpty())
     }
 
+    @Test fun `terminal Crown slot cannot start or block the following slot`() {
+        val first = arena("closed")
+        val second = arena("open")
+        val queue = InMemoryEventQueueStore()
+        val service = service(queue, LockState.UNLOCKED, mapOf(first.id to first, second.id to second),
+            bind = { queued, _ -> queued.occurrenceId != "closed-slot" })
+        service.queueStart(first, EventKind.SCHEDULED, now, occurrenceId = "closed-slot")
+        service.queueStart(second, EventKind.SCHEDULED, now, occurrenceId = "open-slot")
+        service.processQueue()
+        assertEquals(second.id, service.activeEvent?.arena?.id)
+        assertTrue(queue.load().isEmpty())
+    }
     private fun service(
         store: EventQueueStore,
         lock: LockState,
@@ -517,6 +600,8 @@ class KothQueueTest {
         logs: MutableList<String> = mutableListOf(),
         clock: Clock = Clock.fixed(now, ZoneOffset.UTC),
         lockProvider: () -> LockState = { lock },
+        bind: (QueuedEvent, UUID) -> Boolean = { _, _ -> true },
+        discard: (QueuedEvent) -> Boolean = { true },
     ): KothService {
         val lang = mockk<LangService>(relaxed = true)
         every { lang.msg(any(), *anyVararg()) } returns Component.empty()
@@ -536,6 +621,8 @@ class KothQueueTest {
             discordWebhook = mockk<DiscordWebhookService>(relaxed = true),
             zoneBorderService = mockk<ZoneBorderService>(relaxed = true),
             lang = lang,
+            bindScheduledMatch = bind,
+            acknowledgeDiscarded = discard,
             arenaResolver = arenaMap::get,
             queueStore = store,
             clock = clock,
