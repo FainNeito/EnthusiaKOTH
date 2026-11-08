@@ -50,7 +50,7 @@ class CrownRecoveryRuntime(private val plugin:JavaPlugin,source:DataSource,priva
             if(events.plan(slot)==CrownOccurrenceWrite.CONFLICT || events.read(id)!=slot)return
             if(binding!=null && !bindings.assign(binding))return
             send(if(purpose==CrownEventPurpose.HOLDER_CHALLENGE) "Crown holder challenge at $arena. Meaningful participation counts toward Crown activity."
-                else "Crown of Sorrow recovery final at $arena. The winner receives the existing bound Crown; their helmet is preserved. Accept before the start with /ekoth crown accept-binding $id ${p.revision}")
+                else "Crown of Sorrow recovery final at $arena. The winner receives the existing bound Crown, which replaces and destroys their worn helmet. Accept before the start with /ekoth crown accept-binding $id ${p.revision}")
             bindings.announced(id,p.revision,Instant.now())
         }
         if(id in s.getStringList("activity-occurrences")){announce(CrownEventPurpose.HOLDER_CHALLENGE);return}

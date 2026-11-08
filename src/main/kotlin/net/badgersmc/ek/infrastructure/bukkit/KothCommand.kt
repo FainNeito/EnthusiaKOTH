@@ -83,7 +83,7 @@ class KothCommand(
                 else if (!sender.hasPermission("enthusiakoth.command")) sender.sendMessage(lang.msg("command.error.no_permission"))
                 else if (args.size==4 && args[1]=="accept-binding") {
                     sender.sendMessage(if(acceptCrownBinding(args[2],args[3],sender.uniqueId))
-                        "You accepted the binding for this recovery final. Your current helmet will be preserved."
+                        "You accepted the binding for this recovery final. If you win, the Crown replaces and destroys your worn helmet."
                         else "That recovery final is unavailable or has already started.")
                 } else if (args.size != 4 || args[1] != "accept-helmet-loss") {
                     sender.sendMessage("Winning this Crown final permanently consumes your equipped helmet and binds the Crown. To accept before the final starts, use /koth crown accept-helmet-loss <event> <revision>.")

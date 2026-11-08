@@ -50,15 +50,22 @@ class SqlCrownRecoveryEvents(private val source:DataSource) {
     fun cancel(match:UUID)=source.connection.use { c -> c.prepareStatement("UPDATE koth_crown_occurrences SET state='CANCELLED' WHERE match_id=? AND state='STARTED'").use { s ->
         s.setString(1,match.toString());s.executeUpdate()
     } }
-    /** Releases unawarded bindings: cancelled, no winner, or a final rejection. HELD stays bound for staff review. */
+    /**
+     * Releases unawarded bindings: cancelled, no winner, a final rejection, or an approved winner who never accepted
+     * the binding (consent closes when the final starts, so that award can never happen). HELD stays bound for staff review.
+     */
     fun retireEmpty()=source.connection.use { c -> c.createStatement().use { s ->
         // A store that was never initialised holds no rejection, so its clause is left out rather than failing.
         val tables=s.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('koth_match_decisions','koth_reward_audit')")
             .use { r -> buildSet { while(r.next()) add(r.getString(1)) } }
+        val consent=s.executeQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='koth_crown_final_consent'").use { it.next() }
         val rejected=buildList {
             add("m.winner IS NULL")
             if("koth_match_decisions" in tables) add("EXISTS(SELECT 1 FROM koth_match_decisions d WHERE d.event=m.id AND d.status='REJECTED')")
             if("koth_reward_audit" in tables) add("EXISTS(SELECT 1 FROM koth_reward_audit a WHERE a.event_id=m.id AND a.accepted=0)")
+            if("koth_match_decisions" in tables && consent) add("""(EXISTS(SELECT 1 FROM koth_match_decisions d WHERE d.event=m.id AND d.status='APPROVED')
+                AND NOT EXISTS(SELECT 1 FROM koth_crown_final_consent f WHERE f.occurrence_id=o.occurrence_id
+                    AND f.policy_revision=o.policy_revision AND 'solo:'||f.player=m.winner))""")
         }.joinToString(" OR ")
         s.executeUpdate("""UPDATE koth_crown_recovery_events SET retired=1 WHERE match_id IS NULL AND occurrence IN
             (SELECT o.occurrence_id FROM koth_crown_occurrences o LEFT JOIN koth_matches m ON m.id=o.match_id

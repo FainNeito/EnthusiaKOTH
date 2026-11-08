@@ -78,12 +78,13 @@ class CrownQuestCreditTest {
         val restarted=SqlCrownRecoveryEvents(ds).also{it.init();it.retireEmpty()}
         assertTrue(restarted.active().isEmpty());assertTrue(restarted.assign(binding.copy(occurrence="later")))
     }
-    @Test fun `won final releases its binding only on a final rejection`() {
+    @Test fun `won final releases its binding on a final rejection or an unconsented winner`() {
         val ds=source();setup(ds);val events=SqlCrownEventStore(ds).also{it.init()}
         val recovery=SqlCrownRecoveryEvents(ds).also{it.init()}
-        fun completed(name:String,status:String,accepted:Int):RecoveryEventBinding {
+        fun completed(name:String,status:String,accepted:Int,consented:Boolean=true):RecoveryEventBinding {
             val m=match();val binding=RecoveryEventBinding(name,UUID.randomUUID(),CrownTenure(UUID.randomUUID(),player,2))
             events.plan(CrownOccurrence(name,"hill",now,CrownEventPurpose.RECOVERY_CROWN_FINAL,rules.revision))
+            if(consented)assertTrue(events.acceptRecoveryBinding(name,rules.revision,player))
             assertTrue(recovery.assign(binding));assertTrue(events.start(name,m.eventId));recovery.finish(m.eventId,events)
             seed(ds,m,status=status,accepted=accepted);return binding
         }
@@ -91,8 +92,11 @@ class CrownQuestCreditTest {
         val audit=completed("audit-rejected","APPROVED",0)
         val held=completed("held","HELD",1)
         val approved=completed("approved","APPROVED",1)
+        val unconsented=completed("unconsented","APPROVED",1,consented=false)
+        val heldUnconsented=completed("held-unconsented","HELD",1,consented=false)
         val restarted=SqlCrownRecoveryEvents(ds).also{it.init();it.retireEmpty()}
-        assertEquals(setOf(held,approved),restarted.active().toSet())
+        assertEquals(setOf(held,approved,heldUnconsented),restarted.active().toSet())
+        assertTrue(restarted.assign(unconsented.copy(occurrence="unconsented-later")))
         assertTrue(restarted.assign(rejected.copy(occurrence="rejected-later")))
         assertTrue(restarted.assign(audit.copy(occurrence="audit-later")))
         ds.connection.use { c -> c.prepareStatement("UPDATE koth_match_decisions SET status='REJECTED' WHERE status='HELD'").use { it.executeUpdate() } }
