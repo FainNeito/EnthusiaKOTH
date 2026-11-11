@@ -17,7 +17,7 @@ Spec: existing PROG-001..008 and accepted 10% contributor/lifetime policy. Prove
 | contender / Contender | 5 | 3 | 2 | 3 | 1,800s (30m) | koth_contender | none |
 | veteran / Warzone Veteran | 25 | 10 | 3 | 14 | 10,800s (3h) | koth_veteran | none |
 | sovereign_blade / Sovereign Blade | 100 | 25 | 4 | 30 | 43,200s (12h) | koth_sovereign_blade | koth_sovereign_blade |
-| sovereign_crown / Sovereign Crown | 150 | 35 | 4 | 45 | 64,800s (18h) | koth_sovereign_crown | koth_sovereign_crown |
+| sovereign_crown / Crown of Sorrow | 150 | 35 | 4 | 45 | 64,800s (18h) | koth_sovereign_crown | koth_sovereign_crown |
 
 All five metrics apply per player. Days are distinct UTC dates with accepted eligible wins, not consecutive days or the scheduling timezone. Opponents are conservatively merged side identities, not unique humans. Arenas are distinct stored IDs: do not rename/recreate areas to inflate variety. Relic drafts need four accepted arenas. Display parents do not add prerequisites to KOTH's five-metric rules. Full renderer descriptions must change with thresholds; the pilot derives descriptions from KOTH. Install only one renderer profile.
 

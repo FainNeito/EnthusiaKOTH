@@ -54,7 +54,7 @@ installed or enabled by this document.
 
 The existing five-metric challenges are drafts, still disabled: Contender
 5 wins/3 opposing sides/2 arenas/3 days/1,800 scoring seconds; Veteran
-25/10/3/14/10,800; Sovereign Blade 100/25/4/30/43,200; Sovereign Crown
+25/10/3/14/10,800; Sovereign Blade 100/25/4/30/43,200; Crown of Sorrow
 150/35/4/45/64,800. All five criteria and accepted-match eligibility must hold.
 Calibrate against real contested TEST matches before choosing production values.
 Use disposable TEST definitions and separate TEST ownership for reward trials.
