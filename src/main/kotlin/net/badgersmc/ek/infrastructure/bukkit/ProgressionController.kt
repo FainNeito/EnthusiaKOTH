@@ -144,7 +144,7 @@ class ProgressionController(
             }
             "history" -> store.history(100).forEach { m ->
                 add(MenuEntry(if(m.winner==null) Material.GRAY_DYE else Material.LIME_DYE,
-                    arenaName(m.arena).append(Component.text(" - ${playedAt(m.at)}",MenuStyle.COPPER)),listOf(
+                    arenaName(m.arena).append(Component.text(" - ${playedAt(m.at)}",MenuStyle.MUTED)),listOf(
                         line("Winner",winnerName(m.winner)),line("Result",MenuStyle.label(m.detail.substringBefore(';').ifBlank { "-" })),
                         hint("Click to print the full report")))) { player.closeInventory(); command(player,arrayOf("reports",m.id)) }
             }
@@ -153,7 +153,7 @@ class ProgressionController(
                 val (statusText,statusColor)=claimStatus(c.status)
                 add(MenuEntry(claimIcon(c.kind),Component.text(claimKind(c.kind),if(pending) MenuStyle.GOLD else MenuStyle.CREAM),listOfNotNull(
                     if(c.kind=="MONEY") line("Amount",java.math.BigDecimal.valueOf(c.amount,2).toPlainString()) else line("Reward",MenuStyle.label(c.value)),
-                    Component.text("Status: ",MenuStyle.COPPER).append(Component.text(statusText,statusColor)),
+                    Component.text("Status: ",MenuStyle.MUTED).append(Component.text(statusText,statusColor)),
                     c.detail.takeIf { it.isNotBlank() }?.let(::text),
                     hint(when { c.kind=="CHOICE" && pending -> "Click to choose a package"; pending -> "Click to claim"; else -> "Click to check delivery" })),
                     glow=pending)) {
@@ -189,7 +189,7 @@ class ProgressionController(
     private fun choose(player:Player,c:ProgressionClaim) {
         val options=store.options(c.id,player.uniqueId)
         menu(player,"Choose a reward package",false,options.map { MenuEntry(Material.CHEST,Component.text(it,MenuStyle.GOLD),listOf(
-                text("An equal share of this event's reward pool."),Component.text("You can't change this later.",MenuStyle.ROSE),hint("Click to choose"))) },
+                text("An equal share of this event's reward pool."),Component.text("You can't change this later.",MenuStyle.CORAL),hint("Click to choose"))) },
             options.indices.associateWith { i -> { confirmChoice(player,c,options[i]) } },0,{}, { open(player,"claims") },"Back")
     }
     /** A permanent choice gets its own yes/no screen. */
@@ -197,14 +197,14 @@ class ProgressionController(
         val actions=mapOf<Int,()->Unit>(
             CONFIRM_SLOT to {
                 val chosen=store.choose(c.id,player.uniqueId,option)
-                player.sendMessage(Component.text(if(chosen) "Package selected." else "That package is no longer available.",if(chosen) MenuStyle.GOLD else MenuStyle.ROSE))
+                player.sendMessage(Component.text(if(chosen) "Package selected." else "That package is no longer available.",if(chosen) MenuStyle.GOLD else MenuStyle.CORAL))
                 open(player,"claims")
             },
             BACK_SLOT to { choose(player,c) })
         val holder=ProgressionMenu(player.uniqueId,false,actions)
         holder.backing=Bukkit.createInventory(holder,27,MenuStyle.title("Choose $option?"))
-        holder.backing.setItem(CONFIRM_SLOT,MenuStyle.item(Material.LIME_CONCRETE,Component.text("Choose $option",MenuStyle.GOLD),listOf(Component.text("This can't be changed later.",MenuStyle.ROSE))))
-        holder.backing.setItem(BACK_SLOT,MenuStyle.item(Material.RED_CONCRETE,Component.text("Go back",MenuStyle.ROSE),listOf(text("Pick a different package."))))
+        holder.backing.setItem(CONFIRM_SLOT,MenuStyle.item(Material.LIME_CONCRETE,Component.text("Choose $option",MenuStyle.GOLD),listOf(Component.text("This can't be changed later.",MenuStyle.CORAL))))
+        holder.backing.setItem(BACK_SLOT,MenuStyle.item(Material.RED_CONCRETE,Component.text("Go back",MenuStyle.CORAL),listOf(text("Pick a different package."))))
         MenuStyle.fill(holder.backing)
         player.openInventory(holder.backing)
     }
@@ -228,7 +228,7 @@ class ProgressionController(
         shown.forEachIndexed { i,e -> holder.backing.setItem(slots[i],MenuStyle.item(e.icon,e.name,e.lore,e.glow)) }
         if(page>0) holder.backing.setItem(footer,MenuStyle.item(Material.ARROW,Component.text("Previous page",MenuStyle.GOLD)))
         if(page+1<pages) holder.backing.setItem(footer+8,MenuStyle.item(Material.ARROW,Component.text("Next page",MenuStyle.GOLD)))
-        holder.backing.setItem(footer+4,if(backName=="Close") MenuStyle.item(Material.BARRIER,Component.text("Close",MenuStyle.ROSE))
+        holder.backing.setItem(footer+4,if(backName=="Close") MenuStyle.item(Material.BARRIER,Component.text("Close",MenuStyle.CORAL))
             else MenuStyle.item(Material.ARROW,Component.text(backName,MenuStyle.GOLD)))
         if(tags) holder.backing.setItem(footer+3,MenuStyle.item(Material.CHEST,Component.text("Open /rewards",MenuStyle.GOLD)))
         MenuStyle.fill(holder.backing)
@@ -253,16 +253,16 @@ class ProgressionController(
         .map(::text)
     private fun resultState(status:String,qualifying:Boolean):Triple<Material,String,net.kyori.adventure.text.format.TextColor> = when(status) {
         "HELD" -> Triple(Material.YELLOW_DYE,"Under review",MenuStyle.GOLD)
-        "REJECTED" -> Triple(Material.RED_DYE,"Not counted",MenuStyle.ROSE)
-        "APPROVED" -> if(qualifying) Triple(Material.LIME_DYE,"Counted",MenuStyle.GOLD) else Triple(Material.GRAY_DYE,"No credit",MenuStyle.COPPER)
-        else -> Triple(Material.GRAY_DYE,"Older match",MenuStyle.COPPER)
+        "REJECTED" -> Triple(Material.RED_DYE,"Not counted",MenuStyle.CORAL)
+        "APPROVED" -> if(qualifying) Triple(Material.LIME_DYE,"Counted",MenuStyle.GOLD) else Triple(Material.GRAY_DYE,"No credit",MenuStyle.MUTED)
+        else -> Triple(Material.GRAY_DYE,"Older match",MenuStyle.MUTED)
     }
     private fun claimIcon(kind:String)=when(kind) { "MONEY" -> Material.GOLD_INGOT; "LORE" -> Material.ENCHANTED_BOOK; "CHOICE" -> Material.BUNDLE; else -> Material.PAPER }
     private fun claimKind(value:String)=when(value) { "MONEY" -> "Coins"; "LORE" -> "Item"; "CHOICE" -> "Reward package"; else -> MenuStyle.label(value) }
     private fun claimStatus(value:String):Pair<String,net.kyori.adventure.text.format.TextColor> = when(value) {
         "PENDING" -> "Ready to claim" to MenuStyle.GOLD; "SENDING" -> "Being delivered" to MenuStyle.GOLD
         "QUEUED" -> "Queued for delivery" to MenuStyle.GOLD; "REVIEW" -> "Waiting for staff review" to MenuStyle.GOLD
-        "PAID", "GRANTED", "DISPATCHED" -> "Delivered" to MenuStyle.COPPER; else -> MenuStyle.label(value) to MenuStyle.COPPER
+        "PAID", "GRANTED", "DISPATCHED" -> "Delivered" to MenuStyle.MUTED; else -> MenuStyle.label(value) to MenuStyle.MUTED
     }
     private companion object {
         const val PAGE_SIZE=28

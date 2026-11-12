@@ -45,7 +45,7 @@ class ArenaNameRendererTest {
         service.registerGlobalResolver("entered", Placeholder.parsed("entered", "<aqua>FainNoir"))
         val result = service.arenaMsg("koth.enter", "koth_name" to "&#12ABEF&lSummit 🏆".arenaComponent(), "captime" to "3m")
         assertTrue(plain.serialize(result).contains("FainNoir entered the Summit 🏆 KOTH! Cap in 3m!"))
-        assertTrue(plain.serialize(result).contains("Koth"))
+        assertTrue(plain.serialize(result).startsWith("[KOTH] › "))
         val rendered = leaves(result)
         val name = rendered.first { it.first.contains("Summit") }.second
         val after = rendered.first { it.first.contains("KOTH!") }.second
@@ -61,8 +61,8 @@ class ArenaNameRendererTest {
         assertFalse(plain.serialize(result).contains("TextComponent"))
         val rendered = leaves(result)
         assertEquals(TextColor.color(0xFF5555), rendered.first { it.first.contains("Summit") }.second.color())
-        // The time keeps the theme cream from the bossbar template rather than inheriting the arena name colour.
-        assertEquals(TextColor.color(0xFFF6E0), rendered.first { it.first.contains("1m 45s") }.second.color())
+        // The time keeps the studio gold from the bossbar template rather than inheriting the arena name colour.
+        assertEquals(TextColor.color(0xFFCF1F), rendered.first { it.first.contains("1m 45s") }.second.color())
     }
     @Test fun `scheduled warning renders a formatted name using the real language service`() {
         val result = lang().arenaMsg("koth.warning_minutes", "koth_name" to "&#FFAA00Summit 🏆".arenaComponent(), "minutes" to "5")

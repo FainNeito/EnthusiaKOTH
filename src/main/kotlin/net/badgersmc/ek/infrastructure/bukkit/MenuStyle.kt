@@ -10,15 +10,15 @@ import org.bukkit.inventory.ItemStack
 
 /** One look for every KOTH menu: upright text, a quiet background and plain-language values. */
 internal object MenuStyle {
-    /** The Enthusia website palette (Enthusia-Pack website-message-sound-theme): cream text, gold accents, copper labels. */
+    /** The Enthusia message studio palette ("Balanced variation"): cream text, gold names and values, muted secondary text, coral problems. */
     val CREAM: TextColor = TextColor.color(0xFFF6E0)
     val GOLD: TextColor = TextColor.color(0xFFCF1F)
-    val COPPER: TextColor = TextColor.color(0xAD914B)
-    val ROSE: TextColor = TextColor.color(0xFFD0C6)
+    val MUTED: TextColor = TextColor.color(0xBFAE98)
+    val CORAL: TextColor = TextColor.color(0xFF8F82)
     private val SHADOW: ShadowColor = ShadowColor.shadowColor(0, 0, 0, 255)
 
-    /** Menu titles match the theme's KOTH title: cream with a shadow. */
-    fun title(value: String): Component = Component.text(value, CREAM).shadowColor(SHADOW)
+    /** Menu titles are gold with a shadow, like the studio's KOTH menu title. */
+    fun title(value: String): Component = Component.text(value, GOLD).shadowColor(SHADOW)
 
     /** Minecraft italicises custom item text unless told otherwise. */
     fun upright(text: Component): Component = text.decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE)
@@ -36,7 +36,7 @@ internal object MenuStyle {
 
     /** A label and its value, the way every menu line reads. */
     fun line(label: String, value: Any?): Component =
-        Component.text("$label: ", COPPER).append(Component.text(value?.toString() ?: "-", CREAM))
+        Component.text("$label: ", CREAM).append(Component.text(value?.toString() ?: "-", GOLD))
 
     fun hint(value: String): Component = Component.text(value, GOLD)
 
