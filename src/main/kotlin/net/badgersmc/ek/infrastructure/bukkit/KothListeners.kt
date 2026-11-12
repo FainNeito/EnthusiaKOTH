@@ -50,6 +50,15 @@ class KothListeners(
     }
 
     @EventHandler
+    fun onStartConfirmClick(event: InventoryClickEvent) {
+        val holder = event.view.topInventory.holder as? KothStartConfirmHolder ?: return
+        event.isCancelled = true
+        if (event.clickedInventory == event.view.topInventory && event.whoClicked is org.bukkit.entity.Player) {
+            command.handleConfirmClick(event.whoClicked as org.bukkit.entity.Player, event.slot, holder)
+        }
+    }
+
+    @EventHandler
     fun onFireworkDamage(event: EntityDamageByEntityEvent) {
         if (event.damager is Firework && (event.damager as Firework).scoreboardTags.contains(FireworkCelebrationService.EKOTH_FIREWORK_TAG)) {
             event.isCancelled = true

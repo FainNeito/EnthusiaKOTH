@@ -7,6 +7,8 @@ import net.badgersmc.ek.infrastructure.persistence.SqlProgressionStore
 import net.badgersmc.ek.infrastructure.protection.WorldGuardRegionService
 import net.badgersmc.ek.infrastructure.lumaguilds.LumaGuildsAdapter
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
+import net.badgersmc.ek.infrastructure.i18n.arenaComponent
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.command.CommandSender
@@ -21,6 +23,8 @@ import org.bukkit.inventory.ItemStack
 import net.lumalyte.lg.api.events.*
 import net.badgersmc.ek.api.KothRewardsMenuV1
 import org.bukkit.plugin.java.JavaPlugin
+
+internal data class MenuEntry(val icon:Material, val name:Component, val lore:List<Component>, val glow:Boolean=false)
 
 internal class ProgressionMenu(val owner:java.util.UUID, val staff:Boolean, val actions:Map<Int,()->Unit>):InventoryHolder {
     lateinit var backing:Inventory
@@ -41,6 +45,10 @@ class ProgressionController(
         open(online,page)
         return true
     }
+    /** Tab-completion sources for staff commands. */
+    fun heldMatchIds():List<String> = store.decisions().map { it.id }
+    fun recentMatchIds():List<String> = store.history(20).map { it.id }
+    fun reviewClaimIds():List<String> = store.reviewClaimIds()
     fun command(sender:CommandSender,args:Array<out String>) {
         val staff=args[0] in setOf("history","reports","readiness","reconcile","holds","reviewmatch")
         if(staff && !sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage("KOTH administrator permission required."); return }
@@ -102,103 +110,168 @@ class ProgressionController(
         if(sender is Player) add("Observed roster history: ${store.rosterAge(sender.uniqueId,java.time.Instant.now())?.let { "$it seconds since last change" } ?: "unknown"}")
     }
     private fun open(player:Player,page:String,index:Int=0) {
-        val entries=mutableListOf<Pair<String,List<String>>>()
+        val entries=mutableListOf<MenuEntry>()
         val actions=mutableMapOf<Int,()->Unit>()
+        fun add(entry:MenuEntry, action:(()->Unit)?=null) { action?.let { actions[entries.size]=it }; entries+=entry }
         when(page) {
             "home" -> {
-                entries += "Challenges" to listOf("Difficult milestones and exclusive prizes", "Click to see requirements and progress")
-                actions[0]={ open(player,"challenges") }
-                entries += "Your rewards" to listOf("Claim earned rewards or choose a package", "Pending delivery and staff reviews appear here")
-                actions[1]={ open(player,"claims") }
-                entries += "Match results" to listOf("Your recent public matches and challenge credit")
-                actions[2]={ open(player,"results") }
-                entries += "How to earn" to listOf("Score for your guild in qualifying public matches.", "Allied sides do not count as independent opposition.", "Private tests never earn challenges.", "Click for your eligibility details.")
-                actions[3]={ player.closeInventory(); eligibility(player).forEach { player.sendMessage(it) } }
-                entries += "Arenas" to listOf("View current events or start an arena")
-                actions[4]={ player.performCommand("ekoth gui") }
-                entries += "Schedule" to listOf("See upcoming public events")
-                actions[5]={ player.closeInventory(); player.performCommand("ekoth schedule") }
-                entries += "Leaderboards" to listOf("View recorded KOTH standings")
-                actions[6]={ player.closeInventory(); player.performCommand("ekoth top") }
+                val ready=store.claims(player.uniqueId).count { it.status=="PENDING" }
+                add(entry(Material.DIAMOND_SWORD,"Challenges",listOf(text("Long-term goals and exclusive prizes."),hint("Click to see your progress")))) { open(player,"challenges") }
+                add(entry(Material.CHEST,"Your rewards",listOfNotNull(text("Claim what you have earned."),
+                    if(ready>0) line("Ready to claim",ready) else null,hint("Click to open")),glow=ready>0)) { open(player,"claims") }
+                add(entry(Material.BOOK,"Match results",listOf(text("Your recent public matches."),hint("Click to open")))) { open(player,"results") }
+                add(entry(Material.OAK_SIGN,"How to earn",listOf(text("Score for your side in public matches."),
+                    text("Allies don't count as opponents."),text("Private tests never count."),hint("Click for the full rules")))) {
+                    player.closeInventory(); eligibility(player).forEach { player.sendMessage(it) }
+                }
+                add(entry(Material.BEACON,"Arenas",listOf(text("See what's running or start an arena."),hint("Click to open")))) { player.performCommand("ekoth gui") }
+                add(entry(Material.CLOCK,"Schedule",listOf(text("When the next events start."),hint("Click to show in chat")))) {
+                    player.closeInventory(); player.performCommand("ekoth schedule")
+                }
+                add(entry(Material.GOLD_INGOT,"Leaderboards",listOf(text("Top players by wins."),hint("Click to show in chat")))) {
+                    player.closeInventory(); player.performCommand("ekoth top")
+                }
             }
             "results" -> {
-                store.results(player.uniqueId,100).forEach { result ->
-                val slot=entries.size
-                entries.add("${result.arena}: ${result.status}" to listOf(result.at.toString(),"Your scoring: ${result.scoringSeconds}s",
-                    "Challenge credit: ${result.qualifying}",result.detail,"Click to view your claims"))
-                actions[slot]={ open(player,"claims") }
+                store.results(player.uniqueId,100).forEach { r ->
+                    val (icon,state,color)=resultState(r.status,r.qualifying)
+                    add(MenuEntry(icon,arenaName(r.arena).append(Component.text(" - $state",color)),listOf(
+                        line("Played",playedAt(r.at)),line("Your scoring time",MenuStyle.duration(r.scoringSeconds)),
+                        line("Counts toward challenges",if(r.qualifying) "Yes" else "No"))+wrap(r.detail)+hint("Click to see your rewards"))) { open(player,"claims") }
                 }
                 val progress=store.progress(player.uniqueId)
-                val slot=entries.size
-                entries.add("Your challenge progress" to (progress?.map { "${it.key}: ${it.value}%" } ?: listOf("Progression inactive or unavailable")))
-                actions[slot]={ open(player,"challenges") }
+                add(MenuEntry(Material.EXPERIENCE_BOTTLE,Component.text("Challenge progress",NamedTextColor.GOLD),
+                    (progress?.map { line(MenuStyle.label(it.key),"${it.value}%") } ?: listOf(text("Not tracked yet.")))+hint("Click to see challenges"))) { open(player,"challenges") }
             }
-            "history" -> store.history(100).forEach { match ->
-                val slot=entries.size
-                entries.add("${match.arena} ${match.at}" to listOf(match.winner ?: "No winner",match.detail,"Click for report"))
-                actions[slot]={ player.closeInventory(); command(player,arrayOf("reports",match.id)) }
+            "history" -> store.history(100).forEach { m ->
+                add(MenuEntry(if(m.winner==null) Material.GRAY_DYE else Material.LIME_DYE,
+                    arenaName(m.arena).append(Component.text(" - ${playedAt(m.at)}",NamedTextColor.GRAY)),listOf(
+                        line("Winner",winnerName(m.winner)),line("Result",MenuStyle.label(m.detail.substringBefore(';').ifBlank { "-" })),
+                        hint("Click to print the full report")))) { player.closeInventory(); command(player,arrayOf("reports",m.id)) }
             }
             "claims" -> store.claims(player.uniqueId).forEach { c ->
-                val slot=entries.size
-                entries.add("${claimKind(c.kind)}: ${claimStatus(c.status)}" to listOf(
-                    if(c.kind=="MONEY") "Currency: ${java.math.BigDecimal.valueOf(c.amount,2).toPlainString()}" else label(c.value),c.detail,
-                    if(c.status=="PENDING") "Click to claim or choose" else "Click to check delivery"))
-                actions[slot]={
-                    if(c.kind=="CHOICE" && c.status=="PENDING") choose(player,c)
+                val pending=c.status=="PENDING"
+                val (statusText,statusColor)=claimStatus(c.status)
+                add(MenuEntry(claimIcon(c.kind),Component.text(claimKind(c.kind),if(pending) NamedTextColor.GREEN else NamedTextColor.WHITE),listOfNotNull(
+                    if(c.kind=="MONEY") line("Amount",java.math.BigDecimal.valueOf(c.amount,2).toPlainString()) else line("Reward",MenuStyle.label(c.value)),
+                    Component.text("Status: ",NamedTextColor.GRAY).append(Component.text(statusText,statusColor)),
+                    c.detail.takeIf { it.isNotBlank() }?.let(::text),
+                    hint(when { c.kind=="CHOICE" && pending -> "Click to choose a package"; pending -> "Click to claim"; else -> "Click to check delivery" })),
+                    glow=pending)) {
+                    if(c.kind=="CHOICE" && pending) choose(player,c)
                     else { player.sendMessage(claims.redeem(player.uniqueId,c.id)); open(player,"claims",index) }
                 }
             }
             else -> {
                 val progress=store.progress(player.uniqueId)
                 settings.policy().challenges.forEach { rule ->
-                    entries.add("${label(rule.id)}: ${progress?.get(rule.id)?.let { "$it%" } ?: "Inactive or unavailable"}" to listOf(
-                        "${rule.wins} wins / ${rule.opponents} independent sides / ${rule.arenas} arenas",
-                        "${rule.days} separate UTC days / ${rule.seconds} scoring seconds",
-                        if(rule.exclusive) "One recipient ever: ${if(store.exclusiveOwner(rule.id)==null) "unclaimed" else "already awarded"}" else "Individual achievement",
-                        if(progress==null) "Inactive or provider unavailable" else "Verified KOTH records only"))
+                    val percent=progress?.get(rule.id)
+                    add(MenuEntry(when { rule.exclusive -> Material.NETHER_STAR; rule.wins>=25 -> Material.DIAMOND_SWORD; else -> Material.IRON_SWORD },
+                        Component.text(MenuStyle.label(rule.id),NamedTextColor.GOLD),listOf(
+                            line("Progress",percent?.let { "$it%" } ?: "Not tracked yet"),Component.empty(),
+                            line("Wins",rule.wins),line("Different opponents",rule.opponents),line("Different arenas",rule.arenas),
+                            line("Separate days",rule.days),line("Time scoring",MenuStyle.duration(rule.seconds)),Component.empty(),
+                            if(!rule.exclusive) text("Every player can earn this.")
+                            else Component.text(if(store.exclusiveOwner(rule.id)==null) "Only one player can ever earn this." else "Already earned by another player.",NamedTextColor.LIGHT_PURPLE)),
+                        glow=(percent ?: 0)>=100))
                 }
             }
         }
         if(entries.isEmpty()) entries += when(page) {
-            "claims" -> "No earned rewards yet" to listOf("Complete qualifying matches and challenges.", "Use Challenges to see the requirements.")
-            "results" -> "No public match results yet" to listOf("Your recent public matches will appear here.")
-            else -> "Nothing to show yet" to listOf("Ask staff if this feature is awaiting TEST.")
+            "claims" -> entry(Material.LIGHT_GRAY_DYE,"No rewards yet",listOf(text("Win qualifying public matches and challenges."),text("Challenges shows what to aim for.")))
+            "results" -> entry(Material.LIGHT_GRAY_DYE,"No matches yet",listOf(text("Your public matches will appear here.")))
+            else -> entry(Material.LIGHT_GRAY_DYE,"Nothing here yet",listOf(text("Ask staff if this feature is still being set up.")))
         }
-        menu(player,"KOTH ${if(page=="claims") "rewards" else page}",page=="history",entries,actions,index,
+        val title=when(page) { "home" -> "KOTH"; "claims" -> "Your KOTH rewards"; "results" -> "Your match results"; "history" -> "Match history"; else -> "KOTH challenges" }
+        menu(player,title,page=="history",entries,actions,index,
             { open(player,page,it) }, { if(page=="home") player.closeInventory() else open(player,"home") },
-            if(page=="home") "Close" else "Back to KOTH")
+            if(page=="home") "Close" else "Back")
     }
     private fun choose(player:Player,c:ProgressionClaim) {
         val options=store.options(c.id,player.uniqueId)
-        menu(player,"Choose reward package",false,options.map { it to listOf("Same fixed event pool share", "Choice is permanent") },
-            options.indices.associateWith { { player.sendMessage(if(store.choose(c.id,player.uniqueId,options[it])) "Package selected." else "Choice unavailable."); open(player,"claims") } },0,{}, { open(player,"claims") },"Back to your rewards")
+        menu(player,"Choose a reward package",false,options.map { MenuEntry(Material.CHEST,Component.text(it,NamedTextColor.GOLD),listOf(
+                text("An equal share of this event's reward pool."),Component.text("You can't change this later.",NamedTextColor.RED),hint("Click to choose"))) },
+            options.indices.associateWith { i -> { confirmChoice(player,c,options[i]) } },0,{}, { open(player,"claims") },"Back")
     }
-    private fun menu(player:Player,title:String,staff:Boolean,entries:List<Pair<String,List<String>>>,allActions:Map<Int,()->Unit>,index:Int,next:(Int)->Unit,back:()->Unit,backName:String) {
-        val page=index.coerceAtMost((entries.size-1).coerceAtLeast(0)/28)
-        val actions=mutableMapOf<Int,()->Unit>()
-        entries.drop(page*28).take(28).indices.forEach { slot -> allActions[page*28+slot]?.let { actions[slot]=it } }
-        if(page>0) actions[45]={ next(page-1) }
-        if((page+1)*28<entries.size) actions[53]={ next(page+1) }
-        actions[49]=back
-        if(Bukkit.getPluginManager().getPlugin("EnthusiaTags")?.isEnabled==true) actions[48]={ player.performCommand("rewards") }
-        val holder=ProgressionMenu(player.uniqueId,staff,actions)
-        holder.backing=Bukkit.createInventory(holder,54,Component.text("$title - ${page+1}"))
-        entries.drop(page*28).take(28).forEachIndexed { slot,(name,lines) -> holder.backing.setItem(slot,item(Material.PAPER,name,lines)) }
-        if(page>0) holder.backing.setItem(45,item(Material.ARROW,"Previous",emptyList()))
-        if((page+1)*28<entries.size) holder.backing.setItem(53,item(Material.ARROW,"Next",emptyList()))
-        holder.backing.setItem(49,item(Material.ARROW,backName,emptyList()))
-        if(48 in actions) holder.backing.setItem(48,item(Material.CHEST,"Back to /rewards",emptyList()))
+    /** A permanent choice gets its own yes/no screen. */
+    private fun confirmChoice(player:Player,c:ProgressionClaim,option:String) {
+        val actions=mapOf<Int,()->Unit>(
+            CONFIRM_SLOT to {
+                val chosen=store.choose(c.id,player.uniqueId,option)
+                player.sendMessage(Component.text(if(chosen) "Package selected." else "That package is no longer available.",if(chosen) NamedTextColor.GREEN else NamedTextColor.RED))
+                open(player,"claims")
+            },
+            BACK_SLOT to { choose(player,c) })
+        val holder=ProgressionMenu(player.uniqueId,false,actions)
+        holder.backing=Bukkit.createInventory(holder,27,Component.text("Choose $option?"))
+        holder.backing.setItem(CONFIRM_SLOT,MenuStyle.item(Material.LIME_CONCRETE,Component.text("Choose $option",NamedTextColor.GREEN),listOf(Component.text("This can't be changed later.",NamedTextColor.RED))))
+        holder.backing.setItem(BACK_SLOT,MenuStyle.item(Material.RED_CONCRETE,Component.text("Go back",NamedTextColor.RED),listOf(text("Pick a different package."))))
+        MenuStyle.fill(holder.backing)
         player.openInventory(holder.backing)
     }
-    private fun label(value:String)=value.lowercase().split('_','-').joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
-    private fun claimKind(value:String)=when(value) { "MONEY" -> "Currency"; "LORE" -> "Item"; "CHOICE" -> "Reward package"; else -> label(value) }
-    private fun claimStatus(value:String)=when(value) {
-        "PENDING" -> "Ready to claim"; "SENDING" -> "Delivery requested"; "QUEUED" -> "Queued for delivery"
-        "REVIEW" -> "Needs staff review"; "PAID" -> "Paid"; "GRANTED" -> "Granted"; "DISPATCHED" -> "Command accepted"; else -> label(value)
+    /** Entries sit inside a one-slot border, seven to a row, with a footer row for page controls. */
+    private fun menu(player:Player,title:String,staff:Boolean,entries:List<MenuEntry>,allActions:Map<Int,()->Unit>,index:Int,next:(Int)->Unit,back:()->Unit,backName:String) {
+        val pages=((entries.size+PAGE_SIZE-1)/PAGE_SIZE).coerceAtLeast(1)
+        val page=index.coerceIn(0,pages-1)
+        val shown=entries.drop(page*PAGE_SIZE).take(PAGE_SIZE)
+        val rows=(2+(shown.size+6)/7).coerceIn(3,6)
+        val footer=(rows-1)*9
+        val actions=mutableMapOf<Int,()->Unit>()
+        val slots=shown.indices.map { 9*(1+it/7)+1+it%7 }
+        shown.indices.forEach { i -> allActions[page*PAGE_SIZE+i]?.let { actions[slots[i]]=it } }
+        if(page>0) actions[footer]={ next(page-1) }
+        if(page+1<pages) actions[footer+8]={ next(page+1) }
+        actions[footer+4]=back
+        val tags=Bukkit.getPluginManager().getPlugin("EnthusiaTags")?.isEnabled==true
+        if(tags) actions[footer+3]={ player.performCommand("rewards") }
+        val holder=ProgressionMenu(player.uniqueId,staff,actions)
+        holder.backing=Bukkit.createInventory(holder,rows*9,Component.text(if(pages>1) "$title (${page+1}/$pages)" else title))
+        shown.forEachIndexed { i,e -> holder.backing.setItem(slots[i],MenuStyle.item(e.icon,e.name,e.lore,e.glow)) }
+        if(page>0) holder.backing.setItem(footer,MenuStyle.item(Material.ARROW,Component.text("Previous page",NamedTextColor.YELLOW)))
+        if(page+1<pages) holder.backing.setItem(footer+8,MenuStyle.item(Material.ARROW,Component.text("Next page",NamedTextColor.YELLOW)))
+        holder.backing.setItem(footer+4,if(backName=="Close") MenuStyle.item(Material.BARRIER,Component.text("Close",NamedTextColor.RED))
+            else MenuStyle.item(Material.ARROW,Component.text(backName,NamedTextColor.YELLOW)))
+        if(tags) holder.backing.setItem(footer+3,MenuStyle.item(Material.CHEST,Component.text("Open /rewards",NamedTextColor.YELLOW)))
+        MenuStyle.fill(holder.backing)
+        player.openInventory(holder.backing)
     }
-    private fun item(material:Material,name:String,lines:List<String>)=ItemStack(material).apply { itemMeta=itemMeta.apply {
-        displayName(Component.text(name)); lore(lines.flatMap { it.chunked(60) }.map(Component::text))
-    } }
+    private fun entry(icon:Material,name:String,lore:List<Component>,glow:Boolean=false)=MenuEntry(icon,Component.text(name,NamedTextColor.GOLD),lore,glow)
+    private fun text(value:String)=MenuStyle.text(value)
+    private fun hint(value:String)=MenuStyle.hint(value)
+    private fun line(label:String,value:Any?)=MenuStyle.line(label,value)
+    private fun arenaName(id:String)=(arenas()[id]?.name ?: id).arenaComponent()
+    private fun playedAt(at:java.time.Instant)=PLAYED.format(at)
+    private fun winnerName(winner:String?):String = when {
+        winner==null -> "No winner"
+        winner.startsWith("solo:") -> runCatching { java.util.UUID.fromString(winner.removePrefix("solo:")) }.getOrNull()
+            ?.let { Bukkit.getOfflinePlayer(it).name } ?: winner.removePrefix("solo:")
+        winner.startsWith("guild:") -> "Guild ${winner.removePrefix("guild:")}"
+        else -> winner
+    }
+    /** Short word-wrapped lines; lore wider than about 40 characters runs off small screens. */
+    private fun wrap(value:String,width:Int=40):List<Component> = value.split(' ').filter { it.isNotEmpty() }
+        .fold(mutableListOf<String>()) { lines,word -> if(lines.isNotEmpty() && lines.last().length+word.length<width) lines[lines.size-1]="${lines.last()} $word" else lines.add(word); lines }
+        .map(::text)
+    private fun resultState(status:String,qualifying:Boolean):Triple<Material,String,NamedTextColor> = when(status) {
+        "HELD" -> Triple(Material.YELLOW_DYE,"Under review",NamedTextColor.YELLOW)
+        "REJECTED" -> Triple(Material.RED_DYE,"Not counted",NamedTextColor.RED)
+        "APPROVED" -> if(qualifying) Triple(Material.LIME_DYE,"Counted",NamedTextColor.GREEN) else Triple(Material.GRAY_DYE,"No credit",NamedTextColor.GRAY)
+        else -> Triple(Material.GRAY_DYE,"Older match",NamedTextColor.GRAY)
+    }
+    private fun claimIcon(kind:String)=when(kind) { "MONEY" -> Material.GOLD_INGOT; "LORE" -> Material.ENCHANTED_BOOK; "CHOICE" -> Material.BUNDLE; else -> Material.PAPER }
+    private fun claimKind(value:String)=when(value) { "MONEY" -> "Coins"; "LORE" -> "Item"; "CHOICE" -> "Reward package"; else -> MenuStyle.label(value) }
+    private fun claimStatus(value:String):Pair<String,NamedTextColor> = when(value) {
+        "PENDING" -> "Ready to claim" to NamedTextColor.GREEN; "SENDING" -> "Being delivered" to NamedTextColor.YELLOW
+        "QUEUED" -> "Queued for delivery" to NamedTextColor.YELLOW; "REVIEW" -> "Waiting for staff review" to NamedTextColor.GOLD
+        "PAID", "GRANTED", "DISPATCHED" -> "Delivered" to NamedTextColor.GRAY; else -> MenuStyle.label(value) to NamedTextColor.GRAY
+    }
+    private companion object {
+        const val PAGE_SIZE=28
+        const val CONFIRM_SLOT=11
+        const val BACK_SLOT=15
+        val PLAYED: java.time.format.DateTimeFormatter =
+            java.time.format.DateTimeFormatter.ofPattern("MMM d, HH:mm 'UTC'", java.util.Locale.ENGLISH).withZone(java.time.ZoneOffset.UTC)
+    }
     @EventHandler fun click(event:InventoryClickEvent) {
         val holder=event.view.topInventory.holder as? ProgressionMenu ?: return
         event.isCancelled=true
