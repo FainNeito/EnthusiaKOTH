@@ -319,31 +319,36 @@ class ArenaSetupController(
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun chat(event: AsyncChatEvent) {
-        val id = event.player.uniqueId
+        if (answer(event.player, PlainTextComponentSerializer.plainText().serialize(event.message()))) event.isCancelled = true
+    }
+
+    /**
+     * A reply to a pending name prompt. Staff send it with /ekoth reply, which chat plugins never broadcast;
+     * plain chat still works where no chat plugin takes the message first. Returns false when nothing is waiting.
+     */
+    fun answer(player: Player, raw: String): Boolean {
+        val id = player.uniqueId
         val request = displayNamePrompts[id]
         if (request != null) {
-            event.isCancelled = true
-            val raw = PlainTextComponentSerializer.plainText().serialize(event.message())
             plugin.server.scheduler.runTask(plugin, Runnable {
-                val player = event.player
                 if (!displayNamePrompts.remove(id, request) || !player.isOnline || !allowed(player) || drafts[id] !== request.draft) return@Runnable
                 guarded(player) {
                     val input = raw.trim()
-                    if (!input.equals("cancel", true)) service.setName(request.draft, if (input == "-") null else raw)
+                    if (!input.equals("cancel", true)) service.setName(request.draft, if (input == "-") null else input)
                 }
                 editor(player, request.draft)
             })
-            return
+            return true
         }
-        val token = pendingNames[id] ?: return
-        event.isCancelled = true
-        val name = PlainTextComponentSerializer.plainText().serialize(event.message()).trim()
+        val token = pendingNames[id] ?: return false
+        val name = raw.trim()
         plugin.server.scheduler.runTask(plugin, Runnable {
             if (!pendingNames.remove(id, token)) return@Runnable
-            if (!event.player.isOnline || !allowed(event.player)) return@Runnable
-            if (name.equals("cancel", true)) { tell(event.player, "discarded"); return@Runnable }
-            create(event.player, name)
+            if (!player.isOnline || !allowed(player)) return@Runnable
+            if (name.equals("cancel", true)) { tell(player, "discarded"); return@Runnable }
+            create(player, name)
         })
+        return true
     }
 
     fun giveWand(player: Player) {

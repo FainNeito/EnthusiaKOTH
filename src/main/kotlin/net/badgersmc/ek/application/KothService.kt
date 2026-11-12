@@ -315,7 +315,7 @@ class KothService(
         )
         if (!event.isPrivateTest) {
             discordWebhook.sendStart(event.id, event.arena.name, locString(event.arena.zone))
-            if (cfg.display.zoneBorder && showsCaptureRing(event)) zoneBorderService.show(event.arena.zone, event.id.toString())
+            if (cfg.display.zoneBorder && showsCaptureOutline(event)) zoneBorderService.show(event.arena.zone, event.id.toString())
         }
     }
 
@@ -343,7 +343,7 @@ class KothService(
                 null,
             )
         }
-        if (!event.isPrivateTest && cfg.display.zoneBorder && showsCaptureRing(event)) {
+        if (!event.isPrivateTest && cfg.display.zoneBorder && showsCaptureOutline(event)) {
             runActivationStep(event, "zone border display") { zoneBorderService.show(event.arena.zone, event.id.toString()) }
         }
     }
@@ -519,8 +519,8 @@ class KothService(
                 event.isParticipant(player.uniqueId) && event.arena.zone.containsCircular(player.location)
         }
 
-    /** A moving point has its own marker that follows it; a fixed ring would sit where the point started. */
-    private fun showsCaptureRing(event: KothEvent) = !event.arena.family.equals("moving", true)
+    /** A moving point has its own marker that follows it; a fixed outline would sit where the point started. */
+    private fun showsCaptureOutline(event: KothEvent) = !event.arena.family.equals("moving", true)
 
     private fun playersNearMovingPoint(event: KothEvent): List<Player> {
         val arena = event.arena

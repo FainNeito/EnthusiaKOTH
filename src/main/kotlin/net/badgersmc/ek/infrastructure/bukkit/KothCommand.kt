@@ -84,6 +84,13 @@ class KothCommand(
         }
         when (args[0].lowercase()) {
             "help" -> sendHelp(sender, args.getOrNull(1).equals("all", true))
+            "reply" -> if (sender !is Player) sender.sendMessage(lang.msg("command.error.not_a_player")) else {
+                val text = args.drop(1).joinToString(" ")
+                when {
+                    text.isBlank() -> sender.sendMessage(lang.msg("command.reply.usage"))
+                    setup?.answer(sender, text) != true && settings?.answer(sender, text) != true -> sender.sendMessage(lang.msg("command.reply.none"))
+                }
+            }
             "history", "reports", "readiness", "reconcile", "holds", "reviewmatch", "claims", "challenges", "eligibility", "results" -> progression?.command(sender,args.mapIndexed { i,s -> if(i==0) s.lowercase() else s }.toTypedArray())
             "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
                 if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return true }
@@ -135,7 +142,7 @@ class KothCommand(
                 if (canStartFromCommand(sender)) add("start")
                 if (canStartPrivate(sender) || canJoinPrivate(sender)) add("private")
                 if (admin) addAll(listOf("setup", "manage", "schedules", "rewards", "displays", "stop", "status", "lock", "holds", "reviewmatch",
-                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "reload"))
+                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "reply", "reload"))
             }
             2 -> when (sub) {
                 "start" -> if (canStartFromCommand(sender)) arenaIds else emptyList()
@@ -154,6 +161,7 @@ class KothCommand(
                 "reviewmatch" -> if (admin) progression?.heldMatchIds().orEmpty() else emptyList()
                 "reports" -> if (admin) progression?.recentMatchIds().orEmpty() else emptyList()
                 "reconcile" -> if (admin) progression?.reviewClaimIds().orEmpty() else emptyList()
+                "reply" -> if (admin) listOf("cancel", "-") else emptyList()
                 else -> emptyList()
             }
             3 -> when {

@@ -232,11 +232,13 @@ class StaffSettingsController(
         }, 1200L)
     }
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true) fun chat(event: AsyncChatEvent) {
-        val request = prompts[event.player.uniqueId] ?: return
-        event.isCancelled = true
-        val raw = PlainTextComponentSerializer.plainText().serialize(event.message()).trim()
+        if (answer(event.player, PlainTextComponentSerializer.plainText().serialize(event.message()))) event.isCancelled = true
+    }
+    /** A reply to a pending settings prompt, from /ekoth reply or plain chat. Returns false when nothing is waiting. */
+    fun answer(player: Player, text: String): Boolean {
+        val request = prompts[player.uniqueId] ?: return false
+        val raw = text.trim()
         plugin.server.scheduler.runTask(plugin, Runnable {
-            val player = event.player
             if (!prompts.remove(player.uniqueId, request) || !player.isOnline || !allowed(player) || drafts[player.uniqueId] !== request.draft) return@Runnable
             guard(player) {
                 val d = request.draft
@@ -264,5 +266,6 @@ class StaffSettingsController(
                 render(player, d, request.page)
             }
         })
+        return true
     }
 }
