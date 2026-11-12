@@ -184,6 +184,15 @@ class KothFairnessIntegrationTest {
         verify(exactly = 1) { capper.sendMessage(Component.text("koth.leave")) }
         verify(exactly = 0) { idle.sendMessage(Component.text("koth.leave")) }
     }
+    @Test fun `the holder hears the lost note the moment they step off, even outside the message regions`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        localPlayers.clear()
+        service.tick(); service.tick()
+        every { zone.contains(capper.location) } returns false
+        service.tick(); service.tick()
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bass", org.bukkit.SoundCategory.PLAYERS, 0.35f, 0.8f) }
+    }
     @Test fun `the player on the point is told above the hotbar that they are capturing, even outside the message regions`() {
         val service = service(localAudience = true)
         assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))

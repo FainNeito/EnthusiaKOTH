@@ -173,6 +173,7 @@ class KothService(
     fun toggleNotification(player: Player): Boolean = toggleNotifications(player)
     companion object {
         private const val QUEUE_RETRY_SECONDS = 10L
+        private const val LOST_SOUND_DISTANCE = 32.0
 
         internal fun movingPointAt(
             elapsedSeconds: Double,
@@ -404,9 +405,9 @@ class KothService(
         }
         if (previousController != event.currentController) lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CONTROL_CHANGED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
-        CaptureSoundPolicy.transition(previousController, event.currentController)?.let { cue ->
-            runCatching { playCaptureSound(event, cue) }.onFailure { logger("KOTH capture sound failed", it) }
-        }
+        CaptureSoundPolicy.transition(previousController, event.currentController)
+            ?.takeUnless { it == CaptureCue.LOST && event.leaveAnnouncedFor == previousController }
+            ?.let { cue -> runCatching { playCaptureSound(event, cue) }.onFailure { logger("KOTH capture sound failed", it) } }
         val controller = event.currentController
         protectedMatches[event.id]?.observe(teamsInZone, controller,
             controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0))
@@ -472,6 +473,7 @@ class KothService(
     private fun announceLeave(event: KothEvent, controller: TeamId) {
         if (event.leaveAnnouncedFor == controller) return
         event.leaveAnnouncedFor = controller
+        runCatching { playCaptureSound(event, CaptureCue.LOST, nearbyTeamMembers(event, controller)) }.onFailure { logger("KOTH capture sound failed", it) }
         sendEventMessage(
             event,
             lang.arenaMsg(
@@ -1225,7 +1227,19 @@ class KothService(
             .distinctBy { it.uniqueId }
     }
 
-    private fun playCaptureSound(event: KothEvent, cue: CaptureCue) {
+    /** Online members of [team] within hearing distance of the point, such as a holder who just stepped off. */
+    private fun nearbyTeamMembers(event: KothEvent, team: TeamId): List<Player> {
+        val zone = event.arena.zone
+        val centerX = (zone.minX + zone.maxX) / 2.0
+        val centerZ = (zone.minZ + zone.maxZ) / 2.0
+        val reach = (LOST_SOUND_DISTANCE + maxOf(zone.maxX - zone.minX, zone.maxZ - zone.minZ) / 2.0).let { it * it }
+        return Bukkit.getOnlinePlayers().filter { player ->
+            player.world.name == zone.worldName && teamFor(player, event) == team &&
+                (player.location.x - centerX).let { it * it } + (player.location.z - centerZ).let { it * it } <= reach
+        }
+    }
+
+    private fun playCaptureSound(event: KothEvent, cue: CaptureCue, alsoTo: List<Player> = emptyList()) {
         val generation = if (cue == CaptureCue.WIN) null else
             (captureSoundGeneration.getOrDefault(event.id, 0L) + 1L).also { captureSoundGeneration[event.id] = it }
         val settings = cfgLoader().captureSounds
@@ -1236,8 +1250,10 @@ class KothService(
             CaptureCue.WIN -> listOf(settings.win, settings.winAccent, settings.winAccent2, settings.winAccent3)
         }.filter { it.sound.isNotBlank() && it.volume > 0f }
         if (sounds.isEmpty()) return
-        if (cue != CaptureCue.WIN && !captureSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
-        val audience = captureSoundRecipients(event).map { it.uniqueId }.toSet()
+        // Only the capture chime is throttled; a lost note plays once per announced leave, so it cannot repeat on its own.
+        if (cue == CaptureCue.CAPTURE && !captureSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
+        val extra = alsoTo.filter { event.isPrivateTest || notificationsEnabled(it) }
+        val audience = (captureSoundRecipients(event) + extra).map { it.uniqueId }.toSet()
         val controller = event.currentController
         sounds.forEach { layer ->
             val play = {
@@ -1245,7 +1261,7 @@ class KothService(
                 val active = cue == CaptureCue.WIN || layer.delayTicks == 0L || (events[event.id] === event && event.state == EventState.ACTIVE &&
                     captureSoundGeneration[event.id] == generation &&
                     (cue != CaptureCue.CAPTURE || event.currentController == controller))
-                if (active && cfgLoader().captureSounds.enabled) captureSoundRecipients(event)
+                if (active && cfgLoader().captureSounds.enabled) (captureSoundRecipients(event) + extra).distinctBy { it.uniqueId }
                     .filter { it.uniqueId in audience }.forEach { player ->
                         runCatching { player.playSound(player.location, layer.sound, org.bukkit.SoundCategory.PLAYERS, layer.volume, layer.pitch) }
                             .onFailure { logger("Could not play KOTH capture sound for a recipient", it) }
