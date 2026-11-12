@@ -2,6 +2,7 @@ package net.badgersmc.ek.di
 
 import net.badgersmc.ek.infrastructure.i18n.arenaComponent
 import net.badgersmc.ek.infrastructure.i18n.arenaMsg
+import net.badgersmc.ek.infrastructure.i18n.registerKothTags
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import net.badgersmc.ek.EnthusiaKothPlugin
@@ -167,6 +168,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
 
     val lumaGuildsAdapter = LumaGuildsAdapter()
     val langService = LangService(plugin, NexusLocale("en_US"), net.badgersmc.ek.infrastructure.i18n.KothLang::class.java)
+        .also { it.registerKothTags() }
     val statsRepository = SqlStatsRepository(
         dataSource = dataSource,
         familyResolver = { arenaId -> arenas()[arenaId]?.family ?: arenaId },

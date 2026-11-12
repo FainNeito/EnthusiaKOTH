@@ -22,6 +22,7 @@ class ProtectedRewardsIntegrationTest {
     private val guilds=mockk<LumaGuildsAdapter>(relaxed=true)
     private val stats=mockk<SqlStatsRepository>(relaxed=true)
     private val store=mockk<RewardProtectionStore>(relaxed=true)
+    private val lang=mockk<LangService>(relaxed=true).also { every { it.msg(any(),*anyVararg()) } returns Component.empty() }
     private var now=Instant.parse("2026-10-08T12:00:00Z")
     private var hill:List<Player> = emptyList()
     private val clock=object:Clock() { override fun getZone()=ZoneOffset.UTC; override fun withZone(zone:ZoneId)=this; override fun instant()=now }
@@ -52,7 +53,7 @@ class ProtectedRewardsIntegrationTest {
             rewards=listOf("give {CONTRIBUTORS} diamond 1","give {ALL_ONLINE} gold_ingot 1"))
         val s=KothService(cfgLoader={ EnthusiaKothConfig(rewardProtection=RewardProtectionConfig(enabled=true),display=DisplayConfig(false),rewards=mapOf("score" to RewardConfig(guildVaultMoney=10.0))) },
             stats=stats,economy=mockk(relaxed=true),guilds=guilds,displayService=mockk(relaxed=true),fireworkService=mockk(relaxed=true),discordWebhook=mockk(relaxed=true),zoneBorderService=mockk(relaxed=true),
-            lang=mockk<LangService>(relaxed=true).also { every { it.msg(any(),*anyVararg()) } returns Component.empty() },arenaResolver={arena},queueStore=InMemoryEventQueueStore(),clock=clock,logger={_,_->},protectionStore=store,
+            lang=lang,arenaResolver={arena},queueStore=InMemoryEventQueueStore(),clock=clock,logger={_,_->},protectionStore=store,
             progressionSink=sink,progressionPolicy={progression})
         assertTrue(s.startEvent(arena,teamMode=TeamMode.GUILD))
         hill=listOf(enemy); repeat(30) { s.tick() }
@@ -72,6 +73,9 @@ class ProtectedRewardsIntegrationTest {
         game()
         verify(exactly=0) { Bukkit.dispatchCommand(any(),any()); guilds.depositToVault(any(),any(),any()); stats.incrementWin(any(),any()) }
         verify(exactly=1) { store.reject(any(),any(),any(),match { it.contains("INSUFFICIENT_OPPOSITION") }) }
+        // Players are told the point was held but uncontested, not just that there was no winner.
+        verify(exactly=1) { lang.msg("koth.no_winner_unopposed",*anyVararg()) }
+        verify(exactly=0) { lang.msg("koth.no_winner",*anyVararg()) }
     }
     @Test fun `failed durable reservation never issues rewards or statistics`() {
         every { store.reserve(any(),any(),any(),any(),any(),any(),any()) } throws java.sql.SQLException("disk")

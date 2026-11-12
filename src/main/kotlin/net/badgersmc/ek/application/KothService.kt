@@ -90,6 +90,8 @@ class KothService(
     private val captureSoundLimiter = CaptureSoundLimiter()
     private val captureSoundGeneration = mutableMapOf<UUID, Long>()
     private val protectedMatches = mutableMapOf<UUID, ProtectedMatch>()
+    /** Why reward protection turned a completed capture into no winner, so players are told instead of guessing. */
+    private val withheldReasons = mutableMapOf<UUID, String>()
     private val recipientBudgets = mutableMapOf<UUID, Int>()
     private val progressionMatches = mutableMapOf<UUID, ProgressionPolicy>()
     private val matchArenaIdentities = mutableMapOf<UUID, String>()
@@ -155,10 +157,14 @@ class KothService(
             if (reason != null) {
                 protectionStore?.reject(event.id, event.arena.id, clock.instant(), "$reason; ${match.audit()}")
                 logger("KOTH ${event.id} reward withheld: $reason", null)
+                if (candidate != null) withheldReasons[event.id] = reason
                 null
             } else if (protectionStore?.reserve(event.id, event.arena.id, match.side(candidate!!), opponents,
                 clock.instant(), match.config, "recipientCommandBudget=${match.config.maximumRecipientCommands}; ${match.audit()}") == true) candidate
-            else { logger("KOTH ${event.id} reward withheld: repeated opponent, duplicate or unavailable audit store", null); null }
+            else {
+                logger("KOTH ${event.id} reward withheld: repeated opponent, duplicate or unavailable audit store", null)
+                withheldReasons[event.id] = "UNVERIFIED"; null
+            }
         } catch (error: Exception) {
             logger("KOTH ${event.id} reward history failed; no rewards or win credit issued", error); null
         }
@@ -167,6 +173,7 @@ class KothService(
     fun toggleNotification(player: Player): Boolean = toggleNotifications(player)
     companion object {
         private const val QUEUE_RETRY_SECONDS = 10L
+        private const val LOST_SOUND_DISTANCE = 32.0
 
         internal fun movingPointAt(
             elapsedSeconds: Double,
@@ -315,7 +322,7 @@ class KothService(
         )
         if (!event.isPrivateTest) {
             discordWebhook.sendStart(event.id, event.arena.name, locString(event.arena.zone))
-            if (cfg.display.zoneBorder) zoneBorderService.show(event.arena.zone, event.id.toString())
+            if (cfg.display.zoneBorder && showsCaptureOutline(event)) zoneBorderService.show(event.arena.zone, event.id.toString())
         }
     }
 
@@ -343,7 +350,7 @@ class KothService(
                 null,
             )
         }
-        if (!event.isPrivateTest && cfg.display.zoneBorder) {
+        if (!event.isPrivateTest && cfg.display.zoneBorder && showsCaptureOutline(event)) {
             runActivationStep(event, "zone border display") { zoneBorderService.show(event.arena.zone, event.id.toString()) }
         }
     }
@@ -362,11 +369,6 @@ class KothService(
             return
         }
         val playersInZone = if (arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInStaticCaptureZone(event)
-
-        if (cfg.display.actionbar && cfg.progressBar.enabled && event.currentController != null) {
-            val progress = progressBar(event, cfg.progressBar)
-            playersInZone.filter { event.isPrivateTest || (notificationsEnabled(it) && captureAudience(event, it)) }.forEach { it.sendActionBar(progress) }
-        }
 
         val reminder = cfg.reminders
         if (reminder.enabled) {
@@ -403,9 +405,9 @@ class KothService(
         }
         if (previousController != event.currentController) lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CONTROL_CHANGED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
-        CaptureSoundPolicy.transition(previousController, event.currentController)?.let { cue ->
-            runCatching { playCaptureSound(event, cue) }.onFailure { logger("KOTH capture sound failed", it) }
-        }
+        CaptureSoundPolicy.transition(previousController, event.currentController)
+            ?.takeUnless { it == CaptureCue.LOST && event.leaveAnnouncedFor == previousController }
+            ?.let { cue -> runCatching { playCaptureSound(event, cue) }.onFailure { logger("KOTH capture sound failed", it) } }
         val controller = event.currentController
         protectedMatches[event.id]?.observe(teamsInZone, controller,
             controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0))
@@ -419,6 +421,8 @@ class KothService(
         }
 
         val contested = teamsInZone.size > 1
+        if (cfg.display.actionbar) showCaptureStatus(event, playersInZone,
+            contested && (arena.family.lowercase() in setOf("score", "moving", "conquest") || arena.contestWhenMultipleCappers), cfg)
         val timeLeft = formatTime(event.endsAt.epochSecond - now.epochSecond)
         val recipients = eventRecipients(event)
         objectiveMarkerService.show(
@@ -470,6 +474,7 @@ class KothService(
     private fun announceLeave(event: KothEvent, controller: TeamId) {
         if (event.leaveAnnouncedFor == controller) return
         event.leaveAnnouncedFor = controller
+        runCatching { playCaptureSound(event, CaptureCue.LOST, nearbyTeamMembers(event, controller)) }.onFailure { logger("KOTH capture sound failed", it) }
         sendEventMessage(
             event,
             lang.arenaMsg(
@@ -516,8 +521,11 @@ class KothService(
     private fun playersInStaticCaptureZone(event: KothEvent): List<Player> =
         Bukkit.getOnlinePlayers().filter { player ->
             player.isValid && !player.isDead && player.gameMode != GameMode.SPECTATOR &&
-                event.isParticipant(player.uniqueId) && event.arena.zone.containsCircular(player.location)
+                event.isParticipant(player.uniqueId) && event.arena.zone.contains(player.location)
         }
+
+    /** A moving point has its own marker that follows it; a fixed outline would sit where the point started. */
+    private fun showsCaptureOutline(event: KothEvent) = !event.arena.family.equals("moving", true)
 
     private fun playersNearMovingPoint(event: KothEvent): List<Player> {
         val arena = event.arena
@@ -555,7 +563,9 @@ class KothService(
 
     private fun finishEvent(event: KothEvent, candidate: TeamId?) {
         if (events[event.id] !== event) return
-        val winner = protectedWinner(event, candidate.takeIf { event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams })
+        val enoughSides = event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams
+        if (candidate != null && !enoughSides) withheldReasons[event.id] = "INSUFFICIENT_SIDES"
+        val winner = protectedWinner(event, candidate.takeIf { enoughSides })
         event.state = EventState.COMPLETED
         val wasContested = event.scores.size > 1
         val frozenProgression = progressionMatches[event.id]
@@ -611,7 +621,10 @@ class KothService(
                 }
             } else {
                 runCompletionStep(event, "no-winner announcement") {
-                    sendEventMessage(event, lang.arenaMsg("koth.no_winner", "koth_name" to event.arena.name.arenaComponent()))
+                    val reason = withheldReasons[event.id]
+                    val held = candidate?.takeIf { reason != null }
+                    sendEventMessage(event, if (held == null) lang.arenaMsg("koth.no_winner", "koth_name" to event.arena.name.arenaComponent())
+                        else lang.arenaMsg(withheldMessage(reason!!), "captured" to teamName(held), "koth_name" to event.arena.name.arenaComponent()))
                 }
             }
         } finally {
@@ -640,7 +653,14 @@ class KothService(
         }
     }
 
+    private fun withheldMessage(reason: String) = when (reason) {
+        "INSUFFICIENT_OPPOSITION" -> "koth.no_winner_unopposed"
+        "INSUFFICIENT_SIDES" -> "koth.no_winner_sides"
+        else -> "koth.no_winner_unverified"
+    }
+
     private fun cleanupEvent(event: KothEvent) {
+        withheldReasons.remove(event.id)
         captureSoundLimiter.remove(event.id)
         captureSoundGeneration.remove(event.id)
         protectedMatches.remove(event.id)
@@ -1167,7 +1187,27 @@ class KothService(
         return "${center.blockX}, ${center.blockY}, ${center.blockZ}"
     }
 
-    private fun progressBar(event: KothEvent, cfg: ProgressBarConfig): net.kyori.adventure.text.Component {
+    /** Tells each player on the point, above their hotbar, whether they are capturing, contested or still being held off. */
+    private fun showCaptureStatus(event: KothEvent, playersInZone: List<Player>, contested: Boolean, cfg: EnthusiaKothConfig) {
+        val controller = event.currentController
+        val left = if (event.arena.family.equals("capture", true)) {
+            (event.arena.captureSeconds - (controller?.let { event.scores[it] } ?: 0.0)).toLong().coerceAtLeast(0)
+        } else (event.endsAt.epochSecond - clock.instant().epochSecond).coerceAtLeast(0)
+        val values = arrayOf("koth_name" to event.arena.name.arenaComponent(), "progress_bar" to progressBarText(event, cfg.progressBar),
+            "time_left" to formatTime(left), "capper" to (capperName(event) ?: "Someone"))
+        // This is feedback for the player standing on the point, not a broadcast, so the capture-region audience does not apply.
+        playersInZone.filter { event.isPrivateTest || notificationsEnabled(it) }.forEach { player ->
+            val key = when {
+                contested -> "koth.actionbar.contested"
+                controller == null -> "koth.actionbar.starting"
+                teamFor(player, event) == controller -> "koth.actionbar.capturing"
+                else -> "koth.actionbar.held"
+            }
+            player.sendActionBar(lang.arenaMsg(key, *values))
+        }
+    }
+
+    private fun progressBarText(event: KothEvent, cfg: ProgressBarConfig): String {
         val progress = if (event.arena.family.equals("moving", true) || event.arena.family.equals("conquest", true) || event.arena.family.equals("score", true)) {
             displayProgress(event, clock.instant()).toDouble()
         } else {
@@ -1175,16 +1215,34 @@ class KothService(
             ((event.scores.values.maxOrNull() ?: 0.0) / maximum).coerceIn(0.0, 1.0)
         }
         val filled = (progress * cfg.length).toInt()
-        val bar = cfg.character.repeat(filled) + lang.raw("progress_bar.empty_color") +
+        return cfg.character.repeat(filled) + lang.raw("progress_bar.empty_color") +
             cfg.character.repeat((cfg.length - filled).coerceAtLeast(0))
-        return lang.msg("progress_bar.format", "progress_bar" to bar)
     }
 
     private fun eventRecipients(event: KothEvent, captureOnly: Boolean = true): List<Player> = if (event.isPrivateTest) {
         event.participants.mapNotNull { Bukkit.getPlayer(it) }
     } else Bukkit.getOnlinePlayers().filter { notificationsEnabled(it) && (!captureOnly || captureAudience(event, it)) }
 
-    private fun playCaptureSound(event: KothEvent, cue: CaptureCue) {
+    /** The regional capture audience plus anyone standing on the point, who should always hear their own capture. */
+    private fun captureSoundRecipients(event: KothEvent): List<Player> {
+        val onPoint = if (event.arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInStaticCaptureZone(event)
+        return (eventRecipients(event, captureOnly = true) + onPoint.filter { event.isPrivateTest || notificationsEnabled(it) })
+            .distinctBy { it.uniqueId }
+    }
+
+    /** Online members of [team] within hearing distance of the point, such as a holder who just stepped off. */
+    private fun nearbyTeamMembers(event: KothEvent, team: TeamId): List<Player> {
+        val zone = event.arena.zone
+        val centerX = (zone.minX + zone.maxX) / 2.0
+        val centerZ = (zone.minZ + zone.maxZ) / 2.0
+        val reach = (LOST_SOUND_DISTANCE + maxOf(zone.maxX - zone.minX, zone.maxZ - zone.minZ) / 2.0).let { it * it }
+        return Bukkit.getOnlinePlayers().filter { player ->
+            event.isParticipant(player.uniqueId) && player.world.name == zone.worldName && teamFor(player, event) == team &&
+                (player.location.x - centerX).let { it * it } + (player.location.z - centerZ).let { it * it } <= reach
+        }
+    }
+
+    private fun playCaptureSound(event: KothEvent, cue: CaptureCue, alsoTo: List<Player> = emptyList()) {
         val generation = if (cue == CaptureCue.WIN) null else
             (captureSoundGeneration.getOrDefault(event.id, 0L) + 1L).also { captureSoundGeneration[event.id] = it }
         val settings = cfgLoader().captureSounds
@@ -1195,8 +1253,10 @@ class KothService(
             CaptureCue.WIN -> listOf(settings.win, settings.winAccent, settings.winAccent2, settings.winAccent3)
         }.filter { it.sound.isNotBlank() && it.volume > 0f }
         if (sounds.isEmpty()) return
-        if (cue != CaptureCue.WIN && !captureSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
-        val audience = eventRecipients(event, captureOnly = true).map { it.uniqueId }.toSet()
+        // Only the capture chime is throttled; a lost note plays once per announced leave, so it cannot repeat on its own.
+        if (cue == CaptureCue.CAPTURE && !captureSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
+        val extra = alsoTo.filter { event.isPrivateTest || notificationsEnabled(it) }
+        val audience = (captureSoundRecipients(event) + extra).map { it.uniqueId }.toSet()
         val controller = event.currentController
         sounds.forEach { layer ->
             val play = {
@@ -1204,7 +1264,7 @@ class KothService(
                 val active = cue == CaptureCue.WIN || layer.delayTicks == 0L || (events[event.id] === event && event.state == EventState.ACTIVE &&
                     captureSoundGeneration[event.id] == generation &&
                     (cue != CaptureCue.CAPTURE || event.currentController == controller))
-                if (active && cfgLoader().captureSounds.enabled) eventRecipients(event, captureOnly = true)
+                if (active && cfgLoader().captureSounds.enabled) (captureSoundRecipients(event) + extra).distinctBy { it.uniqueId }
                     .filter { it.uniqueId in audience }.forEach { player ->
                         runCatching { player.playSound(player.location, layer.sound, org.bukkit.SoundCategory.PLAYERS, layer.volume, layer.pitch) }
                             .onFailure { logger("Could not play KOTH capture sound for a recipient", it) }

@@ -43,7 +43,7 @@ class FlareService(
             player.sendMessage(lang.msg("command.error.koth_not_found_short"))
             return true
         }
-        if (arena.flaresMustBePlacedOnCap && !arena.zone.containsCircular(player.location)) {
+        if (arena.flaresMustBePlacedOnCap && !arena.zone.contains(player.location)) {
             player.sendMessage(lang.arenaMsg("flare.not_in_region", "koth" to arena.name.arenaComponent()))
             return true
         }

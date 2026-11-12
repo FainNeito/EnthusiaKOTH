@@ -43,7 +43,7 @@ class KothFairnessIntegrationTest {
         every { Bukkit.getPlayer(idle.uniqueId) } returns idle
         every { Bukkit.getConsoleSender() } returns mockk(relaxed = true)
         every { Bukkit.dispatchCommand(any(), any()) } returns true
-        every { zone.containsCircular(capper.location) } returns true
+        every { zone.contains(capper.location) } returns true
         every { guilds.playerGuildId(capper) } returns guild
         every { guilds.playerGuildId(idle) } returns guild
         every { guilds.guildName(guild) } returns "Guild"
@@ -82,6 +82,9 @@ class KothFairnessIntegrationTest {
         assertNull(service.activeEvent)
         verify(exactly = 0) { Bukkit.dispatchCommand(any(), any()) }
         verify(exactly = 0) { stats.incrementWin(any(), any()) }
+        // The side that held the point is told why it did not win.
+        verify(atLeast = 1) { capper.sendMessage(Component.text("koth.no_winner_sides")) }
+        verify(exactly = 0) { capper.sendMessage(Component.text("koth.no_winner")) }
     }
     @Test fun `public event messages respect opt out`() {
         assertTrue(service(mute = true).startEvent(arena(), teamMode = TeamMode.GUILD))
@@ -118,22 +121,34 @@ class KothFairnessIntegrationTest {
         verify(exactly = 0) { idle.playSound(any<org.bukkit.Location>(), any<String>(), any<org.bukkit.SoundCategory>(), any<Float>(), any<Float>()) }
     }
 
+    @Test fun `the player on the point hears the capture chime even outside the message regions`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        localPlayers.clear()
+        service.tick()
+        delayedSounds.forEach { it.second() }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.19f, 0.95f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
+        verify(exactly = 0) { idle.playSound(any<org.bukkit.Location>(), any<String>(), any<org.bukkit.SoundCategory>(), any<Float>(), any<Float>()) }
+    }
+
     @Test fun `delayed capture notes are suppressed after loss of control or audience`() {
         val service = service(localAudience = true)
         assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
         service.tick()
+        // Leaving the audience now means leaving both the message regions and the point itself.
         localPlayers.clear()
+        every { zone.contains(capper.location) } returns false
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
         localPlayers.add(capper)
-        every { zone.containsCircular(capper.location) } returns false
         service.tick()
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
     }
 
     @Test fun `no winner does not play the victory fanfare`() {
-        every { zone.containsCircular(capper.location) } returns false
+        every { zone.contains(capper.location) } returns false
         val service = service()
         assertTrue(service.startEvent(arena().copy(durationSeconds = 0), durationOverride = 0, teamMode = TeamMode.GUILD))
         service.tick()
@@ -148,6 +163,7 @@ class KothFairnessIntegrationTest {
         service.tick(); delayedSounds.clear(); service.tick()
         assertEquals(listOf(3L, 8L, 13L), delayedSounds.map { it.first })
         localPlayers.clear()
+        every { zone.contains(capper.location) } returns false
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:entity.player.levelup", org.bukkit.SoundCategory.PLAYERS, any<Float>(), any<Float>()) }
     }
@@ -166,10 +182,28 @@ class KothFairnessIntegrationTest {
         service.tick(); service.tick()
         verify(exactly = 1) { capper.sendMessage(Component.text("koth.capping")) }
         verify(exactly = 0) { idle.sendMessage(Component.text("koth.capping")) }
-        every { zone.containsCircular(capper.location) } returns false
+        every { zone.contains(capper.location) } returns false
         service.tick()
         verify(exactly = 1) { capper.sendMessage(Component.text("koth.leave")) }
         verify(exactly = 0) { idle.sendMessage(Component.text("koth.leave")) }
+    }
+    @Test fun `the holder hears the lost note the moment they step off, even outside the message regions`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        localPlayers.clear()
+        service.tick(); service.tick()
+        every { zone.contains(capper.location) } returns false
+        service.tick(); service.tick()
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bass", org.bukkit.SoundCategory.PLAYERS, 0.35f, 0.8f) }
+    }
+    @Test fun `the player on the point is told above the hotbar that they are capturing, even outside the message regions`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        localPlayers.clear()
+        service.tick(); service.tick()
+        verify(atLeast = 1) { capper.sendActionBar(Component.text("koth.actionbar.capturing")) }
+        verify(exactly = 0) { capper.sendMessage(Component.text("koth.capping")) }
+        verify(exactly = 0) { idle.sendActionBar(any<Component>()) }
     }
     @Test fun `moving out of notification regions suppresses subsequent capture messages`() {
         val service = service(localAudience = true)

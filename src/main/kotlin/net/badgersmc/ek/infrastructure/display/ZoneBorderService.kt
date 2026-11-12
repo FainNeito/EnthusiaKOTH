@@ -1,113 +1,65 @@
 package net.badgersmc.ek.infrastructure.display
 
 import net.badgersmc.ek.domain.CaptureZone
-import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
-import org.bukkit.Material
-import org.bukkit.entity.BlockDisplay
-import org.bukkit.entity.Display
+import org.bukkit.Particle
 import org.bukkit.plugin.java.JavaPlugin
-import org.bukkit.scheduler.BukkitRunnable
-import org.bukkit.util.Transformation
-import org.joml.Quaternionf
-import org.joml.Vector3f
+import org.bukkit.scheduler.BukkitTask
+import kotlin.math.ceil
+import kotlin.math.hypot
 
 /**
- * Draws the 2D KOTH zone border on the ground using BlockDisplay entities.
- * Four paper-thin edge-spanning displays form a glowing wireframe rectangle
- * (like WorldEdit CUI cuboid render). Visible through walls.
- * Managed per-event — automatically cleaned up on KOTH end.
+ * Outlines a static capture point with a square of gold dust along its edges, redrawn twice a second for
+ * players within [VIEW_DISTANCE] blocks. Particles don't show through walls and leave nothing in the world.
+ * Managed per event and cancelled when the KOTH ends.
  */
 class ZoneBorderService(private val plugin: JavaPlugin) {
 
     companion object {
+        /** Older versions drew the border with tagged display entities; any left behind are swept on show. */
         const val BORDER_TAG = "ekoth_zone_border"
+        internal const val VIEW_DISTANCE = 32.0
+        internal const val MAX_POINTS = 160
+        private const val SPACING = 0.5
+        private val DUST = Particle.DustOptions(Color.fromRGB(255, 190, 40), 1.2f)
+
+        /** Points along the square's four edges, every [SPACING] blocks, spread wider on large zones to stay under [MAX_POINTS]. */
+        internal fun squarePoints(minX: Double, minZ: Double, maxX: Double, maxZ: Double, y: Double): List<Triple<Double, Double, Double>> {
+            val corners = listOf(minX to minZ, maxX to minZ, maxX to maxZ, minX to maxZ)
+            val perimeter = 2 * ((maxX - minX) + (maxZ - minZ))
+            val step = maxOf(SPACING, perimeter / MAX_POINTS)
+            return corners.indices.flatMap { edge ->
+                val (x1, z1) = corners[edge]
+                val (x2, z2) = corners[(edge + 1) % corners.size]
+                val segments = ceil(hypot(x2 - x1, z2 - z1) / step).toInt().coerceAtLeast(1)
+                // Each edge stops one step short of its end corner, which starts the next edge.
+                (0 until segments).map { i -> Triple(x1 + (x2 - x1) * i / segments, y, z1 + (z2 - z1) * i / segments) }
+            }
+        }
     }
 
-    private val borders = mutableMapOf<String, MutableList<BlockDisplay>>()
-    private var activeBorders = mutableListOf<BlockDisplay>()
+    private val outlines = mutableMapOf<String, BukkitTask>()
 
-    /** Show the border for a zone. Clears any previous border first. */
+    /** Show the outline for a zone. Replaces any outline already shown for this event. */
     fun show(zone: CaptureZone, eventKey: String = "legacy") {
         hide(eventKey)
-        activeBorders = mutableListOf()
-        borders[eventKey] = activeBorders
         val world = plugin.server.getWorld(zone.worldName) ?: return
-        val y = zone.objectiveY + 0.1 // just above the configured objective surface
-
-        // Sweep leftover border entities from a previous unclean shutdown
-        world.entities.filter { it.scoreboardTags.contains(BORDER_TAG) && it.scoreboardTags.contains("ekoth_event_$eventKey") }.forEach { it.remove() }
-
-        // Four edges: north, east, south (reversed), west (reversed)
-        spawnEdge(world, zone.minX, y, zone.minZ, zone.maxX, zone.minZ)
-        spawnEdge(world, zone.maxX, y, zone.minZ, zone.maxX, zone.maxZ)
-        spawnEdge(world, zone.maxX, y, zone.maxZ, zone.minX, zone.maxZ)
-        spawnEdge(world, zone.minX, y, zone.maxZ, zone.minX, zone.minZ)
-    }
-
-    /** Remove the border. Safe to call multiple times. */
-    fun hide(eventKey: String? = null) {
-        if (eventKey == null) { borders.values.flatten().forEach { it.remove() }; borders.clear() }
-        else borders.remove(eventKey)?.forEach { it.remove() }
-    }
-
-    /**
-     * Spawns a single BlockDisplay entity that spans from (x1,z1) to (x2,z2).
-     * The display is scaled paper-thin (0.005) so it renders as a glowing wireframe line
-     * — identical to the WorldEdit CUI cuboid render aesthetic.
-     */
-    private fun spawnEdge(world: org.bukkit.World, x1: Double, y: Double, z1: Double, x2: Double, z2: Double) {
-        val midX = (x1 + x2) / 2.0
-        val midZ = (z1 + z2) / 2.0
-        val loc = Location(world, midX, y, midZ)
-
-        val dx = x2 - x1
-        val dz = z2 - z1
-        val length = kotlin.math.sqrt(dx * dx + dz * dz)
-        if (length < 0.5) return
-
-        val yaw = kotlin.math.atan2(dz, dx).toFloat()
-
-        val display = world.spawn(loc, BlockDisplay::class.java) { d ->
-            d.block = Bukkit.createBlockData(Material.RED_STAINED_GLASS)
-            d.setGlowing(true)
-            d.setGlowColorOverride(Color.RED)
-            d.setViewRange(64f)
-            d.setShadowStrength(0.0f)
-            d.setBrightness(Display.Brightness(15, 15))
-            // Don't persist border entities with chunks — unclean shutdowns
-            // would otherwise leave permanent glowing blocks in the world.
-            d.isPersistent = false
-            d.addScoreboardTag(BORDER_TAG)
-            borders.entries.firstOrNull { it.value === activeBorders }?.key?.let { d.addScoreboardTag("ekoth_event_$it") }
-        }
-
-        // Transformation = Translation * LeftRotation * Scale * RightRotation.
-        // The yaw must be the LEFT rotation so it is applied AFTER the non-uniform
-        // scale (length × 0.005 × 0.005); as the right rotation it would rotate the
-        // block first and then flatten it to the local X axis, distorting the edge.
-        // The block display model is centered on the entity origin, so the scaled
-        // edge is already centered at the edge midpoint — no translation offset needed.
-        display.transformation = org.bukkit.util.Transformation(
-            Vector3f(0f, 0f, 0f),
-            Quaternionf().rotateY(yaw),
-            Vector3f(length.toFloat(), 0.005f, 0.005f),  // paper-thin line
-            Quaternionf(),
-        )
-
-        display.setRotation(0f, 0f)
-        activeBorders.add(display)
-    }
-
-    /** Flash the border briefly when a KOTH starts (visual pulse). */
-    fun flashStart(zone: CaptureZone) {
-        show(zone)
-        object : BukkitRunnable() {
-            override fun run() {
-                hide()
-                this.cancel()
+        world.entities.filter { it.scoreboardTags.contains(BORDER_TAG) }.forEach { it.remove() }
+        val y = zone.objectiveY + 0.1
+        val center = Location(world, (zone.minX + zone.maxX) / 2.0, y, (zone.minZ + zone.maxZ) / 2.0)
+        val points = squarePoints(zone.minX, zone.minZ, zone.maxX, zone.maxZ, y).map { (x, py, z) -> Location(world, x, py, z) }
+        val range = (VIEW_DISTANCE + hypot(zone.maxX - zone.minX, zone.maxZ - zone.minZ) / 2).let { it * it }
+        outlines[eventKey] = plugin.server.scheduler.runTaskTimer(plugin, Runnable {
+            world.players.filter { it.location.distanceSquared(center) <= range }.forEach { player ->
+                points.forEach { player.spawnParticle(Particle.DUST, it, 1, 0.0, 0.0, 0.0, 0.0, DUST) }
             }
-        }.runTaskLater(plugin, 10L)
+        }, 0L, 10L)
+    }
+
+    /** Remove the outline. Safe to call multiple times. */
+    fun hide(eventKey: String? = null) {
+        if (eventKey == null) { outlines.values.forEach { it.cancel() }; outlines.clear() }
+        else outlines.remove(eventKey)?.cancel()
     }
 }
