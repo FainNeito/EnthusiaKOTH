@@ -39,8 +39,10 @@ class StaffSettingsController(
     private val schedule: ScheduleService, private val applySaved: () -> Unit, private val lang: LangService,
 ) : Listener {
     private val drafts = mutableMapOf<UUID, StaffSettingsDraft>()
-    private data class Prompt(val token: UUID, val draft: StaffSettingsDraft, val page: StaffSettingsPage, val key: String)
+    private data class Prompt(val token: UUID, val draft: StaffSettingsDraft, val page: StaffSettingsPage, val key: String, val opened: Long = System.nanoTime())
     private val prompts = ConcurrentHashMap<UUID, Prompt>()
+    /** When this player's pending settings prompt opened, or null when none is waiting. */
+    fun promptOpenedAt(player: UUID): Long? = prompts[player]?.opened
     private fun text(key: String, vararg values: Pair<String, Any?>) = lang.arenaMsg("staff.$key", *values)
     private fun allowed(player: Player): Boolean {
         if (player.hasPermission("enthusiakoth.admin")) return true
@@ -117,7 +119,7 @@ class StaffSettingsController(
             StaffSettingsPage.PREVIEW -> {
                 item(10, Material.CLOCK, "upcoming", lore = upcoming(d).ifEmpty { listOf(text("no-upcoming")) })
                 if (d.arenaId != null) item(12, Material.CHEST, "reward-preview", lore = rewardPreview(d))
-                item(14, Material.MAP, "audience", cfg().captureNotificationRegions.joinToString(", ").ifBlank { "Everyone" }, listOf(text("audience-hint")))
+                item(14, Material.MAP, "audience", cfg().captureNotificationRegions.joinToString(", ").ifBlank { "No regions (only players on the point)" }, listOf(text("audience-hint")))
                 item(16, Material.PAPER, "draft", d.changes.size, listOf(text("draft-hint")))
             }
         }

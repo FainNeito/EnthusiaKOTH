@@ -171,7 +171,11 @@ class ProgressionController(
                             line("Wins",rule.wins),line("Different opponents",rule.opponents),line("Different arenas",rule.arenas),
                             line("Separate days",rule.days),line("Time scoring",MenuStyle.duration(rule.seconds)),Component.empty(),
                             if(!rule.exclusive) text("Every player can earn this.")
-                            else Component.text(if(store.exclusiveOwner(rule.id)==null) "Only one player can ever earn this." else "Already earned by another player.",MenuStyle.GOLD)),
+                            else Component.text(when(store.exclusiveOwner(rule.id)) {
+                                null -> "Only one player can ever earn this."
+                                player.uniqueId -> "You earned this. No one else can."
+                                else -> "Already earned by another player."
+                            },MenuStyle.GOLD)),
                         glow=(percent ?: 0)>=100))
                 }
             }

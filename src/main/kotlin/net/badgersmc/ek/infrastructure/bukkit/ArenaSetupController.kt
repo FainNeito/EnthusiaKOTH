@@ -76,6 +76,9 @@ class ArenaSetupController(
     private val pendingNames = ConcurrentHashMap<UUID, UUID>()
     private data class DisplayNamePrompt(val token: UUID, val draft: ArenaSetupDraft)
     private val displayNamePrompts = ConcurrentHashMap<UUID, DisplayNamePrompt>()
+    private val promptOpened = ConcurrentHashMap<UUID, Long>()
+    /** When this player's pending name prompt opened, or null when none is waiting. */
+    fun promptOpenedAt(player: UUID): Long? = promptOpened[player]?.takeIf { pendingNames.containsKey(player) || displayNamePrompts.containsKey(player) }
     private val wandKey = NamespacedKey(plugin, "arena-setup-wand")
     private fun text(key: String, vararg values: Pair<String, Any?>) = lang.arenaMsg("setup.$key", *values)
     private fun tell(player: Player, key: String, vararg values: Pair<String, Any?>) = player.sendMessage(text(key, *values))
@@ -289,6 +292,7 @@ class ArenaSetupController(
         pendingNames.remove(player.uniqueId)
         val request = DisplayNamePrompt(UUID.randomUUID(), draft)
         displayNamePrompts[player.uniqueId] = request
+        promptOpened[player.uniqueId] = System.nanoTime()
         player.closeInventory(); tell(player, "display-name-prompt")
         plugin.server.scheduler.runTaskLater(plugin, Runnable {
             if (displayNamePrompts.remove(player.uniqueId, request) && player.isOnline) tell(player, "name-expired")
@@ -299,6 +303,7 @@ class ArenaSetupController(
         displayNamePrompts.remove(player.uniqueId)
         player.closeInventory(); tell(player, "name-prompt")
         val token = UUID.randomUUID(); pendingNames[player.uniqueId] = token
+        promptOpened[player.uniqueId] = System.nanoTime()
         plugin.server.scheduler.runTaskLater(plugin, Runnable {
             if (pendingNames.remove(player.uniqueId, token) && player.isOnline) tell(player, "name-expired")
         }, 1200L)

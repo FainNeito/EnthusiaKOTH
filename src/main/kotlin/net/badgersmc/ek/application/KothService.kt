@@ -421,7 +421,8 @@ class KothService(
         }
 
         val contested = teamsInZone.size > 1
-        if (cfg.display.actionbar) showCaptureStatus(event, playersInZone, contested, cfg)
+        if (cfg.display.actionbar) showCaptureStatus(event, playersInZone,
+            contested && (arena.family.lowercase() in setOf("score", "moving", "conquest") || arena.contestWhenMultipleCappers), cfg)
         val timeLeft = formatTime(event.endsAt.epochSecond - now.epochSecond)
         val recipients = eventRecipients(event)
         objectiveMarkerService.show(
@@ -562,7 +563,9 @@ class KothService(
 
     private fun finishEvent(event: KothEvent, candidate: TeamId?) {
         if (events[event.id] !== event) return
-        val winner = protectedWinner(event, candidate.takeIf { event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams })
+        val enoughSides = event.isPrivateTest || event.scoringParticipation.teamCount() >= cfgLoader().fairness.minimumParticipatingTeams
+        if (candidate != null && !enoughSides) withheldReasons[event.id] = "INSUFFICIENT_SIDES"
+        val winner = protectedWinner(event, candidate.takeIf { enoughSides })
         event.state = EventState.COMPLETED
         val wasContested = event.scores.size > 1
         val frozenProgression = progressionMatches[event.id]
@@ -1234,7 +1237,7 @@ class KothService(
         val centerZ = (zone.minZ + zone.maxZ) / 2.0
         val reach = (LOST_SOUND_DISTANCE + maxOf(zone.maxX - zone.minX, zone.maxZ - zone.minZ) / 2.0).let { it * it }
         return Bukkit.getOnlinePlayers().filter { player ->
-            player.world.name == zone.worldName && teamFor(player, event) == team &&
+            event.isParticipant(player.uniqueId) && player.world.name == zone.worldName && teamFor(player, event) == team &&
                 (player.location.x - centerX).let { it * it } + (player.location.z - centerZ).let { it * it } <= reach
         }
     }

@@ -82,6 +82,9 @@ class KothFairnessIntegrationTest {
         assertNull(service.activeEvent)
         verify(exactly = 0) { Bukkit.dispatchCommand(any(), any()) }
         verify(exactly = 0) { stats.incrementWin(any(), any()) }
+        // The side that held the point is told why it did not win.
+        verify(atLeast = 1) { capper.sendMessage(Component.text("koth.no_winner_sides")) }
+        verify(exactly = 0) { capper.sendMessage(Component.text("koth.no_winner")) }
     }
     @Test fun `public event messages respect opt out`() {
         assertTrue(service(mute = true).startEvent(arena(), teamMode = TeamMode.GUILD))

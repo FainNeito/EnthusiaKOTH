@@ -86,10 +86,16 @@ class KothCommand(
             "help" -> sendHelp(sender, args.getOrNull(1).equals("all", true))
             "reply" -> if (sender !is Player) sender.sendMessage(lang.msg("command.error.not_a_player")) else {
                 val text = args.drop(1).joinToString(" ")
-                when {
-                    text.isBlank() -> sender.sendMessage(lang.msg("command.reply.usage"))
-                    setup?.answer(sender, text) != true && settings?.answer(sender, text) != true -> sender.sendMessage(lang.msg("command.reply.none"))
+                val setupAt = setup?.promptOpenedAt(sender.uniqueId)
+                val settingsAt = settings?.promptOpenedAt(sender.uniqueId)
+                // With both prompts pending, the one opened last is the one the player is answering.
+                val answered = when {
+                    text.isBlank() -> { sender.sendMessage(lang.msg("command.reply.usage")); true }
+                    settingsAt != null && (setupAt == null || settingsAt > setupAt) -> settings?.answer(sender, text) == true
+                    setupAt != null -> setup?.answer(sender, text) == true
+                    else -> false
                 }
+                if (!answered) sender.sendMessage(lang.msg("command.reply.none"))
             }
             "history", "reports", "readiness", "reconcile", "holds", "reviewmatch", "claims", "challenges", "eligibility", "results" -> progression?.command(sender,args.mapIndexed { i,s -> if(i==0) s.lowercase() else s }.toTypedArray())
             "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
@@ -165,7 +171,7 @@ class KothCommand(
                 else -> emptyList()
             }
             3 -> when {
-                sub == "start" && canStartFromCommand(sender) -> listOf("solo", "guild", "basic", "advanced")
+                sub == "start" && canStartFromCommand(sender) -> listOf("solo", "guild") + startTiers(sender)
                 !admin && !privateStart -> emptyList()
                 sub == "giveflare" -> arenaIds
                 sub == "arena" && !args[1].equals("create", true) -> arenaIds
@@ -176,7 +182,7 @@ class KothCommand(
             }
             4 -> when {
                 sub == "start" && canStartFromCommand(sender) ->
-                    if (args[2].lowercase() in setOf("basic", "advanced")) listOf("solo", "guild") else listOf("basic", "advanced")
+                    if (args[2].lowercase() in setOf("basic", "advanced")) listOf("solo", "guild") else startTiers(sender)
                 privateStart -> listOf("solo", "guild")
                 !admin -> emptyList()
                 sub == "giveflare" -> listOf("1", "5", "10")
@@ -189,6 +195,12 @@ class KothCommand(
             else -> emptyList()
         }
         return options.filter { it.startsWith(args.last(), true) }.toMutableList()
+    }
+
+    /** Advanced starts need their own permission; basic is open to anyone who may start. */
+    private fun startTiers(sender: CommandSender): List<String> = buildList {
+        add("basic")
+        if (sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) add("advanced")
     }
 
     private fun canStartFromCommand(sender: CommandSender): Boolean = sender.hasPermission("enthusiakoth.start.basic") ||
