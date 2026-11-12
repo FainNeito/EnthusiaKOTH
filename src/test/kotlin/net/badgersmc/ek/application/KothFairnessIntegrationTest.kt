@@ -43,7 +43,7 @@ class KothFairnessIntegrationTest {
         every { Bukkit.getPlayer(idle.uniqueId) } returns idle
         every { Bukkit.getConsoleSender() } returns mockk(relaxed = true)
         every { Bukkit.dispatchCommand(any(), any()) } returns true
-        every { zone.containsCircular(capper.location) } returns true
+        every { zone.contains(capper.location) } returns true
         every { guilds.playerGuildId(capper) } returns guild
         every { guilds.playerGuildId(idle) } returns guild
         every { guilds.guildName(guild) } returns "Guild"
@@ -126,14 +126,14 @@ class KothFairnessIntegrationTest {
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
         localPlayers.add(capper)
-        every { zone.containsCircular(capper.location) } returns false
+        every { zone.contains(capper.location) } returns false
         service.tick()
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
     }
 
     @Test fun `no winner does not play the victory fanfare`() {
-        every { zone.containsCircular(capper.location) } returns false
+        every { zone.contains(capper.location) } returns false
         val service = service()
         assertTrue(service.startEvent(arena().copy(durationSeconds = 0), durationOverride = 0, teamMode = TeamMode.GUILD))
         service.tick()
@@ -166,10 +166,17 @@ class KothFairnessIntegrationTest {
         service.tick(); service.tick()
         verify(exactly = 1) { capper.sendMessage(Component.text("koth.capping")) }
         verify(exactly = 0) { idle.sendMessage(Component.text("koth.capping")) }
-        every { zone.containsCircular(capper.location) } returns false
+        every { zone.contains(capper.location) } returns false
         service.tick()
         verify(exactly = 1) { capper.sendMessage(Component.text("koth.leave")) }
         verify(exactly = 0) { idle.sendMessage(Component.text("koth.leave")) }
+    }
+    @Test fun `the player on the point is told above the hotbar that they are capturing`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        service.tick(); service.tick()
+        verify(atLeast = 1) { capper.sendActionBar(Component.text("koth.actionbar.capturing")) }
+        verify(exactly = 0) { idle.sendActionBar(any<Component>()) }
     }
     @Test fun `moving out of notification regions suppresses subsequent capture messages`() {
         val service = service(localAudience = true)

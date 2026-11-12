@@ -140,6 +140,11 @@ koth:
   no_captures: "<prefix><red>No captures were made during that KOTH."
   no_winner: "<prefix><red>The <yellow><koth_name><red> KOTH ended without a winner."
   warning_minutes: "<prefix><green><koth_name> <green>starts in <minutes> minutes!"
+  actionbar:
+    capturing: "<green>Capturing <yellow><koth_name></yellow> <dark_gray>[<green><progress_bar><dark_gray>] <white><time_left> left"
+    contested: "<gold>Contested! <gray>Clear the point to keep capturing <yellow><koth_name>"
+    held: "<red><capper> still holds <yellow><koth_name></yellow><red>. <gray>Stay on the point to take it."
+    starting: "<gray>You are on the <yellow><koth_name></yellow> <gray>point."
   reminder: "<prefix><green>Reminder that the <yellow><koth_name><green> KOTH is still active! <capper> <dark_gray>(<time_left>)</dark_gray> is currently capturing."
 
 protection:
@@ -203,7 +208,7 @@ setup:
   preview-hint: "<gray>Shows you the area with particles for 30 seconds."
   duration: "<yellow>Event length: <white><value>"
   capture: "<yellow>Time to capture: <white><value>"
-  radius: "<yellow>Capture radius: <white><value> blocks"
+  radius: "<yellow>Capture area: <white><value> blocks out from the centre"
   adjust-minute: "<gray>Left-click: +1 minute. Right-click: -1 minute."
   adjust-capture: "<gray>Left-click: +15s. Right-click: -15s."
   adjust-radius: "<gray>Left-click: +1 block. Right-click: -1 block."

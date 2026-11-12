@@ -183,7 +183,7 @@ class ArenaSetupController(
             ArenaSetupPage.REVIEW -> {
                 val r = text("review-hint")
                 inv.setItem(20, icon(Material.MAP, "review-area", "", listOf(MenuStyle.line("Boundary", boundary), MenuStyle.line("Capture point", center),
-                    MenuStyle.line("Capture radius", "${a.radius} blocks"), r)))
+                    MenuStyle.line("Capture area", "${a.radius} blocks out from the centre"), r)))
                 inv.setItem(21, icon(Material.CLOCK, "review-rules", "", listOf(MenuStyle.line("Event length", MenuStyle.duration(a.durationSeconds.toLong())),
                     MenuStyle.line("Time to capture", MenuStyle.duration(a.captureSeconds.toLong())), MenuStyle.line("When the holder leaves", MenuStyle.label(a.leaveBehavior)), r)))
                 inv.setItem(22, icon(Material.CHEST, "review-deaths", "", listOf(MenuStyle.line("Keep inventory", MenuStyle.onOff(a.keepInventory)),

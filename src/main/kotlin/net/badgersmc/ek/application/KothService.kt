@@ -363,11 +363,6 @@ class KothService(
         }
         val playersInZone = if (arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInStaticCaptureZone(event)
 
-        if (cfg.display.actionbar && cfg.progressBar.enabled && event.currentController != null) {
-            val progress = progressBar(event, cfg.progressBar)
-            playersInZone.filter { event.isPrivateTest || (notificationsEnabled(it) && captureAudience(event, it)) }.forEach { it.sendActionBar(progress) }
-        }
-
         val reminder = cfg.reminders
         if (reminder.enabled) {
             val counter = reminderCounters.getOrPut(event.arena.id) { reminder.intervalSeconds }
@@ -419,6 +414,7 @@ class KothService(
         }
 
         val contested = teamsInZone.size > 1
+        if (cfg.display.actionbar) showCaptureStatus(event, playersInZone, contested, cfg)
         val timeLeft = formatTime(event.endsAt.epochSecond - now.epochSecond)
         val recipients = eventRecipients(event)
         objectiveMarkerService.show(
@@ -516,7 +512,7 @@ class KothService(
     private fun playersInStaticCaptureZone(event: KothEvent): List<Player> =
         Bukkit.getOnlinePlayers().filter { player ->
             player.isValid && !player.isDead && player.gameMode != GameMode.SPECTATOR &&
-                event.isParticipant(player.uniqueId) && event.arena.zone.containsCircular(player.location)
+                event.isParticipant(player.uniqueId) && event.arena.zone.contains(player.location)
         }
 
     /** A moving point has its own marker that follows it; a fixed outline would sit where the point started. */
@@ -1170,7 +1166,26 @@ class KothService(
         return "${center.blockX}, ${center.blockY}, ${center.blockZ}"
     }
 
-    private fun progressBar(event: KothEvent, cfg: ProgressBarConfig): net.kyori.adventure.text.Component {
+    /** Tells each player on the point, above their hotbar, whether they are capturing, contested or still being held off. */
+    private fun showCaptureStatus(event: KothEvent, playersInZone: List<Player>, contested: Boolean, cfg: EnthusiaKothConfig) {
+        val controller = event.currentController
+        val left = if (event.arena.family.equals("capture", true)) {
+            (event.arena.captureSeconds - (controller?.let { event.scores[it] } ?: 0.0)).toLong().coerceAtLeast(0)
+        } else (event.endsAt.epochSecond - clock.instant().epochSecond).coerceAtLeast(0)
+        val values = arrayOf("koth_name" to event.arena.name.arenaComponent(), "progress_bar" to progressBarText(event, cfg.progressBar),
+            "time_left" to formatTime(left), "capper" to (capperName(event) ?: "Someone"))
+        playersInZone.filter { event.isPrivateTest || (notificationsEnabled(it) && captureAudience(event, it)) }.forEach { player ->
+            val key = when {
+                contested -> "koth.actionbar.contested"
+                controller == null -> "koth.actionbar.starting"
+                teamFor(player, event) == controller -> "koth.actionbar.capturing"
+                else -> "koth.actionbar.held"
+            }
+            player.sendActionBar(lang.arenaMsg(key, *values))
+        }
+    }
+
+    private fun progressBarText(event: KothEvent, cfg: ProgressBarConfig): String {
         val progress = if (event.arena.family.equals("moving", true) || event.arena.family.equals("conquest", true) || event.arena.family.equals("score", true)) {
             displayProgress(event, clock.instant()).toDouble()
         } else {
@@ -1178,9 +1193,8 @@ class KothService(
             ((event.scores.values.maxOrNull() ?: 0.0) / maximum).coerceIn(0.0, 1.0)
         }
         val filled = (progress * cfg.length).toInt()
-        val bar = cfg.character.repeat(filled) + lang.raw("progress_bar.empty_color") +
+        return cfg.character.repeat(filled) + lang.raw("progress_bar.empty_color") +
             cfg.character.repeat((cfg.length - filled).coerceAtLeast(0))
-        return lang.msg("progress_bar.format", "progress_bar" to bar)
     }
 
     private fun eventRecipients(event: KothEvent, captureOnly: Boolean = true): List<Player> = if (event.isPrivateTest) {
