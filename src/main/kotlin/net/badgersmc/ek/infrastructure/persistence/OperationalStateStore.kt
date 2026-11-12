@@ -10,6 +10,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.UUID
 
@@ -26,6 +27,16 @@ private data class StoredScheduleClaim(
     val status: ScheduleClaimStatus,
     val arenaId: String? = null,
     val teamMode: TeamMode? = null,
+)
+
+/**
+ * Strict durable readback of scheduler and queue state. [evaluatedThrough] is the lower of the
+ * persisted and in-memory cursors, so a pending backwards retry cursor is never overstated.
+ */
+data class OperationalSnapshot(
+    val evaluatedThrough: Instant,
+    val startClaims: Map<String, ScheduleClaimStatus>,
+    val queuedOccurrences: Set<String>,
 )
 
 interface ScheduleStateStore {
@@ -109,12 +120,19 @@ class FileOperationalStateStore(
 ) : ScheduleStateStore, EventQueueStore {
     companion object {
         internal val EVALUATION_PERSIST_INTERVAL: Duration = Duration.ofMinutes(1)
+        // Sticky markers: a lossy load may later be rewritten as a clean-looking file, so the fact
+        // that rows were dropped is persisted until an operator reconciles the file while stopped.
+        // Older readers ignore both lines.
+        private const val SCHEDULE_TAINT = "tainted="
+        private const val QUEUE_TAINT = "t|"
     }
 
     private var loaded = false
     private var evaluated: Instant? = null
     private var lastPersistedEvaluation: Instant? = null
     private val claims = linkedMapOf<String, StoredScheduleClaim>()
+    private var scheduleTaint: String? = null
+    private var queueTaint: String? = null
 
     @Synchronized
     private fun ensureScheduleLoaded() {
@@ -124,38 +142,94 @@ class FileOperationalStateStore(
         runCatching {
             scheduleFile.readLines().forEach { line ->
                 when {
-                    line.startsWith("last=") -> evaluated = line.removePrefix("last=").toLongOrNull()?.let(Instant::ofEpochMilli)
-                    line.startsWith("claim=") -> loadClaim(line.removePrefix("claim="))
+                    line.startsWith("last=") -> evaluated = parseEvaluation(line).also { if (it == null) taintSchedule() }
+                    line.startsWith("claim=") -> parseClaim(line.removePrefix("claim="), ::taintSchedule)
+                        ?.let { (key, claim) -> claims[key] = claim } ?: taintSchedule()
+                    line.startsWith(SCHEDULE_TAINT) -> scheduleTaint = scheduleTaint ?: line.removePrefix(SCHEDULE_TAINT)
+                    line.isNotBlank() -> taintSchedule()
                 }
             }
-        }.onFailure { logger("Failed to read KOTH schedule state; duplicate suppression may be incomplete", it) }
+        }.onFailure {
+            taintSchedule()
+            logger("Failed to read KOTH schedule state; duplicate suppression may be incomplete", it)
+        }
         lastPersistedEvaluation = evaluated
     }
 
-    private fun loadClaim(serialized: String) {
+    private fun taintSchedule() { scheduleTaint = scheduleTaint ?: Instant.now().toEpochMilli().toString() }
+
+    private fun parseEvaluation(line: String): Instant? = line.removePrefix("last=").toLongOrNull()?.let(Instant::ofEpochMilli)
+
+    private fun parseClaim(serialized: String, onLossy: () -> Unit): Pair<String, StoredScheduleClaim>? {
         val parts = serialized.split('|')
-        val instant = parts.firstOrNull()?.toLongOrNull()?.let(Instant::ofEpochMilli) ?: return
-        when (parts.size) {
+        val instant = parts.firstOrNull()?.toLongOrNull()?.let(Instant::ofEpochMilli) ?: return null
+        return when (parts.size) {
             // Legacy claims predate transactional pending/committed state. They represented
             // occurrences already accepted by the scheduler, so treat them as committed.
             2 -> {
-                val key = parts[1].decodeOrNull() ?: return
-                claims[key] = StoredScheduleClaim(instant, ScheduleClaimStatus.COMMITTED)
+                val key = parts[1].decodeOrNull() ?: return null
+                key to StoredScheduleClaim(instant, ScheduleClaimStatus.COMMITTED)
             }
             3 -> {
                 // Transactional v1 rows did not yet include immutable occurrence metadata.
-                val status = runCatching { ScheduleClaimStatus.valueOf(parts[1]) }.getOrNull() ?: return
-                val key = parts[2].decodeOrNull() ?: return
-                claims[key] = StoredScheduleClaim(instant, status)
+                val status = runCatching { ScheduleClaimStatus.valueOf(parts[1]) }.getOrNull() ?: return null
+                val key = parts[2].decodeOrNull() ?: return null
+                key to StoredScheduleClaim(instant, status)
             }
             5 -> {
-                val status = runCatching { ScheduleClaimStatus.valueOf(parts[1]) }.getOrNull() ?: return
-                val key = parts[2].decodeOrNull() ?: return
-                val arenaId = parts[3].takeUnless { it == "-" }?.decodeOrNull()
+                val status = runCatching { ScheduleClaimStatus.valueOf(parts[1]) }.getOrNull() ?: return null
+                val key = parts[2].decodeOrNull() ?: return null
+                // Unreadable metadata keeps the claim (it still suppresses duplicates) but is lossy.
+                val arenaId = parts[3].takeUnless { it == "-" }?.let { it.decodeOrNull() ?: null.also { onLossy() } }
                 val teamMode = parts[4].takeUnless { it == "-" }
-                    ?.let { runCatching { TeamMode.valueOf(it) }.getOrNull() }
-                claims[key] = StoredScheduleClaim(instant, status, arenaId, teamMode)
+                    ?.let { runCatching { TeamMode.valueOf(it) }.getOrNull() ?: null.also { onLossy() } }
+                key to StoredScheduleClaim(instant, status, arenaId, teamMode)
             }
+            else -> null
+        }
+    }
+
+    /**
+     * Strict readback for decisions that must not treat a failed read as absence. Null when a
+     * file is missing, unreadable, malformed, mid-write, tainted by an earlier lossy load, or
+     * does not yet match this store's in-memory claims and persisted cursor.
+     */
+    @Synchronized fun verifiedSnapshot(): OperationalSnapshot? {
+        ensureScheduleLoaded()
+        if (scheduleTaint != null || queueTaint != null) return null
+        if (!scheduleFile.isFile || !queueFile.isFile) return null
+        if (temporaryFor(scheduleFile).exists() || temporaryFor(queueFile).exists()) return null
+        return runCatching {
+            var last: Instant? = null
+            val disk = linkedMapOf<String, StoredScheduleClaim>()
+            for (line in scheduleFile.readLines()) when {
+                line.isBlank() -> Unit
+                line.startsWith("last=") -> {
+                    if (last != null) return null
+                    last = parseEvaluation(line) ?: return null
+                }
+                line.startsWith("claim=") -> {
+                    var lossy = false
+                    val (key, claim) = parseClaim(line.removePrefix("claim=")) { lossy = true } ?: return null
+                    if (lossy) return null
+                    if (disk.put(key, claim) != null) return null
+                }
+                else -> return null
+            }
+            val persisted = last ?: return null
+            val current = evaluated ?: return null
+            if (persisted != lastPersistedEvaluation || disk != claims) return null
+            var lossy = false
+            val queued = queueFile.readLines().filter { it.isNotBlank() }.map { loadQueuedEvent(it) { lossy = true } ?: return null }
+            if (lossy) return null
+            OperationalSnapshot(
+                evaluatedThrough = minOf(persisted, current),
+                startClaims = disk.filterKeys { it.startsWith("start:") }.mapValues { it.value.status },
+                queuedOccurrences = queued.mapNotNull { it.occurrenceId }.toSet(),
+            )
+        }.getOrElse {
+            logger("Failed to verify KOTH schedule and queue state; treating it as unknown", it)
+            null
         }
     }
 
@@ -163,7 +237,8 @@ class FileOperationalStateStore(
 
     @Synchronized override fun setLastEvaluation(value: Instant) {
         ensureScheduleLoaded()
-        evaluated = value
+        // The file stores milliseconds; a finer in-memory cursor would never match its strict readback.
+        evaluated = value.truncatedTo(ChronoUnit.MILLIS)
         val persisted = lastPersistedEvaluation
         val shouldPersist = persisted == null ||
             value.isBefore(persisted) ||
@@ -250,14 +325,20 @@ class FileOperationalStateStore(
     @Synchronized override fun load(): List<QueuedEvent> {
         if (!queueFile.isFile) return emptyList()
         return runCatching {
-            queueFile.readLines().mapNotNull(::loadQueuedEvent)
+            fun taint(marker: String? = null) { queueTaint = queueTaint ?: marker ?: Instant.now().toEpochMilli().toString() }
+            queueFile.readLines().mapNotNull { line ->
+                loadQueuedEvent(line) { taint() }.also {
+                    if (it == null && line.isNotBlank()) taint(line.takeIf { it.startsWith(QUEUE_TAINT) }?.removePrefix(QUEUE_TAINT))
+                }
+            }
         }.getOrElse {
+            queueTaint = queueTaint ?: Instant.now().toEpochMilli().toString()
             logger("Failed to read persisted KOTH queue; leaving it empty", it)
             emptyList()
         }
     }
 
-    private fun loadQueuedEvent(line: String): QueuedEvent? {
+    private fun loadQueuedEvent(line: String, onLossy: () -> Unit): QueuedEvent? {
         val parts = line.split('|')
         if (parts.firstOrNull() != "q") return null
         val arenaId = parts.getOrNull(1)?.decodeOrNull() ?: return null
@@ -291,8 +372,9 @@ class FileOperationalStateStore(
                 state = runCatching { QueuedEventState.valueOf(parts[5]) }.getOrNull() ?: return null,
                 attempts = parts[6].toIntOrNull() ?: return null,
                 nextAttemptAt = parts[7].toLongOrNull()?.let(Instant::ofEpochMilli) ?: return null,
-                occurrenceId = parts[8].takeUnless { it == "-" }?.decodeOrNull(),
-                activationId = parts[9].takeUnless { it == "-" }?.let { runCatching { UUID.fromString(it) }.getOrNull() },
+                occurrenceId = parts[8].takeUnless { it == "-" }?.let { it.decodeOrNull() ?: null.also { onLossy() } },
+                activationId = parts[9].takeUnless { it == "-" }
+                    ?.let { runCatching { UUID.fromString(it) }.getOrNull() ?: null.also { onLossy() } },
             )
             else -> null
         }
@@ -312,7 +394,7 @@ class FileOperationalStateStore(
                 event.occurrenceId?.encode() ?: "-",
                 event.activationId?.toString() ?: "-",
             ).joinToString("|")
-        }
+        } + listOfNotNull(queueTaint?.let { QUEUE_TAINT + it })
         queuePersistInterceptor()
         atomicWrite(queueFile, lines.joinToString("\n", postfix = if (lines.isEmpty()) "" else "\n"))
     }
@@ -331,6 +413,7 @@ class FileOperationalStateStore(
                     ).joinToString("|"),
                 )
             }
+            scheduleTaint?.let { add(SCHEDULE_TAINT + it) }
         }
         schedulePersistInterceptor()
         atomicWrite(scheduleFile, lines.joinToString("\n", postfix = if (lines.isEmpty()) "" else "\n"))
@@ -340,7 +423,7 @@ class FileOperationalStateStore(
 
     private fun atomicWrite(file: File, content: String) {
         file.parentFile?.mkdirs()
-        val temporary = File(file.parentFile, "${file.name}.tmp")
+        val temporary = temporaryFor(file)
         Files.writeString(temporary.toPath(), content, StandardCharsets.UTF_8)
         try {
             Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
@@ -348,6 +431,8 @@ class FileOperationalStateStore(
             Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
+
+    private fun temporaryFor(file: File) = File(file.parentFile, "${file.name}.tmp")
 
     private fun String.encode(): String = Base64.getUrlEncoder().withoutPadding().encodeToString(toByteArray(StandardCharsets.UTF_8))
     private fun String.decodeOrNull(): String? = runCatching {

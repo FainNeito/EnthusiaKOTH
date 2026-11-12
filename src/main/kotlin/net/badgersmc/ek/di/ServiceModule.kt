@@ -2,6 +2,7 @@ package net.badgersmc.ek.di
 
 import net.badgersmc.ek.infrastructure.i18n.arenaComponent
 import net.badgersmc.ek.infrastructure.i18n.arenaMsg
+import net.enthusia.loreitems.api.v1.CrownFirstAwardV1
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import net.badgersmc.ek.EnthusiaKothPlugin
@@ -219,6 +220,37 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         it.init()
         plugin.server.servicesManager.register(net.badgersmc.ek.api.KothProgressionV1::class.java,it,plugin,org.bukkit.plugin.ServicePriority.Normal)
     }
+    private val crownEvents = net.badgersmc.ek.infrastructure.persistence.SqlCrownEventStore(dataSource).also { it.init() }
+    private val crownCredits = net.badgersmc.ek.infrastructure.persistence.SqlCrownQuestCredits(dataSource).also { it.init() }
+    private val crownRecovery = net.badgersmc.ek.infrastructure.bukkit.CrownRecoveryRuntime(plugin,dataSource,crownEvents)
+    private val matchCompletion = object : net.badgersmc.ek.application.MatchProgressionSink {
+        override fun complete(match: net.badgersmc.ek.application.VerifiedMatch) = complete(match, progressionSettings.policy())
+
+        override fun complete(match: net.badgersmc.ek.application.VerifiedMatch, frozenPolicy: net.badgersmc.ek.application.ProgressionPolicy) {
+            progressionStore.complete(match, frozenPolicy)
+            crownRecovery.complete(match.eventId)
+            val settings = plugin.config.getConfigurationSection("crown-quest") ?: return
+            if (!settings.getBoolean("enabled")) return
+            val revision = settings.getString("revision") ?: return
+            val cutover = settings.getString("cutover")?.let(java.time.Instant::parse) ?: return
+            val creditRules = net.badgersmc.ek.infrastructure.persistence.CrownCreditRules(true, cutover, revision)
+            val requirements = net.badgersmc.ek.application.CrownQuestRequirements(true, settings.getInt("wins"),
+                settings.getLong("scoring-seconds"), settings.getInt("distinct-days"))
+            if (match.at.isBefore(cutover)) return
+            val intent = crownEvents.processProtectedResult(match.eventId, creditRules, requirements, crownCredits) ?: return
+            val provider = try {
+                plugin.server.servicesManager.load(CrownFirstAwardV1::class.java)
+            } catch (_: NoClassDefFoundError) { null }
+            if (provider == null) {
+                plugin.logger.warning("First Crown award " + intent.match + " needs a configured LoreItems first-award provider.")
+                return
+            }
+            provider.stageVerifiedWinner(intent.match, intent.winner).whenComplete { staged, error ->
+                if (error != null || staged != true) plugin.logger.log(java.util.logging.Level.WARNING,
+                    "First Crown award " + intent.match + " requires custody review.", error)
+            }
+        }
+    }
     private val progressionClaims = net.badgersmc.ek.infrastructure.bukkit.ProgressionClaims(plugin,progressionStore,vaultEconomy)
 
     fun refreshRewardReadiness() {
@@ -259,7 +291,18 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         cfgLoader = { config() },
         stats = statsRepository,
         protectionStore = net.badgersmc.ek.infrastructure.persistence.SqlRewardProtectionStore(dataSource).also { it.init() },
-        progressionSink = progressionStore,
+        progressionSink = matchCompletion,
+        bindScheduledMatch = { queued, match ->
+            queued.occurrenceId?.let { id -> crownRecovery.canStart(id) && crownEvents.bindScheduledMatch(id, queued.arenaId,
+                queued.scheduledAt, queued.teamMode == net.badgersmc.ek.domain.TeamMode.SOLO, match) } ?: true
+        },
+        acknowledgeDiscarded = { queued ->
+            queued.occurrenceId?.let { id ->
+                crownEvents.acknowledgeDiscard(id,queued.arenaId,queued.scheduledAt,queued.activationId).also { acknowledged ->
+                    if (acknowledged) crownRecovery.retireEmptyBindings()
+                }
+            } ?: true
+        },
         progressionPolicy = progressionSettings::policy,
         rewardedStartIssues = ::rewardedStartIssues,
         arenaIdentity = ::progressionArenaIdentity,
@@ -279,7 +322,11 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             error?.let { plugin.logger.severe(it.stackTraceToString()) }
         },
         eventTerminated = restrictionService::clearEvent,
-        lifecycleSink = { plugin.server.pluginManager.callEvent(it) },
+        lifecycleSink = {
+            if(it.lifecycle==net.badgersmc.ek.api.KothLifecycle.CANCELLED ||
+                (it.lifecycle==net.badgersmc.ek.api.KothLifecycle.COMPLETED && it.snapshot.winner==null)) crownRecovery.cancelled(it.snapshot.eventId)
+            plugin.server.pluginManager.callEvent(it)
+        },
         arenasOverlap = overlap@ { a, b ->
             if (a.zone.worldName != b.zone.worldName) return@overlap false
             fun bounded(arena: KothArena): KothArena? {
@@ -367,8 +414,38 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             val discord = config().discord
             discord.preStartPingMinutes.takeIf { discord.enabled } ?: 0
         },
+        announceCrownFinal = { slot ->
+            crownRecovery.announce(slot.id,slot.arenaId,slot.instant,slot.teamMode==net.badgersmc.ek.domain.TeamMode.SOLO) { key, values ->
+                broadcastCrown(key, values)
+            }
+            val quest = plugin.config.getConfigurationSection("crown-quest")
+            if (quest?.getBoolean("enabled") == true && quest.getString("first-final-occurrence") == slot.id &&
+                slot.teamMode == net.badgersmc.ek.domain.TeamMode.SOLO) {
+                val revision = quest.getString("revision").orEmpty()
+                if (revision.matches(Regex("[a-zA-Z0-9_.-]{1,64}"))) {
+                    val final = net.badgersmc.ek.infrastructure.persistence.CrownOccurrence(slot.id, slot.arenaId, slot.instant,
+                        net.badgersmc.ek.domain.CrownEventPurpose.FIRST_CROWN_FINAL, revision)
+                    val result = crownEvents.plan(final)
+                    if (result != net.badgersmc.ek.infrastructure.persistence.CrownOccurrenceWrite.CONFLICT &&
+                        crownEvents.read(slot.id) == final) {
+                        broadcastCrown("crown.announce-first", listOf("arena" to slot.arenaId, "command" to "/ekoth crown accept-helmet-loss ${slot.id} $revision"))
+                    }
+                }
+            }
+        },
         discordWarningSink = { arenaId, minutes -> discordWebhook.sendPreStart(arenas()[arenaId]?.name ?: arenaId, minutes) },
     )
+
+    init {
+        // Queue lock -> store lock matches the order used by persistQueue and claim checks.
+        crownRecovery.missedOccurrenceGate = { slot ->
+            kothService.withQueueEvidence { live ->
+                val decision = net.badgersmc.ek.application.MissedOccurrencePolicy.assess(
+                    slot.occurrenceId, slot.scheduledAt, clock.instant(), operationalState.verifiedSnapshot(), live)
+                decision to (decision == net.badgersmc.ek.application.MissedOccurrenceDecision.MISSED && crownEvents.cancelMissed(slot))
+            }
+        }
+    }
     val keepInventoryListener = net.badgersmc.ek.infrastructure.bukkit.KeepInventoryListener(
         activeEvent = { kothService.activeEvent },
         allEvents = kothService::allEvents,
@@ -416,7 +493,16 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         plugin.server.scheduler.runTaskTimer(plugin,Runnable { runCatching { it.tick() }.onFailure { error ->
             plugin.logger.warning("KOTH advancement projection unavailable: ${error.message}") } },40L,200L)
     }
+
     val kothCommand = KothCommand(
+        acceptCrownSacrifice = crownEvents::acceptHelmetSacrifice,
+        acceptCrownBinding = crownEvents::acceptRecoveryBinding,
+        openCrownFinals = { kind ->
+            val purpose = if (kind == "binding") net.badgersmc.ek.domain.CrownEventPurpose.RECOVERY_CROWN_FINAL else net.badgersmc.ek.domain.CrownEventPurpose.FIRST_CROWN_FINAL
+            crownEvents.listOpenPage(null, 200).occurrences
+                .filter { it.state == net.badgersmc.ek.infrastructure.persistence.CrownOccurrenceState.PLANNED && it.purpose == purpose }
+                .associate { it.occurrenceId to it.policyRevision }
+        },
         plugin = plugin,
         cfgLoader = { config() },
         kothService = kothService,
@@ -555,6 +641,21 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         }
     }
 
+    /** Crown announcements show the arena's styled name, and their accept command can be clicked to type it. */
+    private fun broadcastCrown(key: String, values: List<Pair<String, String>>) {
+        val rendered = values.map { (name, value) ->
+            name to when (name) {
+                "arena" -> (arenas()[value]?.name ?: value).arenaComponent()
+                "command" -> net.kyori.adventure.text.Component.text(value, net.kyori.adventure.text.format.TextColor.color(0xFFCF1F))
+                    .clickEvent(net.kyori.adventure.text.event.ClickEvent.suggestCommand(value))
+                    .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(net.kyori.adventure.text.Component.text("Click to type this command")))
+                else -> value
+            }
+        }
+        val message = langService.arenaMsg(key, *rendered.toTypedArray())
+        Bukkit.getOnlinePlayers().filter(notificationPreferences::enabled).forEach { it.sendMessage(message) }
+    }
+
     private fun registerCommand(cmd: KothCommand) {
         val commandMap = Bukkit.getCommandMap() ?: run {
             plugin.logger.warning("EnthusiaKOTH: no CommandMap available — /ekoth not registered")
@@ -570,6 +671,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun shutdown() {
+        crownRecovery.close()
         arenaSetupController.shutdown()
         staffSettingsController.shutdown()
         scheduleService.flush()

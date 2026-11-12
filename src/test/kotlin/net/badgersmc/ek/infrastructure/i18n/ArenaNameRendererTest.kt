@@ -40,6 +40,17 @@ class ArenaNameRendererTest {
         }
         assertEquals("Crête & Summit 🏆", plain.serialize("Crête & Summit 🏆".arenaComponent()))
     }
+    @Test fun `crown lines render their wording, arena and command`() {
+        val service = lang()
+        val usage = plain.serialize(service.msg("crown.usage"))
+        assertTrue(usage.contains("/ekoth crown accept-binding <final> <revision> for a recovery final"), usage)
+        assertTrue(usage.contains("/ekoth crown accept-helmet-loss <final> <revision> for the first final"), usage)
+        val announcement = service.arenaMsg("crown.announce-recovery", "arena" to "&cSummit".arenaComponent(),
+            "command" to Component.text("/ekoth crown accept-binding slot test-v1"))
+        assertTrue(plain.serialize(announcement).contains("Crown of Sorrow recovery final at Summit."))
+        assertTrue(plain.serialize(announcement).endsWith("Accept before the start with /ekoth crown accept-binding slot test-v1."))
+        assertEquals(TextColor.color(0xFFD0C6), leaves(service.msg("crown.binding-refused")).first { it.first.startsWith("That") }.second.color())
+    }
     @Test fun `actual Nexus templates preserve prefix and scope arena styling`() {
         val service = lang()
         service.registerGlobalResolver("entered", Placeholder.parsed("entered", "<aqua>FainNoir"))

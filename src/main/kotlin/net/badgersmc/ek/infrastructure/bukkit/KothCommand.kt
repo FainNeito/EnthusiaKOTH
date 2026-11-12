@@ -67,7 +67,24 @@ class KothCommand(
     private val setup: ArenaSetupController? = null,
     private val settings: StaffSettingsController? = null,
     private val progression: ProgressionController? = null,
+    private val acceptCrownSacrifice: (String, String, UUID) -> Boolean = { _, _, _ -> false },
+    private val acceptCrownBinding: (String, String, UUID) -> Boolean = { _, _, _ -> false },
+    /** Crown finals still open for acceptance, as occurrence ID to policy revision, for "binding" or "helmet-loss". */
+    private val openCrownFinals: (String) -> Map<String, String> = { emptyMap() },
 ) : CommandExecutor, TabCompleter {
+
+    /** /ekoth crown accept-binding|accept-helmet-loss <final> <revision>, or null when the line is not a crown command. */
+    internal fun crownTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
+        if (!args.getOrNull(0).equals("crown", true) || args.size < 2 || sender !is Player || !sender.hasPermission("enthusiakoth.command")) return null
+        val kind = when (args[1].lowercase()) { "accept-binding" -> "binding"; "accept-helmet-loss" -> "helmet-loss"; else -> null }
+        val options = when (args.size) {
+            2 -> listOf("accept-binding", "accept-helmet-loss")
+            3 -> kind?.let { openCrownFinals(it).keys.sorted() }.orEmpty()
+            4 -> kind?.let { openCrownFinals(it)[args[2]] }?.let(::listOf).orEmpty()
+            else -> emptyList()
+        }
+        return options.filter { it.startsWith(args.last(), true) }
+    }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (args.isEmpty()) {
@@ -76,6 +93,17 @@ class KothCommand(
             return true
         }
         when (args[0].lowercase()) {
+            "crown" -> {
+                if (sender !is Player) sender.sendMessage(lang.msg("command.error.not_a_player"))
+                else if (!sender.hasPermission("enthusiakoth.command")) sender.sendMessage(lang.msg("command.error.no_permission"))
+                else if (args.size==4 && args[1]=="accept-binding") {
+                    sender.sendMessage(lang.msg(if(acceptCrownBinding(args[2],args[3],sender.uniqueId)) "crown.binding-accepted" else "crown.binding-refused"))
+                } else if (args.size != 4 || args[1] != "accept-helmet-loss") {
+                    sender.sendMessage(lang.msg("crown.usage"))
+                } else if (acceptCrownSacrifice(args[2], args[3], sender.uniqueId)) {
+                    sender.sendMessage(lang.msg("crown.sacrifice-accepted"))
+                } else sender.sendMessage(lang.msg("crown.sacrifice-refused"))
+            }
             "help" -> sendHelp(sender, args.getOrNull(1).equals("all", true))
             "history", "reports", "readiness", "reconcile", "holds", "reviewmatch", "claims", "challenges", "eligibility", "results" -> progression?.command(sender,args.mapIndexed { i,s -> if(i==0) s.lowercase() else s }.toTypedArray())
             "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
@@ -116,8 +144,9 @@ class KothCommand(
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
+        crownTabOptions(sender, args)?.let { return it.toMutableList() }
         if (args.size == 1) {
-            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications", "claims", "challenges", "eligibility", "results")
+            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications", "claims", "challenges", "eligibility", "results", "crown")
             if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {
                 options += "start"
             }
@@ -258,6 +287,7 @@ class KothCommand(
             occurrences.forEach { occurrence ->
                 val time = occurrence.instant.atZone(cfg.schedule.zone).format(DateTimeFormatter.ofPattern("HH:mm"))
                 sender.sendMessage(lang.msg("command.schedule.entry_time", "time" to time))
+                if (sender.hasPermission("enthusiakoth.admin")) sender.sendMessage(lang.msg("crown.schedule-id", "mode" to occurrence.teamMode.toString(), "id" to occurrence.id))
             }
         }
     }
