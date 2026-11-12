@@ -69,7 +69,22 @@ class KothCommand(
     private val progression: ProgressionController? = null,
     private val acceptCrownSacrifice: (String, String, UUID) -> Boolean = { _, _, _ -> false },
     private val acceptCrownBinding: (String, String, UUID) -> Boolean = { _, _, _ -> false },
+    /** Crown finals still open for acceptance, as occurrence ID to policy revision, for "binding" or "helmet-loss". */
+    private val openCrownFinals: (String) -> Map<String, String> = { emptyMap() },
 ) : CommandExecutor, TabCompleter {
+
+    /** /ekoth crown accept-binding|accept-helmet-loss <final> <revision>, or null when the line is not a crown command. */
+    internal fun crownTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
+        if (!args.getOrNull(0).equals("crown", true) || args.size < 2 || sender !is Player || !sender.hasPermission("enthusiakoth.command")) return null
+        val kind = when (args[1].lowercase()) { "accept-binding" -> "binding"; "accept-helmet-loss" -> "helmet-loss"; else -> null }
+        val options = when (args.size) {
+            2 -> listOf("accept-binding", "accept-helmet-loss")
+            3 -> kind?.let { openCrownFinals(it).keys.sorted() }.orEmpty()
+            4 -> kind?.let { openCrownFinals(it)[args[2]] }?.let(::listOf).orEmpty()
+            else -> emptyList()
+        }
+        return options.filter { it.startsWith(args.last(), true) }
+    }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (args.isEmpty()) {
@@ -129,8 +144,9 @@ class KothCommand(
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
+        crownTabOptions(sender, args)?.let { return it.toMutableList() }
         if (args.size == 1) {
-            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications", "claims", "challenges", "eligibility", "results")
+            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications", "claims", "challenges", "eligibility", "results", "crown")
             if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {
                 options += "start"
             }

@@ -497,6 +497,12 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     val kothCommand = KothCommand(
         acceptCrownSacrifice = crownEvents::acceptHelmetSacrifice,
         acceptCrownBinding = crownEvents::acceptRecoveryBinding,
+        openCrownFinals = { kind ->
+            val purpose = if (kind == "binding") net.badgersmc.ek.domain.CrownEventPurpose.RECOVERY_CROWN_FINAL else net.badgersmc.ek.domain.CrownEventPurpose.FIRST_CROWN_FINAL
+            crownEvents.listOpenPage(null, 200).occurrences
+                .filter { it.state == net.badgersmc.ek.infrastructure.persistence.CrownOccurrenceState.PLANNED && it.purpose == purpose }
+                .associate { it.occurrenceId to it.policyRevision }
+        },
         plugin = plugin,
         cfgLoader = { config() },
         kothService = kothService,
