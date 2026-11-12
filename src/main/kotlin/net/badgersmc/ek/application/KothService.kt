@@ -90,6 +90,8 @@ class KothService(
     private val captureSoundLimiter = CaptureSoundLimiter()
     private val captureSoundGeneration = mutableMapOf<UUID, Long>()
     private val protectedMatches = mutableMapOf<UUID, ProtectedMatch>()
+    /** Why reward protection turned a completed capture into no winner, so players are told instead of guessing. */
+    private val withheldReasons = mutableMapOf<UUID, String>()
     private val recipientBudgets = mutableMapOf<UUID, Int>()
     private val progressionMatches = mutableMapOf<UUID, ProgressionPolicy>()
     private val matchArenaIdentities = mutableMapOf<UUID, String>()
@@ -155,10 +157,14 @@ class KothService(
             if (reason != null) {
                 protectionStore?.reject(event.id, event.arena.id, clock.instant(), "$reason; ${match.audit()}")
                 logger("KOTH ${event.id} reward withheld: $reason", null)
+                if (candidate != null) withheldReasons[event.id] = reason
                 null
             } else if (protectionStore?.reserve(event.id, event.arena.id, match.side(candidate!!), opponents,
                 clock.instant(), match.config, "recipientCommandBudget=${match.config.maximumRecipientCommands}; ${match.audit()}") == true) candidate
-            else { logger("KOTH ${event.id} reward withheld: repeated opponent, duplicate or unavailable audit store", null); null }
+            else {
+                logger("KOTH ${event.id} reward withheld: repeated opponent, duplicate or unavailable audit store", null)
+                withheldReasons[event.id] = "UNVERIFIED"; null
+            }
         } catch (error: Exception) {
             logger("KOTH ${event.id} reward history failed; no rewards or win credit issued", error); null
         }
@@ -610,7 +616,10 @@ class KothService(
                 }
             } else {
                 runCompletionStep(event, "no-winner announcement") {
-                    sendEventMessage(event, lang.arenaMsg("koth.no_winner", "koth_name" to event.arena.name.arenaComponent()))
+                    val reason = withheldReasons[event.id]
+                    val held = candidate?.takeIf { reason != null }
+                    sendEventMessage(event, if (held == null) lang.arenaMsg("koth.no_winner", "koth_name" to event.arena.name.arenaComponent())
+                        else lang.arenaMsg(withheldMessage(reason!!), "captured" to teamName(held), "koth_name" to event.arena.name.arenaComponent()))
                 }
             }
         } finally {
@@ -639,7 +648,14 @@ class KothService(
         }
     }
 
+    private fun withheldMessage(reason: String) = when (reason) {
+        "INSUFFICIENT_OPPOSITION" -> "koth.no_winner_unopposed"
+        "INSUFFICIENT_SIDES" -> "koth.no_winner_sides"
+        else -> "koth.no_winner_unverified"
+    }
+
     private fun cleanupEvent(event: KothEvent) {
+        withheldReasons.remove(event.id)
         captureSoundLimiter.remove(event.id)
         captureSoundGeneration.remove(event.id)
         protectedMatches.remove(event.id)

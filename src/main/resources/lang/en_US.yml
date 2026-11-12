@@ -138,6 +138,9 @@ koth:
   ended: "<prefix><color:#ffd0c6>The KOTH <color:#ffcf1f><koth_name><color:#ffd0c6> has been forcefully ended!"
   ended_first_capture: "<prefix><color:#ffd0c6>The KOTH <color:#ffcf1f><koth_name><color:#ffd0c6> has ended — first capture! Congratulations <player>!"
   no_captures: "<prefix><color:#ffd0c6>No captures were made during that KOTH."
+  no_winner_unopposed: "<prefix><color:#fff6e0><captured> held <color:#ffcf1f><koth_name></color>, but no one contested it, so there is no winner this time."
+  no_winner_sides: "<prefix><color:#fff6e0><captured> held <color:#ffcf1f><koth_name></color>, but not enough sides took part, so there is no winner this time."
+  no_winner_unverified: "<prefix><color:#fff6e0><captured> held <color:#ffcf1f><koth_name></color>, but the win could not be verified, so there is no winner this time. Staff can review it."
   no_winner: "<prefix><color:#ffd0c6>The <color:#ffcf1f><koth_name><color:#ffd0c6> KOTH ended without a winner."
   warning_minutes: "<prefix><color:#fff6e0><koth_name> <color:#fff6e0>starts in <minutes> minutes!"
   actionbar:
