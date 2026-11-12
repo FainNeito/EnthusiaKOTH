@@ -171,11 +171,13 @@ class KothFairnessIntegrationTest {
         verify(exactly = 1) { capper.sendMessage(Component.text("koth.leave")) }
         verify(exactly = 0) { idle.sendMessage(Component.text("koth.leave")) }
     }
-    @Test fun `the player on the point is told above the hotbar that they are capturing`() {
+    @Test fun `the player on the point is told above the hotbar that they are capturing, even outside the message regions`() {
         val service = service(localAudience = true)
         assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        localPlayers.clear()
         service.tick(); service.tick()
         verify(atLeast = 1) { capper.sendActionBar(Component.text("koth.actionbar.capturing")) }
+        verify(exactly = 0) { capper.sendMessage(Component.text("koth.capping")) }
         verify(exactly = 0) { idle.sendActionBar(any<Component>()) }
     }
     @Test fun `moving out of notification regions suppresses subsequent capture messages`() {

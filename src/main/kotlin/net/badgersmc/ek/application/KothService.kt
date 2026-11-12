@@ -1174,7 +1174,8 @@ class KothService(
         } else (event.endsAt.epochSecond - clock.instant().epochSecond).coerceAtLeast(0)
         val values = arrayOf("koth_name" to event.arena.name.arenaComponent(), "progress_bar" to progressBarText(event, cfg.progressBar),
             "time_left" to formatTime(left), "capper" to (capperName(event) ?: "Someone"))
-        playersInZone.filter { event.isPrivateTest || (notificationsEnabled(it) && captureAudience(event, it)) }.forEach { player ->
+        // This is feedback for the player standing on the point, not a broadcast, so the capture-region audience does not apply.
+        playersInZone.filter { event.isPrivateTest || notificationsEnabled(it) }.forEach { player ->
             val key = when {
                 contested -> "koth.actionbar.contested"
                 controller == null -> "koth.actionbar.starting"
