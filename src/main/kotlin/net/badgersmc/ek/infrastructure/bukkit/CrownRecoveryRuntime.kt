@@ -40,7 +40,7 @@ class CrownRecoveryRuntime(private val plugin:JavaPlugin,source:DataSource,priva
     fun cancelled(match:UUID){runCatching{bindings.cancel(match);bindings.retireEmpty()}.onFailure(::report)}
     fun retireEmptyBindings(){bindings.retireEmpty()}
     fun canStart(id:String):Boolean=events.read(id)?.purpose!=CrownEventPurpose.RECOVERY_CROWN_FINAL || bindings.active().any{it.occurrence==id}
-    fun announce(id:String,arena:String,at:Instant,solo:Boolean,send:(String)->Unit) {
+    fun announce(id:String,arena:String,at:Instant,solo:Boolean,send:(String,List<Pair<String,String>>)->Unit) {
         if(!enabled() || !solo)return
         val s=settings()!!;val frozen=runCatching{capture()}.getOrElse{report(it);return};val p=frozen.policy
         val lead=s.getLong("minimum-announcement-seconds");if(lead<=0 || Instant.now().isAfter(at.minusSeconds(lead)))return
@@ -49,8 +49,8 @@ class CrownRecoveryRuntime(private val plugin:JavaPlugin,source:DataSource,priva
             val slot=CrownOccurrence(id,arena,at,purpose,p.revision)
             if(events.plan(slot)==CrownOccurrenceWrite.CONFLICT || events.read(id)!=slot)return
             if(binding!=null && !bindings.assign(binding))return
-            send(if(purpose==CrownEventPurpose.HOLDER_CHALLENGE) "Crown holder challenge at $arena. Meaningful participation counts toward Crown activity."
-                else "Crown of Sorrow recovery final at $arena. The winner receives the existing bound Crown, which replaces and destroys their worn helmet. Accept before the start with /ekoth crown accept-binding $id ${p.revision}")
+            if(purpose==CrownEventPurpose.HOLDER_CHALLENGE) send("crown.announce-challenge",listOf("arena" to arena))
+            else send("crown.announce-recovery",listOf("arena" to arena,"command" to "/ekoth crown accept-binding $id ${p.revision}"))
             bindings.announced(id,p.revision,Instant.now())
         }
         if(id in s.getStringList("activity-occurrences")){announce(CrownEventPurpose.HOLDER_CHALLENGE);return}

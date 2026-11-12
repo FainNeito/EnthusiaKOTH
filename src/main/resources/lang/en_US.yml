@@ -321,3 +321,14 @@ staff:
     commands: "<prefix><red>Use up to 45 single-line commands, at most 512 characters each; chance entries use percent|command."
     period: "<prefix><red>Use lifetime, daily, weekly or season. Set a valid season start before viewing season standings."
     teleport: "<prefix><red>No safe landing near the objective, world unavailable, or teleport denied by another plugin."
+
+crown:
+  announce-challenge: "<prefix><color:#fff6e0>Crown holder challenge at <color:#ffcf1f><arena><color:#fff6e0>. Meaningful participation counts toward Crown activity."
+  announce-recovery: "<prefix><color:#fff6e0>Crown of Sorrow recovery final at <color:#ffcf1f><arena><color:#fff6e0>. The winner receives the existing bound Crown, which replaces and destroys their worn helmet. Accept before the start with <command><color:#fff6e0>."
+  announce-first: "<prefix><color:#fff6e0>Crown of Sorrow final at <color:#ffcf1f><arena><color:#fff6e0>. Winning consumes your equipped helmet and binds the Crown. Accept before the start with <command><color:#fff6e0>."
+  binding-accepted: "<prefix><color:#fff6e0>You accepted the binding for this recovery final. If you win, the Crown replaces and destroys your worn helmet."
+  binding-refused: "<prefix><color:#ffd0c6>That recovery final is unavailable or has already started."
+  sacrifice-accepted: "<prefix><color:#fff6e0>You accepted the helmet sacrifice for this Crown final."
+  sacrifice-refused: "<prefix><color:#ffd0c6>That Crown final is unavailable or has already started."
+  usage: "<prefix><color:#fff6e0>Accept a Crown final before it starts: <color:#ffcf1f>/ekoth crown accept-binding <final> <revision></color> for a recovery final, or <color:#ffcf1f>/ekoth crown accept-helmet-loss <final> <revision></color> for the first final, which permanently consumes your equipped helmet."
+  schedule-id: "<color:#bfae98>Schedule ID (<mode>): <color:#fff6e0><id>"
