@@ -199,10 +199,10 @@ class KothCommand(
         sender.sendMessage(lang.msg("command.help.header"))
         fun row(usage: String, description: String) {
             val typed = usage.substringBefore(" <").substringBefore(" [") + " "
-            sender.sendMessage(Component.text(usage, net.kyori.adventure.text.format.NamedTextColor.GREEN)
+            sender.sendMessage(Component.text(usage, MenuStyle.GOLD)
                 .clickEvent(net.kyori.adventure.text.event.ClickEvent.suggestCommand(typed))
                 .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Component.text("Click to type this command")))
-                .append(Component.text(" - $description", net.kyori.adventure.text.format.NamedTextColor.GRAY)))
+                .append(Component.text(" - $description", MenuStyle.CREAM)))
         }
         row("/ekoth", "Open the KOTH menu")
         row("/ekoth gui", "See the arenas and start one")

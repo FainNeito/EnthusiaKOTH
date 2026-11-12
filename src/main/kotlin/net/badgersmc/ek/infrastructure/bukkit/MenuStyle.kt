@@ -1,7 +1,8 @@
 package net.badgersmc.ek.infrastructure.bukkit
 
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.ShadowColor
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Material
 import org.bukkit.inventory.Inventory
@@ -9,6 +10,16 @@ import org.bukkit.inventory.ItemStack
 
 /** One look for every KOTH menu: upright text, a quiet background and plain-language values. */
 internal object MenuStyle {
+    /** The Enthusia website palette (Enthusia-Pack website-message-sound-theme): cream text, gold accents, copper labels. */
+    val CREAM: TextColor = TextColor.color(0xFFF6E0)
+    val GOLD: TextColor = TextColor.color(0xFFCF1F)
+    val COPPER: TextColor = TextColor.color(0xAD914B)
+    val ROSE: TextColor = TextColor.color(0xFFD0C6)
+    private val SHADOW: ShadowColor = ShadowColor.shadowColor(0, 0, 0, 255)
+
+    /** Menu titles match the theme's KOTH title: cream with a shadow. */
+    fun title(value: String): Component = Component.text(value, CREAM).shadowColor(SHADOW)
+
     /** Minecraft italicises custom item text unless told otherwise. */
     fun upright(text: Component): Component = text.decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE)
 
@@ -21,13 +32,13 @@ internal object MenuStyle {
             }
         }
 
-    fun text(value: String, color: NamedTextColor = NamedTextColor.GRAY): Component = Component.text(value, color)
+    fun text(value: String, color: TextColor = CREAM): Component = Component.text(value, color)
 
     /** A label and its value, the way every menu line reads. */
     fun line(label: String, value: Any?): Component =
-        Component.text("$label: ", NamedTextColor.GRAY).append(Component.text(value?.toString() ?: "-", NamedTextColor.WHITE))
+        Component.text("$label: ", COPPER).append(Component.text(value?.toString() ?: "-", CREAM))
 
-    fun hint(value: String): Component = Component.text(value, NamedTextColor.YELLOW)
+    fun hint(value: String): Component = Component.text(value, GOLD)
 
     /** Empty slots get a pane with no tooltip, so the menu's real buttons stand out. */
     fun fill(inventory: Inventory) {
