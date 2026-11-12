@@ -1218,6 +1218,13 @@ class KothService(
         event.participants.mapNotNull { Bukkit.getPlayer(it) }
     } else Bukkit.getOnlinePlayers().filter { notificationsEnabled(it) && (!captureOnly || captureAudience(event, it)) }
 
+    /** The regional capture audience plus anyone standing on the point, who should always hear their own capture. */
+    private fun captureSoundRecipients(event: KothEvent): List<Player> {
+        val onPoint = if (event.arena.family.equals("moving", true)) playersNearMovingPoint(event) else playersInStaticCaptureZone(event)
+        return (eventRecipients(event, captureOnly = true) + onPoint.filter { event.isPrivateTest || notificationsEnabled(it) })
+            .distinctBy { it.uniqueId }
+    }
+
     private fun playCaptureSound(event: KothEvent, cue: CaptureCue) {
         val generation = if (cue == CaptureCue.WIN) null else
             (captureSoundGeneration.getOrDefault(event.id, 0L) + 1L).also { captureSoundGeneration[event.id] = it }
@@ -1230,7 +1237,7 @@ class KothService(
         }.filter { it.sound.isNotBlank() && it.volume > 0f }
         if (sounds.isEmpty()) return
         if (cue != CaptureCue.WIN && !captureSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
-        val audience = eventRecipients(event, captureOnly = true).map { it.uniqueId }.toSet()
+        val audience = captureSoundRecipients(event).map { it.uniqueId }.toSet()
         val controller = event.currentController
         sounds.forEach { layer ->
             val play = {
@@ -1238,7 +1245,7 @@ class KothService(
                 val active = cue == CaptureCue.WIN || layer.delayTicks == 0L || (events[event.id] === event && event.state == EventState.ACTIVE &&
                     captureSoundGeneration[event.id] == generation &&
                     (cue != CaptureCue.CAPTURE || event.currentController == controller))
-                if (active && cfgLoader().captureSounds.enabled) eventRecipients(event, captureOnly = true)
+                if (active && cfgLoader().captureSounds.enabled) captureSoundRecipients(event)
                     .filter { it.uniqueId in audience }.forEach { player ->
                         runCatching { player.playSound(player.location, layer.sound, org.bukkit.SoundCategory.PLAYERS, layer.volume, layer.pitch) }
                             .onFailure { logger("Could not play KOTH capture sound for a recipient", it) }

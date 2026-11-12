@@ -118,15 +118,27 @@ class KothFairnessIntegrationTest {
         verify(exactly = 0) { idle.playSound(any<org.bukkit.Location>(), any<String>(), any<org.bukkit.SoundCategory>(), any<Float>(), any<Float>()) }
     }
 
+    @Test fun `the player on the point hears the capture chime even outside the message regions`() {
+        val service = service(localAudience = true)
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        localPlayers.clear()
+        service.tick()
+        delayedSounds.forEach { it.second() }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.19f, 0.95f) }
+        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
+        verify(exactly = 0) { idle.playSound(any<org.bukkit.Location>(), any<String>(), any<org.bukkit.SoundCategory>(), any<Float>(), any<Float>()) }
+    }
+
     @Test fun `delayed capture notes are suppressed after loss of control or audience`() {
         val service = service(localAudience = true)
         assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
         service.tick()
+        // Leaving the audience now means leaving both the message regions and the point itself.
         localPlayers.clear()
+        every { zone.contains(capper.location) } returns false
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
         localPlayers.add(capper)
-        every { zone.contains(capper.location) } returns false
         service.tick()
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
@@ -148,6 +160,7 @@ class KothFairnessIntegrationTest {
         service.tick(); delayedSounds.clear(); service.tick()
         assertEquals(listOf(3L, 8L, 13L), delayedSounds.map { it.first })
         localPlayers.clear()
+        every { zone.contains(capper.location) } returns false
         delayedSounds.forEach { it.second() }
         verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:entity.player.levelup", org.bukkit.SoundCategory.PLAYERS, any<Float>(), any<Float>()) }
     }

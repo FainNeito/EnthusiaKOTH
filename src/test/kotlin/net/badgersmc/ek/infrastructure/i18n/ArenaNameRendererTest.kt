@@ -45,7 +45,7 @@ class ArenaNameRendererTest {
         service.registerGlobalResolver("entered", Placeholder.parsed("entered", "<aqua>FainNoir"))
         val result = service.arenaMsg("koth.enter", "koth_name" to "&#12ABEF&lSummit 🏆".arenaComponent(), "captime" to "3m")
         assertTrue(plain.serialize(result).contains("FainNoir entered the Summit 🏆 KOTH! Cap in 3m!"))
-        assertTrue(plain.serialize(result).startsWith("[KOTH] › "))
+        assertTrue(plain.serialize(result).startsWith("[KOTH] FainNoir"))
         val rendered = leaves(result)
         val name = rendered.first { it.first.contains("Summit") }.second
         val after = rendered.first { it.first.contains("KOTH!") }.second
