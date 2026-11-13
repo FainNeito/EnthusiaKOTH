@@ -100,17 +100,18 @@ object LeaderboardArt {
         return over(glyph, if (wide) BUTTON_WIDE_ADVANCE else BUTTON_ADVANCE, text, TextWidth.of(label))
     }
 
-    private const val PANEL = ''
+    /** Where a line sits in the panel: the heading carries the top cap, the last line the part behind the buttons. */
+    enum class Slice(val char: Char) { TOP(''), MIDDLE(''), BOTTOM('') }
     const val PANEL_ADVANCE = 257
 
     /**
-     * [content] with the button panel hung below it. The panel art draws under its line (negative ascent), so on the
-     * body's last line it lands behind the buttons, which the client draws on top. It is centred under [content] and
-     * takes no width, so the line still centres on [content] alone.
+     * [content] on its slice of the background panel. Each dialog line draws the slice from just above it to the next
+     * line, so the slices meet into one panel; the bottom slice reaches down behind the buttons, which the client draws
+     * on top. The slice is centred under [content] and takes no width, so the line still centres on [content] alone.
      */
-    fun withPanel(content: Component, contentWidth: Int): Component {
+    fun onPanel(content: Component, contentWidth: Int, slice: Slice): Component {
         val before = (contentWidth - PANEL_ADVANCE) / 2
-        return Component.text().append(shift(before)).append(glyph(PANEL)).append(shift(-PANEL_ADVANCE - before)).append(content).build()
+        return Component.text().append(shift(before)).append(glyph(slice.char)).append(shift(-PANEL_ADVANCE - before)).append(content).build()
     }
 
     /** Width of an inline player head object: an 8 px face and the 1 px gap after it. */
