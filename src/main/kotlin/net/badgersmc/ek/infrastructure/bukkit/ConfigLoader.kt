@@ -63,6 +63,7 @@ class ConfigLoader(private val plugin: JavaPlugin) {
                 margin = integer(config, "arena-build.margin", 16).coerceIn(0, 128),
                 maxBlocks = integer(config, "arena-build.max-blocks", 20_000).coerceIn(1, 500_000),
                 maxScanBlocks = integer(config, "arena-build.max-scan-blocks", 2_000_000).toLong().coerceIn(1, 20_000_000),
+                victoryHoldSeconds = integer(config, "arena-build.victory-hold-seconds", 8).coerceIn(0, 120),
             ),
             fairness = net.badgersmc.ek.config.FairnessConfig(
                 contributorMinimumPercent = decimal(config, "fairness.contributor-minimum-percent", 10.0).let { if (it.isFinite()) it.coerceIn(0.0, 100.0) else 10.0 },
@@ -358,6 +359,7 @@ private object DisplayConfigLoader {
         movingFloor = boolean(config, "display.moving-floor", true),
         startTitle = boolean(config, "display.start-title", true),
         startEffects = boolean(config, "display.start-effects", true),
+        championBanners = boolean(config, "display.champion-banners", true),
         bossbarColor = string(config, "display.bossbar-color", "RED"), bossbarOverlay = string(config, "display.bossbar-overlay", "PROGRESS"),
         bossbarTitle = string(config, "display.bossbar-title", ""),
     )

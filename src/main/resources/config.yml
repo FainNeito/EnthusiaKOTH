@@ -219,6 +219,9 @@ display:
   # Only players following the event (or at the arena) see and hear it; nothing is damaged.
   start-title: true
   start-effects: true
+  # Banners in an arena fly the design of the guild that last won there, until another guild wins it.
+  # Solo wins, private tests and withheld wins leave the champion in place.
+  champion-banners: true
   bossbar-color: RED
   bossbar-overlay: PROGRESS
   bossbar-title: "" # Blank uses lang/en_US.yml; MiniMessage placeholders koth_name, capper, time, contested.
@@ -336,6 +339,8 @@ arena-build:
   margin: 16
   max-blocks: 20000
   max-scan-blocks: 2000000
+  # After a KOTH is won, the built arena stands this long under the victors' banners before it comes down.
+  victory-hold-seconds: 8
 
 # Inclusive local date; leave blank until a season has been selected.
 leaderboards:

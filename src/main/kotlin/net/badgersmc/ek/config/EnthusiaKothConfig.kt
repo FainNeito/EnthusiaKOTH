@@ -42,6 +42,8 @@ data class ArenaBuildConfig(
     val margin: Int = 16,
     val maxBlocks: Int = 20_000,
     val maxScanBlocks: Long = 2_000_000,
+    /** Seconds a built arena stays up after a KOTH is won there, before it comes down. */
+    val victoryHoldSeconds: Int = 8,
 )
 
 data class SoundCueConfig(val sound: String, val volume: Float, val pitch: Float, val delayTicks: Long = 0)
@@ -129,7 +131,7 @@ data class DiscordConfig(
     val embeds: Map<DiscordMessageType, DiscordEmbedTemplate> = DiscordEmbedDefaults.templates,
     val startRoleId: String = "",
 )
-data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val movingFloor: Boolean = true, val startTitle: Boolean = true, val startEffects: Boolean = true, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
+data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val movingFloor: Boolean = true, val startTitle: Boolean = true, val startEffects: Boolean = true, val championBanners: Boolean = true, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
 data class FamilyRulesConfig(val rules: Map<String, RuleSet> = emptyMap())
 data class PrivateTestingConfig(val lobbySeconds: Int = 0, val quickMatchDurationSeconds: Int = 120, val quickCaptureSeconds: Int = 15, val showObjectiveParticles: Boolean = true)
 data class LockConfig(val state: LockState = LockState.UNLOCKED)

@@ -38,6 +38,8 @@ class ArenaBuildService(
     private val regionBounds: (KothArena) -> CaptureZone?,
     /** Whether a KOTH is running or queued in the arena, which blocks recording. */
     private val arenaBusy: (String) -> Boolean,
+    /** Called for each banner the build places, so it can take on the arena's champion colours. */
+    private val decorate: (String, org.bukkit.block.Block) -> Unit = { _, _ -> },
 ) : Listener {
     /** Arenas currently built or building, with how far the build got. */
     private class Active(val build: ArenaBuild, val order: List<BuildBlock>) {
@@ -47,6 +49,8 @@ class ArenaBuildService(
 
     private val active = mutableMapOf<String, Active>()
     private val tearingDown = mutableMapOf<String, Pair<ArenaBuild, BukkitTask>>()
+    /** Arenas standing a little longer after a win, so the victors see their banners go up. */
+    private val holding = mutableMapOf<String, BukkitTask>()
     private val parsed = mutableMapOf<String, BlockData>()
 
     /** Puts back any arena the server stopped in the middle of. Call once on enable. */
@@ -67,6 +71,16 @@ class ArenaBuildService(
             KothLifecycle.COMPLETED, KothLifecycle.CANCELLED -> {
                 // A reload or shutdown can't wait for an animation, so the base form goes back at once.
                 val instant = !plugin.isEnabled || event.snapshot.reason in setOf("RELOAD", "PLUGIN_DISABLE")
+                val hold = settings().victoryHoldSeconds
+                if (!instant && hold > 0 && event.lifecycle == KothLifecycle.COMPLETED && event.snapshot.winner != null && arena in active) {
+                    // The winners get a moment in the finished arena under their own banners before it comes down.
+                    holding.remove(arena)?.cancel()
+                    holding[arena] = plugin.server.scheduler.runTaskLater(plugin, Runnable {
+                        holding.remove(arena)
+                        runCatching { teardown(arena) }.onFailure { plugin.logger.severe("Arena '$arena' could not take itself down: ${it.message}") }
+                    }, hold * 20L)
+                    return
+                }
                 runCatching { teardown(arena, instant) }.onFailure { plugin.logger.severe("Arena '$arena' could not take itself down: ${it.message}") }
             }
             else -> Unit
@@ -76,6 +90,8 @@ class ArenaBuildService(
     /** Starts the build animation for [arenaId], if it has a recorded build. Returns how many blocks it will place. */
     fun build(arenaId: String): Int {
         val cfg = settings()
+        // A KOTH starting while the last one's victory hold stands keeps the arena up as it is.
+        holding.remove(arenaId)?.cancel()
         if (!cfg.enabled || arenaId in active) return 0
         finishTeardown(arenaId)
         val build = store.loadBuild(arenaId)?.takeIf { it.blocks.isNotEmpty() } ?: return 0
@@ -91,7 +107,7 @@ class ArenaBuildService(
         state.task = plugin.server.scheduler.runTaskTimer(plugin, Runnable {
             if (tick >= batches.size) { state.task?.cancel(); state.task = null; return@Runnable }
             val batch = state.order.subList(state.placed, state.placed + batches[tick])
-            batch.forEach { block -> set(world, block, block.built) }
+            batch.forEach { block -> set(world, block, block.built); decorateIfBanner(arenaId, world, block) }
             effects(world, batch, place = true)
             state.placed += batch.size
             liftPlayers(world, batch)
@@ -102,6 +118,7 @@ class ArenaBuildService(
 
     /** Takes [arenaId] back to its base form: in reverse over a few seconds, or at once when [instant]. */
     fun teardown(arenaId: String, instant: Boolean = false) {
+        holding.remove(arenaId)?.cancel()
         val state = active.remove(arenaId) ?: return
         state.task?.cancel()
         val world = Bukkit.getWorld(state.build.world)
@@ -142,6 +159,8 @@ class ArenaBuildService(
 
     /** Puts every built arena back at once. Call on disable and before a reload. */
     fun shutdown() {
+        holding.values.forEach { it.cancel() }
+        holding.clear()
         tearingDown.keys.toList().forEach(::finishTeardown)
         active.keys.toList().forEach { teardown(it, instant = true) }
     }
@@ -200,7 +219,7 @@ class ArenaBuildService(
         val build = store.loadBuild(arenaId) ?: return Result.NO_BUILD to 0
         val world = Bukkit.getWorld(build.world) ?: return Result.NO_WORLD to 0
         store.startJournal(build)
-        build.blocks.forEach { set(world, it, it.built) }
+        build.blocks.forEach { set(world, it, it.built); decorateIfBanner(arenaId, world, it) }
         return Result.DONE to build.blocks.size
     }
 
@@ -248,6 +267,12 @@ class ArenaBuildService(
 
     private fun set(world: World, block: BuildBlock, state: String) {
         world.getBlockAt(block.x, block.y, block.z).setBlockData(data(state), false)
+    }
+
+    private fun decorateIfBanner(arenaId: String, world: World, block: BuildBlock) {
+        if (!data(block.built).material.name.endsWith("_BANNER")) return
+        runCatching { decorate(arenaId, world.getBlockAt(block.x, block.y, block.z)) }
+            .onFailure { plugin.logger.warning("Arena '$arenaId' could not dress a banner: ${it.message}") }
     }
 
     private fun restoreNow(build: ArenaBuild) {
