@@ -113,7 +113,7 @@ data class DiscordConfig(
     val embeds: Map<DiscordMessageType, DiscordEmbedTemplate> = DiscordEmbedDefaults.templates,
     val startRoleId: String = "",
 )
-data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
+data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val movingFloor: Boolean = true, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
 data class FamilyRulesConfig(val rules: Map<String, RuleSet> = emptyMap())
 data class PrivateTestingConfig(val lobbySeconds: Int = 0, val quickMatchDurationSeconds: Int = 120, val quickCaptureSeconds: Int = 15, val showObjectiveParticles: Boolean = true)
 data class LockConfig(val state: LockState = LockState.UNLOCKED)

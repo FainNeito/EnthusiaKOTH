@@ -212,6 +212,9 @@ display:
   actionbar: true
   hologram: false
   scoreboard: false
+  # Moving KOTH: light up the edge of the capture square in the floor as it moves. Client-side only;
+  # the world is never changed and the real blocks return when the KOTH ends.
+  moving-floor: true
   bossbar-color: RED
   bossbar-overlay: PROGRESS
   bossbar-title: "" # Blank uses lang/en_US.yml; MiniMessage placeholders koth_name, capper, time, contested.

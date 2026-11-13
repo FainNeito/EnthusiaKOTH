@@ -436,6 +436,7 @@ class KothService(
             event,
             markerAudience(event, recipients),
             showStaticObjective = event.isPrivateTest && cfg.privateTesting.showObjectiveParticles,
+            movingFloor = cfg.display.movingFloor,
         )
         displayService.showKoth(
             arena.id,
@@ -702,6 +703,8 @@ class KothService(
             .onFailure { logger("KOTH '${event.arena.id}' display cleanup failed", it) }
         runCatching { zoneBorderService.hide(event.id.toString()) }
             .onFailure { logger("KOTH '${event.arena.id}' zone-border cleanup failed", it) }
+        runCatching { objectiveMarkerService.clear(event.id, event.arena.zone.worldName) }
+            .onFailure { logger("KOTH '${event.arena.id}' moving floor cleanup failed", it) }
     }
 
     private fun executeRewards(event: KothEvent, winner: TeamId) {

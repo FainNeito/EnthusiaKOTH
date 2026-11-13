@@ -45,6 +45,18 @@ class ObjectiveMarkerServiceTest {
     }
 
     @Test
+    fun `moving floor outline is the edge of the blocks inside the capture square`() {
+        // A point at x 30.5, z 30.5 with a 5 block half-size has its edges through the middle of blocks 25 and 35;
+        // those blocks form the outline, at the floor under y 80.
+        val cells = ObjectiveMarkerService.movingFloorCells(30.5, 80.0, 30.5, half = 5.0)
+        assertEquals(40, cells.size)
+        assertTrue(cells.all { it.y == 79 })
+        assertTrue(FloorCell(25, 79, 25) in cells && FloorCell(35, 79, 35) in cells && FloorCell(30, 79, 25) in cells)
+        assertTrue(FloorCell(30, 79, 30) !in cells)
+        assertTrue(cells.all { it.x in 25..35 && it.z in 25..35 })
+    }
+
+    @Test
     fun `bossbar progress follows current controller score and clamps`() {
         val event = KothEvent(
             id = UUID.randomUUID(),
