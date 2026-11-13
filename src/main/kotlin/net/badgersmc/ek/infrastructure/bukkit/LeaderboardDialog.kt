@@ -18,7 +18,7 @@ import java.util.Locale
 /** Which board the dialog shows. */
 enum class LeaderboardSide(val prefix: String, val label: String) { PLAYERS("solo", "Players"), GUILDS("guild", "Guilds") }
 
-data class LeaderboardRow(val rank: Int, val name: String, val wins: Int, val viewer: Boolean)
+data class LeaderboardRow(val rank: Int, val name: String, val wins: Int, val viewer: Boolean, val key: String = "")
 
 /** One page of a leaderboard, worked out without Bukkit so it can be tested. */
 data class LeaderboardPage(val rows: List<LeaderboardRow>, val page: Int, val pages: Int, val viewer: LeaderboardRow?) {
@@ -30,7 +30,7 @@ data class LeaderboardPage(val rows: List<LeaderboardRow>, val page: Int, val pa
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             val pages = ((ranked.size + SIZE - 1) / SIZE).coerceAtLeast(1)
             val selected = page.coerceIn(1, pages)
-            fun row(index: Int) = ranked[index].let { LeaderboardRow(index + 1, name(it.key), it.value, it.key == viewerKey) }
+            fun row(index: Int) = ranked[index].let { LeaderboardRow(index + 1, name(it.key), it.value, it.key == viewerKey, it.key) }
             val rows = (((selected - 1) * SIZE) until minOf(selected * SIZE, ranked.size)).map(::row)
             val viewer = ranked.indexOfFirst { it.key == viewerKey }.takeIf { it >= 0 }?.let(::row)
             return LeaderboardPage(rows, selected, pages, viewer)
@@ -49,6 +49,10 @@ class LeaderboardDialog(
     private val wins: (String) -> Map<String, Int>?,
     private val periods: () -> List<String>,
     private val name: (String) -> String,
+    /** The icon beside a row: a player's head, or the guild's banner. */
+    private val icon: (String) -> org.bukkit.inventory.ItemStack,
+    /** Whether the Enthusia pack's leaderboard art is available (Nexo installed, or forced on in config). */
+    private val art: () -> Boolean = { false },
 ) {
     data class View(val period: String = "lifetime", val side: LeaderboardSide = LeaderboardSide.PLAYERS, val page: Int = 1)
 
@@ -73,28 +77,37 @@ class LeaderboardDialog(
         })
     }
 
+    /** Heading, one row per rank with its head or banner, then the viewer's own rank, like enthusia.info/leaderboards. */
     private fun body(view: View, board: LeaderboardPage): List<DialogBody> {
+        val themed = art()
         val heading = Component.text("${title(view.period)}  ", MenuStyle.GOLD)
             .append(Component.text("${view.side.label}  ", MenuStyle.CREAM))
-            .append(Component.text("Page ${board.page} of ${board.pages}", MenuStyle.MUTED))
-        val rows = if (board.rows.isEmpty()) listOf(Component.text("No wins yet in this period", MenuStyle.MUTED))
-            else board.rows.map(::line)
-        val parts = mutableListOf<DialogBody>(
-            DialogBody.plainMessage(heading, 300),
-            DialogBody.plainMessage(Component.join(JoinConfiguration.newlines(), rows), 300),
-        )
+            .append(Component.text("Page ${board.page} of ${board.pages}", if (themed) MenuStyle.CREAM else MenuStyle.MUTED))
+        val parts = mutableListOf<DialogBody>(DialogBody.plainMessage(if (themed) LeaderboardArt.banner(heading) else heading, ROW_WIDTH))
+        if (board.rows.isEmpty()) parts += DialogBody.plainMessage(Component.text("No wins yet in this period", MenuStyle.MUTED), ROW_WIDTH)
+        board.rows.forEach { row ->
+            parts += DialogBody.item(icon(row.key))
+                .description(DialogBody.plainMessage(line(row, themed), ROW_WIDTH - 24))
+                .showDecorations(false)
+                .showTooltip(true)
+                .build()
+        }
+        if (themed) parts += DialogBody.plainMessage(LeaderboardArt.divider(), ROW_WIDTH)
         if (view.side == LeaderboardSide.PLAYERS) parts += DialogBody.plainMessage(board.viewer?.let {
-            Component.text("Your rank: ", MenuStyle.CREAM).append(Component.text("#${it.rank}", MenuStyle.GOLD))
+            Component.text("Your rank: ", MenuStyle.CREAM).append(rank(it.rank, themed))
                 .append(Component.text("  ${wins(it.wins)}", MenuStyle.CREAM))
-        } ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED), 300)
+        } ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED), ROW_WIDTH)
         return parts
     }
 
-    private fun line(row: LeaderboardRow): Component {
-        val rankColor = if (row.rank <= 3) MenuStyle.GOLD else MenuStyle.MUTED
+    private fun rank(rank: Int, themed: Boolean): Component = if (themed) LeaderboardArt.rank(rank)
+        else Component.text("#$rank", if (rank <= 3) MenuStyle.GOLD else MenuStyle.MUTED)
+
+    private fun line(row: LeaderboardRow, themed: Boolean): Component {
         val nameText = Component.text(row.name, if (row.viewer) MenuStyle.GOLD else MenuStyle.CREAM)
             .let { if (row.viewer) it.decoration(TextDecoration.BOLD, true) else it }
-        return Component.text("#${row.rank}  ", rankColor).append(nameText).append(Component.text("  ${wins(row.wins)}", MenuStyle.GOLD))
+        return Component.text().append(rank(row.rank, themed)).append(Component.text("  ")).append(nameText)
+            .append(Component.text("  ${wins(row.wins)}", MenuStyle.GOLD)).build()
     }
 
     /**
@@ -125,6 +138,7 @@ class LeaderboardDialog(
 
     private companion object {
         const val WIDTH = 120
+        const val ROW_WIDTH = 244
         val PERIODS = listOf("daily", "weekly", "season", "lifetime")
         val ONE_USE: ClickCallback.Options = ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build()
     }

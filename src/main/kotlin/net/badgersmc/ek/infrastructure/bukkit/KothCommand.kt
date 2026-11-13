@@ -433,7 +433,27 @@ class KothCommand(
                 else net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)?.let(stats::winsIn)
             },
             periods = { listOfNotNull("daily", "weekly", "season".takeIf { cfgLoader().seasonStart != null }, "lifetime") },
-            name = ::formatStatUser)
+            name = ::formatStatUser,
+            icon = ::leaderboardIcon,
+            art = {
+                when (plugin.config.getString("leaderboards.dialog-art", "auto")?.lowercase()) {
+                    "on", "true" -> true
+                    "off", "false" -> false
+                    else -> Bukkit.getPluginManager().isPluginEnabled("Nexo")
+                }
+            })
+    }
+
+    /** A player's own head (the client fills in the skin), or a banner for a guild. */
+    private fun leaderboardIcon(key: String): ItemStack {
+        val id = runCatching { UUID.fromString(key.substringAfter(':')) }.getOrNull()
+        if (!key.startsWith("solo:") || id == null) return MenuStyle.item(Material.RED_BANNER, MenuStyle.text(formatStatUser(key), MenuStyle.GOLD))
+        return ItemStack(Material.PLAYER_HEAD).apply {
+            editMeta(org.bukkit.inventory.meta.SkullMeta::class.java) { meta ->
+                meta.playerProfile = Bukkit.createProfile(id, formatStatUser(key).takeIf { it.length in 1..16 && it.all { c -> c.isLetterOrDigit() || c == '_' } })
+                meta.displayName(MenuStyle.upright(MenuStyle.text(formatStatUser(key), MenuStyle.GOLD)))
+            }
+        }
     }
 
     private fun top(sender: CommandSender, page: Int, period: String = "lifetime") {

@@ -316,3 +316,5 @@ events:
 # Inclusive local date; leave blank until a season has been selected.
 leaderboards:
   season-start: ""
+  # Enthusia-Pack leaderboard art in the /ekoth leaderboard dialog: auto (when Nexo is installed), on or off.
+  dialog-art: auto
