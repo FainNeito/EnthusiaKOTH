@@ -33,14 +33,27 @@ class ObjectiveMarkerServiceTest {
     }
 
     @Test
-    fun `moving objective marker forms a ring at configured radius`() {
-        val points = ObjectiveMarkerService.movingRingPoints(10.0, 65.0, -4.0, radius = 5.0, segments = 12)
+    fun `moving objective marker outlines the square capture area`() {
+        val points = ObjectiveMarkerService.movingSquarePoints(10.0, 65.0, -4.0, half = 5.0)
 
-        assertEquals(12, points.size)
+        assertEquals(80, points.size)
         points.forEach { point ->
-            assertEquals(5.0, hypot(point.x - 10.0, point.z + 4.0), 0.000001)
+            val edge = maxOf(kotlin.math.abs(point.x - 10.0), kotlin.math.abs(point.z + 4.0))
+            assertEquals(5.0, edge, 0.000001)
             assertEquals(65.0, point.y)
         }
+    }
+
+    @Test
+    fun `moving floor outline is the edge of the blocks inside the capture square`() {
+        // A point at x 30.5, z 30.5 with a 5 block half-size has its edges through the middle of blocks 25 and 35;
+        // those blocks form the outline, at the floor under y 80.
+        val cells = ObjectiveMarkerService.movingFloorCells(30.5, 80.0, 30.5, half = 5.0)
+        assertEquals(40, cells.size)
+        assertTrue(cells.all { it.y == 79 })
+        assertTrue(FloorCell(25, 79, 25) in cells && FloorCell(35, 79, 35) in cells && FloorCell(30, 79, 25) in cells)
+        assertTrue(FloorCell(30, 79, 30) !in cells)
+        assertTrue(cells.all { it.x in 25..35 && it.z in 25..35 })
     }
 
     @Test

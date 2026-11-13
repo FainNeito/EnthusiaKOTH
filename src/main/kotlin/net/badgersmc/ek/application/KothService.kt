@@ -86,6 +86,8 @@ class KothService(
     private val rewardedStartIssues: (KothArena) -> List<String> = { emptyList() },
     private val arenaIdentity: (KothArena) -> String = { it.id },
     private val scheduleSound: (Long, () -> Unit) -> Unit = { _, _ -> },
+    /** Runs once a blitz round goes live, after its normal start announcement. */
+    private val blitzRoundStarted: (BlitzRound, KothEvent) -> Unit = { _, _ -> },
 ) {
     private val captureSoundLimiter = CaptureSoundLimiter()
     private val captureSoundGeneration = mutableMapOf<UUID, Long>()
@@ -174,6 +176,7 @@ class KothService(
     companion object {
         private const val QUEUE_RETRY_SECONDS = 10L
         private const val LOST_SOUND_DISTANCE = 32.0
+        private const val MOVING_MARKER_DISTANCE = 64.0
 
         internal fun movingPointAt(
             elapsedSeconds: Double,
@@ -264,6 +267,10 @@ class KothService(
         private set(value) { if (value != null) events[value.id] = value }
     @Synchronized fun allEvents(): List<KothEvent> = events.values.toList()
     fun eventForArena(id: String): KothEvent? = allEvents().firstOrNull { it.arena.id == id }
+
+    /** Whether the event started for this scheduled occurrence is running now; another event in the same arena does not count. */
+    fun isOccurrenceLive(occurrenceId: String): Boolean =
+        allEvents().any { it.occurrenceId == occurrenceId && !it.isPrivateTest && it.state == EventState.ACTIVE }
     fun conflicts(arena: KothArena): Boolean {
         val current = allEvents()
         return current.isNotEmpty() && EventConcurrency.conflicts(arena, current, cfgLoader().maxConcurrentEvents, arenasOverlap)
@@ -427,8 +434,9 @@ class KothService(
         val recipients = eventRecipients(event)
         objectiveMarkerService.show(
             event,
-            recipients,
+            markerAudience(event, recipients),
             showStaticObjective = event.isPrivateTest && cfg.privateTesting.showObjectiveParticles,
+            movingFloor = cfg.display.movingFloor,
         )
         displayService.showKoth(
             arena.id,
@@ -526,6 +534,22 @@ class KothService(
 
     /** A moving point has its own marker that follows it; a fixed outline would sit where the point started. */
     private fun showsCaptureOutline(event: KothEvent) = !event.arena.family.equals("moving", true)
+
+    /**
+     * Who sees the moving point's marker: the usual event audience, plus anyone close enough to chase it, since the
+     * moving arena is rarely inside the regions that receive capture notifications.
+     */
+    private fun markerAudience(event: KothEvent, recipients: List<Player>): List<Player> {
+        if (!event.arena.family.equals("moving", true)) return recipients
+        val point = event.movingPoint ?: return recipients
+        val range = MOVING_MARKER_DISTANCE * MOVING_MARKER_DISTANCE
+        val nearby = Bukkit.getOnlinePlayers().filter { player ->
+            player.world.name == event.arena.zone.worldName && event.isParticipant(player.uniqueId) &&
+                (event.isPrivateTest || notificationsEnabled(player)) &&
+                player.location.let { (it.x - point.first) * (it.x - point.first) + (it.z - point.third) * (it.z - point.third) } <= range
+        }
+        return (recipients + nearby).distinctBy { it.uniqueId }
+    }
 
     private fun playersNearMovingPoint(event: KothEvent): List<Player> {
         val arena = event.arena
@@ -679,6 +703,8 @@ class KothService(
             .onFailure { logger("KOTH '${event.arena.id}' display cleanup failed", it) }
         runCatching { zoneBorderService.hide(event.id.toString()) }
             .onFailure { logger("KOTH '${event.arena.id}' zone-border cleanup failed", it) }
+        runCatching { objectiveMarkerService.clear(event.id, event.arena.zone.worldName) }
+            .onFailure { logger("KOTH '${event.arena.id}' moving floor cleanup failed", it) }
     }
 
     private fun executeRewards(event: KothEvent, winner: TeamId) {
@@ -858,6 +884,11 @@ class KothService(
         val now = clock.instant()
         if (now.isBefore(next.nextAttemptAt)) return
         if (!scheduledClaimAllowsActivation(next)) return
+        if (blitzSlotPassed(next, now)) {
+            logger("Skipping blitz round ${next.occurrenceId} in '${next.arenaId}': it could not start before its slot ended", null)
+            removeInvalidQueued(next)
+            return
+        }
 
         val arena = arenaResolver(next.arenaId)
         if (arena == null) {
@@ -889,6 +920,15 @@ class KothService(
         }
     }
 
+    /**
+     * A blitz round that still has not started once its slot (round plus break) is over is dropped. Otherwise a round
+     * that can never start, for example one blocked by start readiness, would hold the queue and every round after it.
+     */
+    private fun blitzSlotPassed(next: QueuedEvent, now: Instant): Boolean {
+        if (next.startSource != EventKind.SCHEDULED || BlitzRound.parse(next.occurrenceId) == null) return false
+        return !now.isBefore(next.scheduledAt.plusSeconds(cfgLoader().schedule.blitz.slotSeconds))
+    }
+
     private fun resumeActivating(next: QueuedEvent) {
         val now = clock.instant()
         if (!scheduledClaimAllowsActivation(next)) return
@@ -906,7 +946,9 @@ class KothService(
         }
     }
 
-    private fun startDurableActivation(next: QueuedEvent, arena: KothArena, recovered: Boolean): Boolean {
+    private fun startDurableActivation(next: QueuedEvent, configured: KothArena, recovered: Boolean): Boolean {
+        val blitzRound = next.occurrenceId?.takeIf { next.startSource == EventKind.SCHEDULED }?.let(BlitzRound::parse)
+        val arena = blitzRound?.let { BlitzRound.apply(configured, cfgLoader().schedule.blitz) } ?: configured
         if (conflicts(arena)) return false
         if (!checkRewardedStart(arena, next.startSource)) return false
         val cfg = cfgLoader()
@@ -921,9 +963,13 @@ class KothService(
             state = EventState.ACTIVE,
             teamMode = if (arena.ignoreFactions) TeamMode.SOLO else next.teamMode,
             source = next.startSource,
+            occurrenceId = next.occurrenceId,
         )
         activeEvent = event
         activateQueuedEvent(event, cfg, recovered)
+        if (blitzRound != null && event.state == EventState.ACTIVE && !recovered) {
+            runCatching { blitzRoundStarted(blitzRound, event) }.onFailure { logger("KOTH blitz round announcement failed", it) }
+        }
 
         val completed = next.copy(state = QueuedEventState.COMPLETED)
         eventQueue[0] = completed

@@ -29,6 +29,8 @@ data class KothEvent(
     val teamMode: TeamMode = TeamMode.SOLO,
     val privateTestAccess: PrivateTestAccess? = null,
     val source: EventKind = EventKind.ADMIN,
+    /** The scheduled occurrence this event was started for, when it came from the schedule. */
+    val occurrenceId: String? = null,
 ) {
     val scores: MutableMap<TeamId, Double> = ConcurrentHashMap()
     val scoringParticipation = ScoringParticipation()
