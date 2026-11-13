@@ -39,8 +39,9 @@ data class LeaderboardPage(val rows: List<LeaderboardRow>, val page: Int, val pa
 }
 
 /**
- * The KOTH leaderboard as a dialog: period and board buttons across the top, ten ranks per page,
- * and the viewer's own rank underneath. Every button reopens the dialog with the new view.
+ * The KOTH leaderboard as a dialog: ten ranks per page and the viewer's own rank, with buttons in pairs
+ * (board, periods, pages). The dialog stays open while a button is handled and is replaced in place,
+ * so the client never drops back to the game and re-centres the cursor between views.
  */
 class LeaderboardDialog(
     private val plugin: JavaPlugin,
@@ -60,12 +61,14 @@ class LeaderboardDialog(
             factory.empty()
                 .base(DialogBase.builder(MenuStyle.title("KOTH Leaderboard"))
                     .canCloseWithEscape(true)
-                    .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                    .pause(false)
+                    .afterAction(DialogBase.DialogAfterAction.NONE)
                     .body(body(current, board))
                     .build())
                 .type(DialogType.multiAction(buttons(current, board, available))
-                    .columns(4)
-                    .exitAction(ActionButton.builder(MenuStyle.text("Close")).width(80).build())
+                    .columns(2)
+                    .exitAction(ActionButton.builder(MenuStyle.text("Close")).width(WIDTH * 2 + 4)
+                        .action(DialogAction.customClick({ _, audience -> audience.closeDialog() }, ONE_USE)).build())
                     .build())
         })
     }
@@ -94,24 +97,34 @@ class LeaderboardDialog(
         return Component.text("#${row.rank}  ", rankColor).append(nameText).append(Component.text("  ${wins(row.wins)}", MenuStyle.GOLD))
     }
 
+    /** Two columns: Players | Guilds, Daily | Weekly, Season | Lifetime, Previous | Next. */
     private fun buttons(view: View, board: LeaderboardPage, available: List<String>): List<ActionButton> = buildList {
-        available.forEach { period -> add(button(view, title(period), period == view.period, view.copy(period = period, page = 1))) }
-        LeaderboardSide.entries.forEach { side -> add(button(view, side.label, side == view.side, view.copy(side = side, page = 1))) }
-        add(button(view, "Previous", false, view.copy(page = view.page - 1), enabled = board.page > 1))
-        add(button(view, "Next", false, view.copy(page = view.page + 1), enabled = board.page < board.pages))
+        LeaderboardSide.entries.forEach { side -> add(button(side.label, side == view.side, view.copy(side = side, page = 1))) }
+        PERIODS.forEach { period ->
+            add(button(title(period), period == view.period, view.copy(period = period, page = 1), enabled = period in available,
+                unavailable = "No season start is set"))
+        }
+        add(button("Previous", false, view.copy(page = view.page - 1), enabled = board.page > 1, unavailable = "This is the first page"))
+        add(button("Next", false, view.copy(page = view.page + 1), enabled = board.page < board.pages, unavailable = "This is the last page"))
     }
 
-    private fun button(view: View, label: String, selected: Boolean, target: View, enabled: Boolean = true): ActionButton {
+    private fun button(label: String, selected: Boolean, target: View, enabled: Boolean = true, unavailable: String = ""): ActionButton {
         val color = when { selected -> MenuStyle.GOLD; enabled -> MenuStyle.CREAM; else -> MenuStyle.MUTED }
         val text = Component.text(label, color).let { if (selected) it.decoration(TextDecoration.UNDERLINED, true) else it }
-        val builder = ActionButton.builder(text).width(80)
-        if (!enabled || selected) builder.tooltip(MenuStyle.text(if (selected) "Showing now" else "Nothing more this way", MenuStyle.MUTED))
-        // Every button reopens the board; the current or unavailable ones simply show the same page again.
-        val destination = if (!enabled || selected) view else target
+        val builder = ActionButton.builder(text).width(WIDTH)
+        // Buttons for the current view, or with nowhere to go, do nothing: the dialog simply stays as it is.
+        if (selected) return builder.tooltip(MenuStyle.text("Showing now", MenuStyle.MUTED)).build()
+        if (!enabled) return builder.tooltip(MenuStyle.text(unavailable, MenuStyle.MUTED)).build()
         return builder.action(DialogAction.customClick({ _, audience ->
             val player = audience as? Player ?: return@customClick
-            plugin.server.scheduler.runTask(plugin, Runnable { if (player.isOnline) open(player, destination) })
-        }, ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build())).build()
+            plugin.server.scheduler.runTask(plugin, Runnable { if (player.isOnline) open(player, target) })
+        }, ONE_USE)).build()
+    }
+
+    private companion object {
+        const val WIDTH = 120
+        val PERIODS = listOf("daily", "weekly", "season", "lifetime")
+        val ONE_USE: ClickCallback.Options = ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build()
     }
 
     private fun title(period: String) = period.replaceFirstChar { it.titlecase(Locale.ROOT) }

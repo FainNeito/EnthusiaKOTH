@@ -128,7 +128,7 @@ class ProgressionController(
                     player.closeInventory(); player.performCommand("ekoth schedule")
                 }
                 add(entry(Material.GOLD_INGOT,"Leaderboards",listOf(text("Top players and guilds by wins."),hint("Click to open")))) {
-                    player.closeInventory(); player.performCommand("ekoth top")
+                    player.closeInventory(); player.performCommand("ekoth leaderboard")
                 }
             }
             "results" -> {

@@ -177,7 +177,7 @@ class KothCommand(
             "schedule" -> schedule(sender)
             "blitz" -> blitz(sender)
             "hologram", "holo" -> hologram(sender, args)
-            "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
+            "leaderboard", "lb", "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
             "stats" -> stats(sender, args.getOrNull(1))
             "start" -> start(sender, args.getOrNull(1) ?: "", args.drop(2))
             "stop", "cancel" -> stop(sender, args.getOrNull(1))
@@ -212,7 +212,7 @@ class KothCommand(
         // One spelling per command is suggested; aliases such as cancel, editor, test and messages still work.
         val options: List<String> = when (args.size) {
             1 -> buildList {
-                addAll(listOf("gui", "schedule", "blitz", "top", "stats", "notifications", "claims", "challenges", "results", "eligibility", "help"))
+                addAll(listOf("gui", "schedule", "blitz", "leaderboard", "stats", "notifications", "claims", "challenges", "results", "eligibility", "help"))
                 if (canStartFromCommand(sender)) add("start")
                 if (canStartPrivate(sender) || canJoinPrivate(sender)) add("private")
                 if (admin) addAll(listOf("setup", "manage", "schedules", "rewards", "displays", "stop", "status", "lock", "holds", "reviewmatch",
@@ -220,7 +220,7 @@ class KothCommand(
             }
             2 -> when (sub) {
                 "start" -> if (canStartFromCommand(sender)) arenaIds else emptyList()
-                "top" -> listOf("daily", "weekly", "season", "lifetime")
+                "leaderboard", "lb", "top" -> listOf("daily", "weekly", "season", "lifetime")
                 "stats" -> players()
                 "help" -> if (admin) listOf("all") else emptyList()
                 "private", "test" -> buildList {
@@ -288,7 +288,7 @@ class KothCommand(
         row("/ekoth gui", "See the arenas and start one")
         row("/ekoth schedule", "When the next events start")
         row("/ekoth blitz", "The next weekend blitz, round by round")
-        row("/ekoth top [daily|weekly|season]", "Leaderboard")
+        row("/ekoth leaderboard [daily|weekly|season]", "Leaderboard")
         row("/ekoth stats [player]", "KOTH wins")
         row("/ekoth notifications", "Turn KOTH chat messages on or off")
         if (canStartFromCommand(sender)) row("/ekoth start <arena> [solo|guild] [basic|advanced]", "Start an arena")

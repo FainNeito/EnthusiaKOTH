@@ -33,7 +33,7 @@ class KothCommandTabCompleteTest {
 
     @Test fun `players are offered only the commands they can use, one spelling each`() {
         val options = complete(player(), "")
-        assertTrue(options.containsAll(listOf("gui", "schedule", "top", "stats", "notifications", "help")))
+        assertTrue(options.containsAll(listOf("gui", "schedule", "leaderboard", "stats", "notifications", "help")))
         assertFalse(options.any { it in setOf("setup", "start", "stop", "cancel", "editor", "test", "messages", "reviewmatch") })
         assertTrue(complete(player(starter = true), "st").containsAll(listOf("start", "stats")))
         assertTrue("setup" in complete(player(admin = true), "se"))
@@ -46,7 +46,7 @@ class KothCommandTabCompleteTest {
         assertEquals(listOf("basic"), complete(player(starter = true), "start", "capture", "solo", ""))
         assertEquals(listOf("solo", "guild", "basic", "advanced"), complete(player(admin = true), "start", "capture", ""))
         assertEquals(listOf("solo", "guild"), complete(player(starter = true), "start", "capture", "basic", ""))
-        assertEquals(listOf("daily", "weekly", "season", "lifetime"), complete(player(), "top", ""))
+        assertEquals(listOf("daily", "weekly", "season", "lifetime"), complete(player(), "leaderboard", ""))
         assertEquals(listOf("capture", "moving", "cancel"), complete(player(admin = true), "setup", ""))
         assertEquals(listOf("spawn"), complete(player(admin = true), "arena", "region", "capture", "sp"))
     }

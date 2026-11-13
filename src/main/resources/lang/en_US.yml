@@ -14,7 +14,7 @@ command:
     gui: "<prefix><color:#fff6e0>/ekoth gui <color:#fff6e0>- Open KOTH GUI"
     schedule: "<prefix><color:#fff6e0>/ekoth schedule <color:#fff6e0>- Show KOTH schedule"
     blitz: "<prefix><color:#fff6e0>/ekoth blitz <color:#fff6e0>- Show the next weekend blitz"
-    top: "<prefix><color:#fff6e0>/ekoth top [page] <color:#fff6e0>- KOTH leaderboard"
+    top: "<prefix><color:#fff6e0>/ekoth leaderboard [period] [page] <color:#fff6e0>- KOTH leaderboard"
     stats: "<prefix><color:#fff6e0>/ekoth stats [player] <color:#fff6e0>- Your KOTH stats"
     start: "<error_prefix><color:#ffd0c6>/ekoth start <arena> [solo|guild] [basic|advanced] <color:#ffd0c6>- Start a KOTH"
     stop: "<error_prefix><color:#ffd0c6>/ekoth stop <color:#ffd0c6>- Force-end active KOTH"
