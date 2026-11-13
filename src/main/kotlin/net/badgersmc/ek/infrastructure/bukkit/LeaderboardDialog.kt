@@ -97,15 +97,17 @@ class LeaderboardDialog(
         return Component.text("#${row.rank}  ", rankColor).append(nameText).append(Component.text("  ${wins(row.wins)}", MenuStyle.GOLD))
     }
 
-    /** Two columns: Players | Guilds, Daily | Weekly, Season | Lifetime, Previous | Next. */
+    /**
+     * Two columns: Players | Guilds, Previous | Next, then the periods. Season only appears once a season start is set;
+     * the periods come last so that, without it, Lifetime sits centred on its own row instead of pushing the others out of line.
+     */
     private fun buttons(view: View, board: LeaderboardPage, available: List<String>): List<ActionButton> = buildList {
         LeaderboardSide.entries.forEach { side -> add(button(side.label, side == view.side, view.copy(side = side, page = 1))) }
-        PERIODS.forEach { period ->
-            add(button(title(period), period == view.period, view.copy(period = period, page = 1), enabled = period in available,
-                unavailable = "No season start is set"))
-        }
         add(button("Previous", false, view.copy(page = view.page - 1), enabled = board.page > 1, unavailable = "This is the first page"))
         add(button("Next", false, view.copy(page = view.page + 1), enabled = board.page < board.pages, unavailable = "This is the last page"))
+        PERIODS.filter { it in available }.forEach { period ->
+            add(button(title(period), period == view.period, view.copy(period = period, page = 1)))
+        }
     }
 
     private fun button(label: String, selected: Boolean, target: View, enabled: Boolean = true, unavailable: String = ""): ActionButton {
