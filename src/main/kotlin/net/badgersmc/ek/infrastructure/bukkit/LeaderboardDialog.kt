@@ -49,8 +49,8 @@ class LeaderboardDialog(
     private val wins: (String) -> Map<String, Int>?,
     private val periods: () -> List<String>,
     private val name: (String) -> String,
-    /** The icon beside a row: a player's head, or the guild's banner. */
-    private val icon: (String) -> org.bukkit.inventory.ItemStack,
+    /** A player's head drawn inline in text, or null for guilds and unknown keys. */
+    private val head: (String) -> Component?,
     /** Whether the Enthusia pack's leaderboard art is available (Nexo installed, or forced on in config). */
     private val art: () -> Boolean = { false },
 ) {
@@ -83,15 +83,10 @@ class LeaderboardDialog(
         val heading = Component.text("${title(view.period)}  ", MenuStyle.GOLD)
             .append(Component.text("${view.side.label}  ", MenuStyle.CREAM))
             .append(Component.text("Page ${board.page} of ${board.pages}", if (themed) MenuStyle.CREAM else MenuStyle.MUTED))
-        val parts = mutableListOf<DialogBody>(DialogBody.plainMessage(if (themed) LeaderboardArt.banner(heading) else heading, ROW_WIDTH))
+        // The banner line is measured before its cursor moves are applied, so it needs room for the art and the text.
+        val parts = mutableListOf<DialogBody>(DialogBody.plainMessage(if (themed) LeaderboardArt.banner(heading) else heading, BANNER_WIDTH))
         if (board.rows.isEmpty()) parts += DialogBody.plainMessage(Component.text("No wins yet in this period", MenuStyle.MUTED), ROW_WIDTH)
-        board.rows.forEach { row ->
-            parts += DialogBody.item(icon(row.key))
-                .description(DialogBody.plainMessage(line(row, themed), ROW_WIDTH - 24))
-                .showDecorations(false)
-                .showTooltip(true)
-                .build()
-        }
+        board.rows.forEach { row -> parts += DialogBody.plainMessage(line(row, themed), ROW_WIDTH) }
         if (themed) parts += DialogBody.plainMessage(LeaderboardArt.divider(), ROW_WIDTH)
         if (view.side == LeaderboardSide.PLAYERS) parts += DialogBody.plainMessage(board.viewer?.let {
             Component.text("Your rank: ", MenuStyle.CREAM).append(rank(it.rank, themed))
@@ -106,8 +101,9 @@ class LeaderboardDialog(
     private fun line(row: LeaderboardRow, themed: Boolean): Component {
         val nameText = Component.text(row.name, if (row.viewer) MenuStyle.GOLD else MenuStyle.CREAM)
             .let { if (row.viewer) it.decoration(TextDecoration.BOLD, true) else it }
-        return Component.text().append(rank(row.rank, themed)).append(Component.text("  ")).append(nameText)
-            .append(Component.text("  ${wins(row.wins)}", MenuStyle.GOLD)).build()
+        val line = Component.text().append(rank(row.rank, themed)).append(Component.text(" "))
+        head(row.key)?.let { line.append(it).append(Component.text(" ")) }
+        return line.append(nameText).append(Component.text("  ${wins(row.wins)}", MenuStyle.GOLD)).build()
     }
 
     /**
@@ -139,6 +135,7 @@ class LeaderboardDialog(
     private companion object {
         const val WIDTH = 120
         const val ROW_WIDTH = 244
+        const val BANNER_WIDTH = 520
         val PERIODS = listOf("daily", "weekly", "season", "lifetime")
         val ONE_USE: ClickCallback.Options = ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build()
     }

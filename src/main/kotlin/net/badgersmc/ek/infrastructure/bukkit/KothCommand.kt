@@ -434,7 +434,7 @@ class KothCommand(
             },
             periods = { listOfNotNull("daily", "weekly", "season".takeIf { cfgLoader().seasonStart != null }, "lifetime") },
             name = ::formatStatUser,
-            icon = ::leaderboardIcon,
+            head = ::leaderboardHead,
             art = {
                 when (plugin.config.getString("leaderboards.dialog-art", "auto")?.lowercase()) {
                     "on", "true" -> true
@@ -444,16 +444,21 @@ class KothCommand(
             })
     }
 
-    /** A player's own head (the client fills in the skin), or a banner for a guild. */
-    private fun leaderboardIcon(key: String): ItemStack {
-        val id = runCatching { UUID.fromString(key.substringAfter(':')) }.getOrNull()
-        if (!key.startsWith("solo:") || id == null) return MenuStyle.item(Material.RED_BANNER, MenuStyle.text(formatStatUser(key), MenuStyle.GOLD))
-        return ItemStack(Material.PLAYER_HEAD).apply {
-            editMeta(org.bukkit.inventory.meta.SkullMeta::class.java) { meta ->
-                meta.playerProfile = Bukkit.createProfile(id, formatStatUser(key).takeIf { it.length in 1..16 && it.all { c -> c.isLetterOrDigit() || c == '_' } })
-                meta.displayName(MenuStyle.upright(MenuStyle.text(formatStatUser(key), MenuStyle.GOLD)))
-            }
+    /**
+     * A player's head as an inline text object. The skin comes from the server's copy of their profile when it has one
+     * (online, or cached from an earlier join); otherwise the client looks it up by name.
+     */
+    private fun leaderboardHead(key: String): Component? {
+        if (!key.startsWith("solo:")) return null
+        val id = runCatching { UUID.fromString(key.substringAfter(':')) }.getOrNull() ?: return null
+        val profile = (Bukkit.getPlayer(id) ?: Bukkit.getOfflinePlayer(id)).playerProfile
+        val head = net.kyori.adventure.text.`object`.ObjectContents.playerHead().id(id)
+        val name = profile.name ?: formatStatUser(key)
+        if (name.length in 1..16 && name.all { it.isLetterOrDigit() || it == '_' }) head.name(name)
+        profile.properties.filter { it.name == "textures" }.forEach { property ->
+            head.profileProperty(net.kyori.adventure.text.`object`.PlayerHeadObjectContents.property(property.name, property.value, property.signature))
         }
+        return Component.`object`(head.build())
     }
 
     private fun top(sender: CommandSender, page: Int, period: String = "lifetime") {
