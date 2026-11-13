@@ -266,6 +266,10 @@ class KothService(
         private set(value) { if (value != null) events[value.id] = value }
     @Synchronized fun allEvents(): List<KothEvent> = events.values.toList()
     fun eventForArena(id: String): KothEvent? = allEvents().firstOrNull { it.arena.id == id }
+
+    /** Whether the event started for this scheduled occurrence is running now; another event in the same arena does not count. */
+    fun isOccurrenceLive(occurrenceId: String): Boolean =
+        allEvents().any { it.occurrenceId == occurrenceId && !it.isPrivateTest && it.state == EventState.ACTIVE }
     fun conflicts(arena: KothArena): Boolean {
         val current = allEvents()
         return current.isNotEmpty() && EventConcurrency.conflicts(arena, current, cfgLoader().maxConcurrentEvents, arenasOverlap)
@@ -925,6 +929,7 @@ class KothService(
             state = EventState.ACTIVE,
             teamMode = if (arena.ignoreFactions) TeamMode.SOLO else next.teamMode,
             source = next.startSource,
+            occurrenceId = next.occurrenceId,
         )
         activeEvent = event
         activateQueuedEvent(event, cfg, recovered)

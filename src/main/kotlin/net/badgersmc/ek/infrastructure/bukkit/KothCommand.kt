@@ -418,14 +418,8 @@ class KothCommand(
             "rounds" to rounds.size.toString(), "length" to formatTime(cfg.schedule.blitz.roundSeconds.toLong()),
             "capture" to formatTime(cfg.schedule.blitz.captureSeconds.toLong())))
         rounds.forEachIndexed { index, occurrence ->
-            val ends = occurrence.instant.plusSeconds(cfg.schedule.blitz.roundSeconds.toLong())
-            val running = kothService.eventForArena(occurrence.arenaId)
-                ?.takeIf { !it.isPrivateTest && it.state == net.badgersmc.ek.domain.EventState.ACTIVE } != null
-            val state = when {
-                now.isBefore(occurrence.instant) -> "upcoming"
-                now.isBefore(ends) && running -> "live"
-                else -> "done"
-            }
+            val state = net.badgersmc.ek.application.BlitzRound.status(now, occurrence.instant, cfg.schedule.blitz.roundSeconds,
+                kothService.isOccurrenceLive(occurrence.id)).name.lowercase()
             sender.sendMessage(lang.arenaMsg("command.blitz.round_$state", "round" to (index + 1).toString(),
                 "arena" to (arenas()[occurrence.arenaId]?.name ?: occurrence.arenaId).arenaComponent(),
                 "time" to occurrence.instant.atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm"))))

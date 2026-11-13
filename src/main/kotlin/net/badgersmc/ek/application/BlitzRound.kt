@@ -14,6 +14,8 @@ data class BlitzRound(
     val rounds: Int,
     val arenaId: String,
 ) {
+    enum class Status { UPCOMING, LIVE, DONE }
+
     val isFirst: Boolean get() = round == 1
     val isLast: Boolean get() = round == rounds
 
@@ -39,6 +41,13 @@ data class BlitzRound(
             if (order.isEmpty()) return emptyList()
             val shift = Math.floorMod(date.toEpochDay() * 7 + startIndex, order.size.toLong()).toInt()
             return order.drop(shift) + order.take(shift)
+        }
+
+        /** How a round reads: live only while its own event runs, finished once its slot ends or it was stopped. */
+        fun status(now: java.time.Instant, start: java.time.Instant, roundSeconds: Int, running: Boolean): Status = when {
+            now.isBefore(start) -> Status.UPCOMING
+            now.isBefore(start.plusSeconds(roundSeconds.toLong())) && running -> Status.LIVE
+            else -> Status.DONE
         }
 
         /** Blitz rounds are shorter than the arena's own match; the capture can never outlast the round. */

@@ -501,6 +501,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         upcoming = { count -> scheduleService.previewUpcoming(config(), arenas(), count) },
         nextBlitz = { scheduleService.nextBlitz() },
         blitzRoundSeconds = { config().schedule.blitz.roundSeconds },
+        occurrenceLive = kothService::isOccurrenceLive,
         top = { prefix, count ->
             statsRepository.allWins().entries.filter { it.key.startsWith("$prefix:") }
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).take(count)

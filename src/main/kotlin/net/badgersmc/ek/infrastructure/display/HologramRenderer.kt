@@ -28,6 +28,8 @@ class HologramRenderer(
     private val upcoming: (Int) -> List<ScheduledOccurrence>,
     private val nextBlitz: () -> List<ScheduledOccurrence>,
     private val blitzRoundSeconds: () -> Int,
+    /** Whether the event started for a scheduled occurrence is running. */
+    private val occurrenceLive: (String) -> Boolean,
     private val top: (prefix: String, count: Int) -> List<Pair<String, Int>>,
     private val placeholder: (String) -> String,
     private val custom: (String) -> Component,
@@ -78,16 +80,14 @@ class HologramRenderer(
         val rounds = nextBlitz()
         if (rounds.isEmpty()) return listOf(title("Weekend Blitz"), muted("No blitz this week"))
         val now = clock.instant()
-        val length = blitzRoundSeconds().toLong()
         val opens = rounds.first().instant
         val header = if (now.isBefore(opens)) MenuStyle.line("Starts", when_(opens)) else Component.text("Running now", MenuStyle.GOLD)
         return listOf(title("Weekend Blitz"), header) + rounds.mapIndexed { index, occurrence ->
-            val ends = occurrence.instant.plusSeconds(length)
             val label = Component.text("${index + 1}. ", MenuStyle.MUTED).append(arenaName(occurrence.arenaId))
-            when {
-                now.isBefore(occurrence.instant) -> label.append(Component.text("  ${occurrence.instant.atZone(zone()).format(time)}", MenuStyle.CREAM))
-                now.isBefore(ends) && live(occurrence.arenaId) != null -> label.append(Component.text("  live", MenuStyle.GOLD))
-                else -> label.append(muted("  done"))
+            when (BlitzRound.status(now, occurrence.instant, blitzRoundSeconds(), occurrenceLive(occurrence.id))) {
+                BlitzRound.Status.UPCOMING -> label.append(Component.text("  ${occurrence.instant.atZone(zone()).format(time)}", MenuStyle.CREAM))
+                BlitzRound.Status.LIVE -> label.append(Component.text("  live", MenuStyle.GOLD))
+                BlitzRound.Status.DONE -> label.append(muted("  done"))
             }
         }
     }

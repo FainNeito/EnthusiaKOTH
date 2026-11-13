@@ -68,6 +68,15 @@ class BlitzScheduleTest {
         assertEquals(120, shortened.captureSeconds)
     }
 
+    @Test fun `a round is live only while its own event runs`() {
+        val start = Instant.parse("2026-11-14T18:06:00Z")
+        val during = Instant.parse("2026-11-14T18:07:00Z")
+        assertEquals(BlitzRound.Status.UPCOMING, BlitzRound.status(start.minusSeconds(1), start, 300, running = false))
+        assertEquals(BlitzRound.Status.LIVE, BlitzRound.status(during, start, 300, running = true))
+        assertEquals(BlitzRound.Status.DONE, BlitzRound.status(during, start, 300, running = false))
+        assertEquals(BlitzRound.Status.DONE, BlitzRound.status(start.plusSeconds(300), start, 300, running = true))
+    }
+
     @Test fun `next blitz lists every round of the coming blitz`() {
         val rounds = service(Instant.parse("2026-11-13T09:00:00Z")).nextBlitz()
         assertEquals(4, rounds.size)
