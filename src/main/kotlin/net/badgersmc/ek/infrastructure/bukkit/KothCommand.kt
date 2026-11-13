@@ -75,7 +75,46 @@ class KothCommand(
     private val settings: StaffSettingsController? = null,
     private val progression: ProgressionController? = null,
     private val holograms: () -> net.badgersmc.ek.infrastructure.display.KothHologramService? = { null },
+    private val arenaBuild: () -> ArenaBuildService? = { null },
 ) : CommandExecutor, TabCompleter {
+
+    /** /ekoth build <arena> <base|save|edit|preview|status|clear>, or null when the line is not a build command. */
+    internal fun buildTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
+        if (!args.getOrNull(0).equals("build", true) || args.size < 2) return null
+        if (!sender.hasPermission("enthusiakoth.admin")) return emptyList()
+        val options = when (args.size) {
+            2 -> arenas().keys.sorted()
+            3 -> listOf("base", "save", "edit", "preview", "status", "clear")
+            else -> emptyList()
+        }
+        return options.filter { it.startsWith(args.last(), true) }
+    }
+
+    private fun arenaBuild(sender: CommandSender, args: Array<out String>) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        val service = arenaBuild() ?: return
+        val arena = args.getOrNull(1)?.let { requested -> arenas().keys.firstOrNull { it.equals(requested, true) } }
+        val action = args.getOrNull(2)?.lowercase()
+        if (arena == null || action == null) { sender.sendMessage(lang.msg("arena-build.usage")); return }
+        fun reply(result: ArenaBuildService.Result, count: Int, done: String) = sender.sendMessage(lang.msg(
+            if (result == ArenaBuildService.Result.DONE) done else "arena-build.error.${result.name.lowercase().replace('_', '-')}",
+            "arena" to arena, "count" to "%,d".format(count), "limit" to "%,d".format(cfgLoader().arenaBuild.maxBlocks)))
+        when (action) {
+            "base" -> service.recordBase(arena).let { (r, n) -> reply(r, n, "arena-build.base-saved") }
+            "save" -> service.recordBuild(arena).let { (r, n) -> reply(r, n, "arena-build.saved") }
+            "edit" -> service.edit(arena).let { (r, n) -> reply(r, n, "arena-build.editing") }
+            "preview" -> service.preview(arena).let { (r, n) -> reply(r, n, "arena-build.previewing") }
+            "clear" -> reply(service.clear(arena), 0, "arena-build.cleared")
+            "status" -> {
+                val (base, blocks, built) = service.status(arena)
+                sender.sendMessage(lang.msg("arena-build.status", "arena" to arena,
+                    "base" to if (base) "saved" else "not saved",
+                    "build" to (blocks?.let { "%,d blocks".format(it) } ?: "not recorded"),
+                    "state" to if (built) "built form" else "base form"))
+            }
+            else -> sender.sendMessage(lang.msg("arena-build.usage"))
+        }
+    }
 
     /** /ekoth hologram create <name> <type> [arena] | move <name> | remove <name> | list, or null when the line is not a hologram command. */
     internal fun hologramTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
@@ -177,6 +216,7 @@ class KothCommand(
             "schedule" -> schedule(sender)
             "blitz" -> blitz(sender)
             "hologram", "holo" -> hologram(sender, args)
+            "build" -> arenaBuild(sender, args)
             "leaderboard", "lb", "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
             "stats" -> stats(sender, args.getOrNull(1))
             "start" -> start(sender, args.getOrNull(1) ?: "", args.drop(2))
@@ -204,6 +244,7 @@ class KothCommand(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
         hologramTabOptions(sender, args)?.let { return it.toMutableList() }
+        buildTabOptions(sender, args)?.let { return it.toMutableList() }
         val admin = sender.hasPermission("enthusiakoth.admin")
         val arenaIds = arenas().keys.sorted()
         val players = { Bukkit.getOnlinePlayers().map { it.name }.sorted() }
@@ -216,7 +257,7 @@ class KothCommand(
                 if (canStartFromCommand(sender)) add("start")
                 if (canStartPrivate(sender) || canJoinPrivate(sender)) add("private")
                 if (admin) addAll(listOf("setup", "manage", "schedules", "rewards", "displays", "stop", "status", "lock", "holds", "reviewmatch",
-                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "reply", "reload"))
+                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "build", "reply", "reload"))
             }
             2 -> when (sub) {
                 "start" -> if (canStartFromCommand(sender)) arenaIds else emptyList()
@@ -298,6 +339,7 @@ class KothCommand(
         row("/ekoth manage [arena]", "Schedules, rewards and displays")
         row("/ekoth stop [arena]", "End a running KOTH")
         row("/ekoth hologram <create|move|remove|list>", "Place live KOTH holograms")
+        row("/ekoth build <arena> <base|save|edit|preview|status|clear>", "Arenas that build themselves when a KOTH starts")
         row("/ekoth holds", "Matches waiting for review")
         if (!detailed) { row("/ekoth help all", "Every staff command"); return }
         row("/ekoth reviewmatch <match> <approve|reject> <note>", "Decide a held match")

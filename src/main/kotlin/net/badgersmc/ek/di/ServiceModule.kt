@@ -299,6 +299,8 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         captureAudience = ::captureAudience,
         scheduleSound = { delay, task -> plugin.server.scheduler.runTaskLater(plugin, Runnable { task() }, delay) },
         blitzRoundStarted = { round, event -> announceBlitzRound(round, event) },
+        arenaWarmup = { arena -> arenaBuildService.warmupSeconds(arena.id) },
+        liveEffects = { event, audience -> net.badgersmc.ek.infrastructure.bukkit.KothOpening.play(plugin, langService, config().display, event, audience) },
     )
 
     /** Names the round and, unless it is the last, where and when the chain moves next. */
@@ -455,6 +457,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         settings = staffSettingsController,
         progression = progressionController,
         holograms = { hologramService },
+        arenaBuild = { arenaBuildService },
     ).also(::registerCommand)
     val kothListeners = KothListeners(
         cfgLoader = { config() },
@@ -522,6 +525,31 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
     )
     val hologramService = net.badgersmc.ek.infrastructure.display.KothHologramService(plugin, hologramRenderer::render).also { it.start() }
+    val championBannerService = net.badgersmc.ek.infrastructure.bukkit.ChampionBannerService(
+        plugin = plugin,
+        store = net.badgersmc.ek.application.ChampionStore(File(plugin.dataFolder, "arena-champions.tsv")),
+        arenas = { arenas() },
+        enabled = { config().display.championBanners },
+        regionBounds = { arena ->
+            arena.worldGuardRegion?.let { worldGuardRegionService.bounds(arena.zone.worldName, it) } ?: arena.protectedRegion
+        },
+        guildName = { lumaGuildsAdapter.guildName(it) },
+        guildBanner = { lumaGuildsAdapter.guildBanner(it) },
+    ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
+    val arenaBuildService = net.badgersmc.ek.infrastructure.bukkit.ArenaBuildService(
+        plugin = plugin,
+        store = net.badgersmc.ek.application.ArenaBuildStore(File(plugin.dataFolder, "arena-builds")),
+        arenas = { arenas() },
+        settings = { config().arenaBuild },
+        regionBounds = { arena ->
+            arena.worldGuardRegion?.let { worldGuardRegionService.bounds(arena.zone.worldName, it) } ?: arena.protectedRegion
+        },
+        arenaBusy = { id -> kothService.eventForArena(id) != null || kothService.queuedEvents().any { it.arenaId == id } },
+        decorate = { arenaId, block -> championBannerService.decorate(arenaId, block) },
+    ).also {
+        it.recover()
+        plugin.server.pluginManager.registerEvents(it, plugin)
+    }
 
     init {
         registerArenaIdentities()
@@ -629,6 +657,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun shutdown() {
+        arenaBuildService.shutdown()
         hologramService.shutdown()
         arenaSetupController.shutdown()
         staffSettingsController.shutdown()

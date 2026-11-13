@@ -152,12 +152,34 @@ koth:
   no_winner_unverified: "<prefix><color:#fff6e0><captured> held <color:#ffcf1f><koth_name><color:#fff6e0>, but the win could not be verified, so there is no winner this time. Staff can review it."
   no_winner: "<prefix><color:#ff8f82>The <color:#ffcf1f><koth_name><color:#ff8f82> KOTH ended without a winner."
   warning_minutes: "<prefix><color:#fff6e0><koth_name> <color:#fff6e0>starts in <minutes> minutes!"
+  rising: "<prefix><color:#fff6e0>The <koth_name> <color:#fff6e0>arena is rising from its ruins. The KOTH begins in <color:#ffcf1f><seconds>s</color>."
+  rising_actionbar: "<koth_name> <color:#fff6e0>is rising. The KOTH begins in <color:#ffcf1f><seconds>s"
+  live_title: "<koth_name>"
+  live_subtitle: "<color:#fff6e0>The KOTH has begun. <color:#ffcf1f>Take the point!"
   actionbar:
     capturing: "<color:#ffcf1f>Capturing <color:#ffcf1f><koth_name></color> <color:#fff6e0>[<color:#ffcf1f><progress_bar><color:#fff6e0>] <color:#fff6e0><time_left> left"
     contested: "<color:#ffcf1f>Contested! <color:#fff6e0>Clear the point to keep capturing <color:#ffcf1f><koth_name>"
     held: "<color:#ff8f82><capper> still holds <color:#ffcf1f><koth_name></color><color:#ff8f82>. <color:#fff6e0>Stay on the point to take it."
     starting: "<color:#fff6e0>You are on the <color:#ffcf1f><koth_name></color> <color:#fff6e0>point."
   reminder: "<prefix><color:#fff6e0>Reminder that the <color:#ffcf1f><koth_name><color:#fff6e0> KOTH is still active! <capper> <color:#bfae98>(<time_left>)</color> is currently capturing."
+
+arena-build:
+  usage: "<prefix><color:#fff6e0>Make an arena build itself when a KOTH starts: <color:#ffcf1f>/ekoth build <arena> base</color> saves how it looks now, build the full form, then <color:#ffcf1f>/ekoth build <arena> save</color>. Also <color:#ffcf1f>edit</color>, <color:#ffcf1f>preview</color>, <color:#ffcf1f>status</color> and <color:#ffcf1f>clear</color>."
+  base-saved: "<prefix><color:#fff6e0>Saved the base form of <color:#ffcf1f><arena></color> (<count> blocks scanned). Build the full form now, then run <color:#ffcf1f>/ekoth build <arena> save</color>."
+  saved: "<prefix><color:#fff6e0>Recorded <color:#ffcf1f><count></color> blocks for <color:#ffcf1f><arena></color> and put its base form back. It builds itself when a KOTH starts; try <color:#ffcf1f>/ekoth build <arena> preview</color>."
+  editing: "<prefix><color:#fff6e0>Placed the recorded build of <color:#ffcf1f><arena></color> (<count> blocks). Change it, then run <color:#ffcf1f>/ekoth build <arena> save</color>."
+  previewing: "<prefix><color:#fff6e0>Building <color:#ffcf1f><arena></color> (<count> blocks). It comes back down by itself shortly."
+  cleared: "<prefix><color:#fff6e0>Removed the recorded build and base form of <color:#ffcf1f><arena></color>."
+  status: "<prefix><color:#ffcf1f><arena></color><color:#fff6e0>: base form <color:#ffcf1f><base></color>, build <color:#ffcf1f><build></color>, now in its <color:#ffcf1f><state></color>."
+  error:
+    no-arena: "<error_prefix><color:#ffd0c6>There is no loaded arena called <arena>."
+    no-world: "<error_prefix><color:#ffd0c6>The world for <arena> is not loaded."
+    busy: "<error_prefix><color:#ffd0c6><arena> is running, queued or built right now. Try again once it is back in its base form."
+    no-base: "<error_prefix><color:#ffd0c6>Save the base form first: /ekoth build <arena> base."
+    no-build: "<error_prefix><color:#ffd0c6><arena> has no recorded build yet."
+    nothing-changed: "<error_prefix><color:#ffd0c6>Nothing differs from the base form of <arena>. Build the full form first."
+    too-large: "<error_prefix><color:#ffd0c6>The area to record for <arena> is <count> blocks, over arena-build.max-scan-blocks. Give the arena a smaller protection region."
+    too-many: "<error_prefix><color:#ffd0c6>The build changes <count> blocks, over the limit of <limit> (arena-build.max-blocks)."
 
 hologram:
   usage: "<prefix><color:#fff6e0>Use <color:#ffcf1f>/ekoth hologram create <name> <type> [arena]</color>, <color:#ffcf1f>move <name></color>, <color:#ffcf1f>remove <name></color> or <color:#ffcf1f>list</color>. Types: arena, schedule, blitz, top-players, top-guilds, placeholders, custom."

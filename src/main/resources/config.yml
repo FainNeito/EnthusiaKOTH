@@ -215,6 +215,13 @@ display:
   # Moving KOTH: light up the edge of the capture square in the floor as it moves. Client-side only;
   # the world is never changed and the real blocks return when the KOTH ends.
   moving-floor: true
+  # When a KOTH goes live: a title on screen, a low two-tone call with thunder, and a burst of light on the point.
+  # Only players following the event (or at the arena) see and hear it; nothing is damaged.
+  start-title: true
+  start-effects: true
+  # Banners in an arena fly the design of the guild that last won there, until another guild wins it.
+  # Solo wins, private tests and withheld wins leave the champion in place.
+  champion-banners: true
   bossbar-color: RED
   bossbar-overlay: PROGRESS
   bossbar-title: "" # Blank uses lang/en_US.yml; MiniMessage placeholders koth_name, capper, time, contested.
@@ -315,6 +322,25 @@ rewards:
 # Concurrent public events require nonoverlapping native arenas; private tests remain exclusive.
 events:
   max-concurrent: 1
+
+# Arenas that build themselves when a KOTH starts. Record with /ekoth build <arena> base, build the
+# full form, then /ekoth build <arena> save. The recorded blocks rise layer by layer when an event
+# starts there and come down in reverse when it ends. The blocks are real; a journal under
+# arena-builds/active/ puts the base form back on the next start if the server stops mid-event.
+arena-build:
+  enabled: true
+  build-seconds: 4
+  teardown-seconds: 3
+  preview-seconds: 10
+  # Recorded region: the arena's protection region (or its zone plus margin), from below to above
+  # the capture point.
+  below: 8
+  above: 24
+  margin: 16
+  max-blocks: 20000
+  max-scan-blocks: 2000000
+  # After a KOTH is won, the built arena stands this long under the victors' banners before it comes down.
+  victory-hold-seconds: 8
 
 # Inclusive local date; leave blank until a season has been selected.
 leaderboards:
