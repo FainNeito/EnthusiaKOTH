@@ -66,6 +66,12 @@ class HologramRendererTest {
         assertTrue("%enthusiakoth_moving_capper%  (empty)" in placeholders, placeholders.toString())
     }
 
+    @Test fun `custom lines keep their MiniMessage colours around coloured placeholder values`() {
+        val values = mapOf("%enthusiakoth_next_name%" to "§cSummit§r", "%enthusiakoth_next_koth_time%" to "10m 28s")
+        val line = customLine("<color:#fff6e0>Next: <color:#ffcf1f>%enthusiakoth_next_name% <color:#fff6e0>in %enthusiakoth_next_koth_time% %other_x%") { values[it] }
+        assertEquals("Next: Summit in 10m 28s %other_x%", plain.serialize(line))
+    }
+
     @Test fun `hologram commands tab complete their actions, types, arenas and names`() {
         val service = mockk<KothHologramService> { every { names() } returns listOf("spawn-board") }
         val command = KothCommand(mockk(relaxed = true), { mockk(relaxed = true) }, mockk(relaxed = true), mockk(relaxed = true),

@@ -188,3 +188,18 @@ class KothHologramService(
 
 /** Placeholder values come back with legacy section-sign colours; holograms show them as components. */
 internal fun legacyValue(value: String): Component = LegacyComponentSerializer.legacySection().deserialize(value)
+
+private val PLACEHOLDER = Regex("%[^%\\s]+%")
+
+/**
+ * A custom hologram line: MiniMessage around PlaceholderAPI placeholders. Each placeholder is resolved on its own and its
+ * legacy colours are turned into MiniMessage, so a coloured value never stops the line's own tags from parsing.
+ */
+fun customLine(line: String, resolve: (String) -> String?): Component {
+    val mini = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+    val expanded = PLACEHOLDER.replace(line) { match ->
+        val value = resolve(match.value)?.takeIf { it != match.value } ?: return@replace match.value
+        mini.serialize(legacyValue(value))
+    }
+    return mini.deserialize(expanded)
+}

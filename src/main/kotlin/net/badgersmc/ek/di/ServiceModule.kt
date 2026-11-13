@@ -515,10 +515,10 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
         placeholder = { key -> papiExpansion.onPlaceholderRequest(null, key) },
         custom = { line ->
-            val resolved = if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))
-                runCatching { me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(null as org.bukkit.OfflinePlayer?, line) }.getOrDefault(line) else line
-            if ('\u00a7' in resolved) net.badgersmc.ek.infrastructure.display.legacyValue(resolved)
-            else net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(resolved)
+            net.badgersmc.ek.infrastructure.display.customLine(line) { token ->
+                if (!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) null
+                else runCatching { me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(null as org.bukkit.OfflinePlayer?, token) }.getOrNull()
+            }
         },
     )
     val hologramService = net.badgersmc.ek.infrastructure.display.KothHologramService(plugin, hologramRenderer::render).also { it.start() }
