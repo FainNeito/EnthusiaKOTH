@@ -127,7 +127,7 @@ class ProgressionController(
                 add(entry(Material.CLOCK,"Schedule",listOf(text("When the next events start."),hint("Click to show in chat")))) {
                     player.closeInventory(); player.performCommand("ekoth schedule")
                 }
-                add(entry(Material.GOLD_INGOT,"Leaderboards",listOf(text("Top players by wins."),hint("Click to show in chat")))) {
+                add(entry(Material.GOLD_INGOT,"Leaderboards",listOf(text("Top players and guilds by wins."),hint("Click to open")))) {
                     player.closeInventory(); player.performCommand("ekoth top")
                 }
             }

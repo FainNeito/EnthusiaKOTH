@@ -426,7 +426,24 @@ class KothCommand(
         }
     }
 
+    private val leaderboardDialog by lazy {
+        LeaderboardDialog(plugin,
+            wins = { period ->
+                if (period == "lifetime") stats.allWins()
+                else net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)?.let(stats::winsIn)
+            },
+            periods = { listOfNotNull("daily", "weekly", "season".takeIf { cfgLoader().seasonStart != null }, "lifetime") },
+            name = ::formatStatUser)
+    }
+
     private fun top(sender: CommandSender, page: Int, period: String = "lifetime") {
+        if (sender is Player) {
+            if (period != "lifetime" && net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart) == null) {
+                sender.sendMessage(lang.msg("staff.error.period")); return
+            }
+            leaderboardDialog.open(sender, LeaderboardDialog.View(period.lowercase(), LeaderboardSide.PLAYERS, page))
+            return
+        }
         val window = net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)
         if (period != "lifetime" && window == null) { sender.sendMessage(lang.msg("staff.error.period")); return }
         val wins = if (window == null) stats.allWins() else stats.winsIn(window)
