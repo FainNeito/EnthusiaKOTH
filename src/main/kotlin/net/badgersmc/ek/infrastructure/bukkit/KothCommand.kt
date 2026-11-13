@@ -110,7 +110,7 @@ class KothCommand(
                 sender.sendMessage(lang.msg("arena-build.status", "arena" to arena,
                     "base" to if (base) "saved" else "not saved",
                     "build" to (blocks?.let { "%,d blocks".format(it) } ?: "not recorded"),
-                    "state" to if (built) "built" else "base form"))
+                    "state" to if (built) "built form" else "base form"))
             }
             else -> sender.sendMessage(lang.msg("arena-build.usage"))
         }
