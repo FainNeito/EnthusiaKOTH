@@ -33,6 +33,13 @@ class LeaderboardArtTest {
         assertEquals(-TextWidth.of(heading), spaces(LeaderboardArt.banner(heading)))
     }
 
+    @Test fun `rows and buttons end exactly after their art`() {
+        // The left and right content plus every cursor move net out, so only the bar's own advance remains.
+        assertEquals(-(12 + 6), spaces(LeaderboardArt.row(Component.text("ab"), 12, Component.text("c"), 6, viewer = false)))
+        assertEquals(-TextWidth.of("Previous"), spaces(LeaderboardArt.button("Previous", LeaderboardArt.Button.DISABLED)))
+        assertEquals(-TextWidth.of("Close"), spaces(LeaderboardArt.button("Close", LeaderboardArt.Button.NORMAL, wide = true)))
+    }
+
     @Test fun `default font widths`() {
         assertEquals(6 * 3, TextWidth.of("abc"))
         assertEquals(2 + 3 + 4, TextWidth.of("ilt"))

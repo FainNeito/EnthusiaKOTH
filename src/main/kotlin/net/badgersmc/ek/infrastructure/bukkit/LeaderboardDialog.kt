@@ -61,37 +61,36 @@ class LeaderboardDialog(
         val period = view.period.takeIf { it in available } ?: "lifetime"
         val board = LeaderboardPage.of(wins(period).orEmpty(), view.side, view.page, "solo:${player.uniqueId}", name)
         val current = view.copy(period = period, page = board.page)
+        val themed = art()
+        val close = if (themed) LeaderboardArt.button("Close", LeaderboardArt.Button.NORMAL, wide = true) else MenuStyle.text("Close")
         player.showDialog(Dialog.create { factory ->
             factory.empty()
                 .base(DialogBase.builder(MenuStyle.title("KOTH Leaderboard"))
                     .canCloseWithEscape(true)
                     .pause(false)
                     .afterAction(DialogBase.DialogAfterAction.NONE)
-                    .body(body(current, board))
+                    .body(body(current, board, themed))
                     .build())
-                .type(DialogType.multiAction(buttons(current, board, available))
+                .type(DialogType.multiAction(buttons(current, board, available, themed))
                     .columns(2)
-                    .exitAction(ActionButton.builder(MenuStyle.text("Close")).width(WIDTH * 2 + 4)
+                    .exitAction(ActionButton.builder(close).width(WIDTH * 2 + 4)
                         .action(DialogAction.customClick({ _, audience -> audience.closeDialog() }, ONE_USE)).build())
                     .build())
         })
     }
 
     /** Heading, one row per rank with its head or banner, then the viewer's own rank, like enthusia.info/leaderboards. */
-    private fun body(view: View, board: LeaderboardPage): List<DialogBody> {
-        val themed = art()
+    private fun body(view: View, board: LeaderboardPage, themed: Boolean): List<DialogBody> {
         val heading = Component.text("${title(view.period)}  ", MenuStyle.GOLD)
             .append(Component.text("${view.side.label}  ", MenuStyle.CREAM))
             .append(Component.text("Page ${board.page} of ${board.pages}", if (themed) MenuStyle.CREAM else MenuStyle.MUTED))
         // The banner line is measured before its cursor moves are applied, so it needs room for the art and the text.
         val parts = mutableListOf<DialogBody>(DialogBody.plainMessage(if (themed) LeaderboardArt.banner(heading) else heading, BANNER_WIDTH))
         if (board.rows.isEmpty()) parts += DialogBody.plainMessage(Component.text("No wins yet in this period", MenuStyle.MUTED), ROW_WIDTH)
-        board.rows.forEach { row -> parts += DialogBody.plainMessage(line(row, themed), ROW_WIDTH) }
-        if (themed) parts += DialogBody.plainMessage(LeaderboardArt.divider(), ROW_WIDTH)
-        if (view.side == LeaderboardSide.PLAYERS) parts += DialogBody.plainMessage(board.viewer?.let {
-            Component.text("Your rank: ", MenuStyle.CREAM).append(rank(it.rank, themed))
-                .append(Component.text("  ${wins(it.wins)}", MenuStyle.CREAM))
-        } ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED), ROW_WIDTH)
+        board.rows.forEach { row -> parts += DialogBody.plainMessage(line(row, themed), BANNER_WIDTH) }
+        if (themed) parts += DialogBody.plainMessage(LeaderboardArt.divider(), BANNER_WIDTH)
+        if (view.side == LeaderboardSide.PLAYERS) parts += DialogBody.plainMessage(board.viewer?.let { yours(it, themed) }
+            ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED), BANNER_WIDTH)
         return parts
     }
 
@@ -101,27 +100,44 @@ class LeaderboardDialog(
     private fun line(row: LeaderboardRow, themed: Boolean): Component {
         val nameText = Component.text(row.name, if (row.viewer) MenuStyle.GOLD else MenuStyle.CREAM)
             .let { if (row.viewer) it.decoration(TextDecoration.BOLD, true) else it }
-        val line = Component.text().append(rank(row.rank, themed)).append(Component.text(" "))
-        head(row.key)?.let { line.append(it).append(Component.text(" ")) }
-        return line.append(nameText).append(Component.text("  ${wins(row.wins)}", MenuStyle.GOLD)).build()
+        val face = head(row.key)
+        val left = Component.text().append(rank(row.rank, themed)).append(Component.text(" "))
+        face?.let { left.append(it).append(Component.text(" ")) }
+        left.append(nameText)
+        val score = Component.text(wins(row.wins), MenuStyle.GOLD)
+        if (!themed) return left.append(Component.text("  ")).append(score).build()
+        // On the art the row reads like the website: rank, head and name on the left, wins against the right edge.
+        val leftWidth = LeaderboardArt.BADGE_ADVANCE + 4 + (if (face != null) LeaderboardArt.HEAD_ADVANCE + 4 else 0) +
+            TextWidth.of(row.name, bold = row.viewer)
+        return LeaderboardArt.row(left.build(), leftWidth, score, TextWidth.of(wins(row.wins)), row.viewer)
+    }
+
+    private fun yours(row: LeaderboardRow, themed: Boolean): Component {
+        val label = Component.text("Your rank ", MenuStyle.CREAM)
+        val score = Component.text(wins(row.wins), MenuStyle.GOLD)
+        if (!themed) return label.append(rank(row.rank, false)).append(Component.text("  ")).append(score)
+        return LeaderboardArt.row(label.append(LeaderboardArt.rank(row.rank)), TextWidth.of("Your rank ") + LeaderboardArt.BADGE_ADVANCE,
+            score, TextWidth.of(wins(row.wins)), viewer = true)
     }
 
     /**
      * Two columns: Players | Guilds, Previous | Next, then the periods. Season only appears once a season start is set;
      * the periods come last so that, without it, Lifetime sits centred on its own row instead of pushing the others out of line.
      */
-    private fun buttons(view: View, board: LeaderboardPage, available: List<String>): List<ActionButton> = buildList {
-        LeaderboardSide.entries.forEach { side -> add(button(side.label, side == view.side, view.copy(side = side, page = 1))) }
-        add(button("Previous", false, view.copy(page = view.page - 1), enabled = board.page > 1, unavailable = "This is the first page"))
-        add(button("Next", false, view.copy(page = view.page + 1), enabled = board.page < board.pages, unavailable = "This is the last page"))
+    private fun buttons(view: View, board: LeaderboardPage, available: List<String>, themed: Boolean): List<ActionButton> = buildList {
+        LeaderboardSide.entries.forEach { side -> add(button(side.label, side == view.side, view.copy(side = side, page = 1), themed)) }
+        add(button("Previous", false, view.copy(page = view.page - 1), themed, enabled = board.page > 1, unavailable = "This is the first page"))
+        add(button("Next", false, view.copy(page = view.page + 1), themed, enabled = board.page < board.pages, unavailable = "This is the last page"))
         PERIODS.filter { it in available }.forEach { period ->
-            add(button(title(period), period == view.period, view.copy(period = period, page = 1)))
+            add(button(title(period), period == view.period, view.copy(period = period, page = 1), themed))
         }
     }
 
-    private fun button(label: String, selected: Boolean, target: View, enabled: Boolean = true, unavailable: String = ""): ActionButton {
+    private fun button(label: String, selected: Boolean, target: View, themed: Boolean, enabled: Boolean = true, unavailable: String = ""): ActionButton {
         val color = when { selected -> MenuStyle.GOLD; enabled -> MenuStyle.CREAM; else -> MenuStyle.MUTED }
-        val text = Component.text(label, color).let { if (selected) it.decoration(TextDecoration.UNDERLINED, true) else it }
+        val look = when { selected -> LeaderboardArt.Button.SELECTED; enabled -> LeaderboardArt.Button.NORMAL; else -> LeaderboardArt.Button.DISABLED }
+        val text = if (themed) LeaderboardArt.button(label, look)
+            else Component.text(label, color).let { if (selected) it.decoration(TextDecoration.UNDERLINED, true) else it }
         val builder = ActionButton.builder(text).width(WIDTH)
         // Buttons for the current view, or with nowhere to go, do nothing: the dialog simply stays as it is.
         if (selected) return builder.tooltip(MenuStyle.text("Showing now", MenuStyle.MUTED)).build()

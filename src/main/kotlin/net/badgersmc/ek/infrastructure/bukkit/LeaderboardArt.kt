@@ -56,6 +56,50 @@ object LeaderboardArt {
 
     fun divider(): Component = glyph(DIVIDER)
 
+    private const val ROW = ''
+    private const val ROW_VIEWER = ''
+    const val ROW_ADVANCE = 241
+    private const val ROW_PADDING = 5
+
+    /** A website-style row bar: [left] from the left edge, [right] against the right edge. */
+    fun row(left: Component, leftWidth: Int, right: Component, rightWidth: Int, viewer: Boolean): Component {
+        val gap = ROW_ADVANCE - 2 * ROW_PADDING - leftWidth - rightWidth
+        return Component.text()
+            .append(glyph(if (viewer) ROW_VIEWER else ROW)).append(shift(-(ROW_ADVANCE - ROW_PADDING)))
+            .append(left).append(shift(gap)).append(right).append(shift(ROW_PADDING))
+            .build()
+    }
+
+    /** Button looks: the standard crimson, gold for the view on screen, dimmed when there is nowhere to go. */
+    enum class Button { NORMAL, SELECTED, DISABLED }
+
+    private const val BUTTON = ''
+    private const val BUTTON_SELECTED = ''
+    private const val BUTTON_DISABLED = ''
+    private const val BUTTON_WIDE = ''
+    const val BUTTON_ADVANCE = 116
+    const val BUTTON_WIDE_ADVANCE = 240
+
+    /** A button label drawn on button art that fills the dialog button's label area. */
+    fun button(label: String, look: Button, wide: Boolean = false): Component {
+        val color: TextColor = when (look) {
+            Button.NORMAL -> MenuStyle.CREAM
+            Button.SELECTED -> TextColor.color(0x3A0A07)
+            Button.DISABLED -> MenuStyle.MUTED
+        }
+        val glyph = when {
+            wide -> BUTTON_WIDE
+            look == Button.SELECTED -> BUTTON_SELECTED
+            look == Button.DISABLED -> BUTTON_DISABLED
+            else -> BUTTON
+        }
+        val text = Component.text(label, color)
+        return over(glyph, if (wide) BUTTON_WIDE_ADVANCE else BUTTON_ADVANCE, text, TextWidth.of(label))
+    }
+
+    /** Width of an inline player head object: an 8 px face and the 1 px gap after it. */
+    const val HEAD_ADVANCE = 9
+
     /** The website's rank box: gold, silver and bronze for the podium, crimson with a gold rim for the rest. */
     fun rank(rank: Int): Component {
         val badge = when (rank) { 1 -> BADGE_GOLD; 2 -> BADGE_SILVER; 3 -> BADGE_BRONZE; else -> BADGE }
