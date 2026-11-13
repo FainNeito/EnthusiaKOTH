@@ -26,6 +26,22 @@ data class EnthusiaKothConfig(
     val seasonStart: String? = null,
     val captureNotificationRegions: List<String> = listOf("spawn", "warzone", "market"),
     val captureSounds: CaptureSoundsConfig = CaptureSoundsConfig(),
+    val arenaBuild: ArenaBuildConfig = ArenaBuildConfig(),
+)
+
+/** Arenas that build themselves from their base form when a KOTH starts (see /ekoth build). */
+data class ArenaBuildConfig(
+    val enabled: Boolean = true,
+    val buildSeconds: Int = 4,
+    val teardownSeconds: Int = 3,
+    val previewSeconds: Int = 10,
+    /** How far below and above the capture point the recorded region reaches. */
+    val below: Int = 8,
+    val above: Int = 24,
+    /** Margin around the capture zone when the arena has no protection region. */
+    val margin: Int = 16,
+    val maxBlocks: Int = 20_000,
+    val maxScanBlocks: Long = 2_000_000,
 )
 
 data class SoundCueConfig(val sound: String, val volume: Float, val pitch: Float, val delayTicks: Long = 0)

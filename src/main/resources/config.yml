@@ -316,6 +316,23 @@ rewards:
 events:
   max-concurrent: 1
 
+# Arenas that build themselves when a KOTH starts. Record with /ekoth build <arena> base, build the
+# full form, then /ekoth build <arena> save. The recorded blocks rise layer by layer when an event
+# starts there and come down in reverse when it ends. The blocks are real; a journal under
+# arena-builds/active/ puts the base form back on the next start if the server stops mid-event.
+arena-build:
+  enabled: true
+  build-seconds: 4
+  teardown-seconds: 3
+  preview-seconds: 10
+  # Recorded region: the arena's protection region (or its zone plus margin), from below to above
+  # the capture point.
+  below: 8
+  above: 24
+  margin: 16
+  max-blocks: 20000
+  max-scan-blocks: 2000000
+
 # Inclusive local date; leave blank until a season has been selected.
 leaderboards:
   season-start: ""

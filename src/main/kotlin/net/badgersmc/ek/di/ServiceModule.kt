@@ -455,6 +455,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         settings = staffSettingsController,
         progression = progressionController,
         holograms = { hologramService },
+        arenaBuild = { arenaBuildService },
     ).also(::registerCommand)
     val kothListeners = KothListeners(
         cfgLoader = { config() },
@@ -522,6 +523,19 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
     )
     val hologramService = net.badgersmc.ek.infrastructure.display.KothHologramService(plugin, hologramRenderer::render).also { it.start() }
+    val arenaBuildService = net.badgersmc.ek.infrastructure.bukkit.ArenaBuildService(
+        plugin = plugin,
+        store = net.badgersmc.ek.application.ArenaBuildStore(File(plugin.dataFolder, "arena-builds")),
+        arenas = { arenas() },
+        settings = { config().arenaBuild },
+        regionBounds = { arena ->
+            arena.worldGuardRegion?.let { worldGuardRegionService.bounds(arena.zone.worldName, it) } ?: arena.protectedRegion
+        },
+        arenaBusy = { id -> kothService.eventForArena(id) != null || kothService.queuedEvents().any { it.arenaId == id } },
+    ).also {
+        it.recover()
+        plugin.server.pluginManager.registerEvents(it, plugin)
+    }
 
     init {
         registerArenaIdentities()
@@ -629,6 +643,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun shutdown() {
+        arenaBuildService.shutdown()
         hologramService.shutdown()
         arenaSetupController.shutdown()
         staffSettingsController.shutdown()
