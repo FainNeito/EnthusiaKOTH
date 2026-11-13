@@ -76,6 +76,25 @@ class BlitzScheduleTest {
         assertEquals(Instant.parse("2026-11-14T18:00:00Z"), running.first().instant)
     }
 
+    @Test fun `a long blitz still queues rounds that fall days after it opened`() {
+        val long = blitz.copy(rounds = 48, roundSeconds = 7200, breakSeconds = 3600)
+        val round12 = Instant.parse("2026-11-16T03:00:00Z")
+        val koth = mockk<KothService>(relaxed = true) { every { queueStart(any(), any(), any(), any(), any()) } returns true }
+        val store = InMemoryScheduleStateStore().apply { setLastEvaluation(round12.minusSeconds(1)) }
+        service(round12, long, store, koth).tickAt(round12)
+        verify(exactly = 1) { koth.queueStart(any(), EventKind.SCHEDULED, round12, any(), match { BlitzRound.parse(it)?.round == 12 }) }
+    }
+
+    @Test fun `next event and per-arena starts find a weekend blitz from midweek`() {
+        val monday = service(Instant.parse("2026-11-16T12:00:00Z"))
+        assertEquals(Instant.parse("2026-11-21T18:00:00Z"), monday.nextScheduledStart())
+        val rounds = monday.nextBlitz()
+        val opener = rounds.first().arenaId
+        assertEquals(rounds.first().instant, monday.nextStartFor(opener)!!.instant)
+        val second = rounds[1]
+        assertEquals(second.instant, monday.nextStartFor(second.arenaId)!!.instant)
+    }
+
     private fun service(
         now: Instant,
         config: BlitzConfig = blitz,

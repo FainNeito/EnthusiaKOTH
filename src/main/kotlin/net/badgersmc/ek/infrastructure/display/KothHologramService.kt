@@ -25,6 +25,9 @@ enum class HologramType(val needsArena: Boolean = false) {
     }
 }
 
+/** What a create, move or remove did. Nothing changes unless holograms.yml was written. */
+enum class HologramChange { DONE, EXISTS, UNKNOWN, SAVE_FAILED, FILE_UNREADABLE }
+
 data class HologramSpec(
     val name: String,
     val type: HologramType,
@@ -53,6 +56,8 @@ class KothHologramService(
     private val specs = linkedMapOf<String, HologramSpec>()
     private val displays = mutableMapOf<String, TextDisplay>()
     private var task: BukkitTask? = null
+    /** Set while holograms.yml cannot be parsed, so a save never overwrites definitions staff still need to repair. */
+    private var fileUnreadable = false
 
     fun start() {
         load()
@@ -64,29 +69,34 @@ class KothHologramService(
     fun all(): List<HologramSpec> = specs.values.toList()
     fun get(name: String): HologramSpec? = specs[name.lowercase(Locale.ROOT)]
 
-    fun create(spec: HologramSpec): Boolean {
+    fun create(spec: HologramSpec): HologramChange {
         val key = spec.name.lowercase(Locale.ROOT)
-        if (key in specs) return false
-        specs[key] = spec.copy(name = key)
-        save(); refresh()
-        return true
+        if (key in specs) return HologramChange.EXISTS
+        return change { it[key] = spec.copy(name = key) }
     }
 
-    fun move(name: String, location: Location): Boolean {
+    fun move(name: String, location: Location): HologramChange {
         val key = name.lowercase(Locale.ROOT)
-        val spec = specs[key] ?: return false
-        specs[key] = spec.copy(world = location.world?.name ?: return false, x = location.x, y = location.y, z = location.z)
-        displays.remove(key)?.remove()
-        save(); refresh()
-        return true
+        val spec = specs[key] ?: return HologramChange.UNKNOWN
+        val world = location.world?.name ?: return HologramChange.UNKNOWN
+        return change { it[key] = spec.copy(world = world, x = location.x, y = location.y, z = location.z) }
+            .also { if (it == HologramChange.DONE) { displays.remove(key)?.remove(); refresh() } }
     }
 
-    fun remove(name: String): Boolean {
+    fun remove(name: String): HologramChange {
         val key = name.lowercase(Locale.ROOT)
-        specs.remove(key) ?: return false
-        displays.remove(key)?.remove()
-        save()
-        return true
+        if (key !in specs) return HologramChange.UNKNOWN
+        return change { it.remove(key) }
+    }
+
+    /** Applies a change to a copy, writes it, and only then makes it live. */
+    private fun change(edit: (MutableMap<String, HologramSpec>) -> Unit): HologramChange {
+        if (fileUnreadable) return HologramChange.FILE_UNREADABLE
+        val next = LinkedHashMap(specs).also(edit)
+        if (!save(next.values)) return HologramChange.SAVE_FAILED
+        specs.clear(); specs.putAll(next)
+        refresh()
+        return HologramChange.DONE
     }
 
     fun reload() {
@@ -109,7 +119,7 @@ class KothHologramService(
         displays.keys.filter { it !in specs }.forEach { displays.remove(it)?.remove() }
         specs.values.forEach { spec ->
             val world = Bukkit.getWorld(spec.world) ?: return@forEach
-            if (!world.isChunkLoaded(Math.floorDiv(spec.x.toInt(), 16), Math.floorDiv(spec.z.toInt(), 16))) return@forEach
+            if (!world.isChunkLoaded(Math.floorDiv(Math.floor(spec.x).toInt(), 16), Math.floorDiv(Math.floor(spec.z).toInt(), 16))) return@forEach
             val text = runCatching { render(spec) }.getOrElse { error ->
                 plugin.logger.warning("KOTH hologram '${spec.name}' could not render: ${error.message}")
                 listOf(MenuStyle.text("Unavailable", MenuStyle.CORAL))
@@ -129,9 +139,18 @@ class KothHologramService(
     }
 
     private fun load() {
+        if (!file.exists()) { specs.clear(); fileUnreadable = false; return }
+        val yaml = YamlConfiguration()
+        try {
+            yaml.load(file)
+        } catch (error: Exception) {
+            // Keep what is already placed; refuse to save until the file parses again.
+            fileUnreadable = true
+            plugin.logger.severe("holograms.yml could not be read (${error.message}); keeping the current holograms and refusing changes until it is fixed")
+            return
+        }
+        fileUnreadable = false
         specs.clear()
-        if (!file.exists()) return
-        val yaml = YamlConfiguration.loadConfiguration(file)
         val section = yaml.getConfigurationSection("holograms") ?: return
         section.getKeys(false).forEach { name ->
             val entry = section.getConfigurationSection(name) ?: return@forEach
@@ -147,13 +166,13 @@ class KothHologramService(
         }
     }
 
-    private fun save() {
+    private fun save(all: Collection<HologramSpec>): Boolean {
         val yaml = YamlConfiguration()
         yaml.options().setHeader(listOf(
             "KOTH holograms. Manage them with /ekoth hologram, or edit this file and run /ekoth reload.",
             "Types: " + HologramType.entries.joinToString { it.id } + ". Custom lines are MiniMessage and may use PlaceholderAPI placeholders.",
         ))
-        specs.values.forEach { spec ->
+        all.forEach { spec ->
             val path = "holograms.${spec.name}"
             yaml.set("$path.type", spec.type.id)
             spec.arena?.let { yaml.set("$path.arena", it) }
@@ -161,8 +180,9 @@ class KothHologramService(
             yaml.set("$path.x", spec.x); yaml.set("$path.y", spec.y); yaml.set("$path.z", spec.z)
             if (spec.type == HologramType.CUSTOM) yaml.set("$path.lines", spec.lines)
         }
-        runCatching { file.parentFile?.mkdirs(); yaml.save(file) }
+        return runCatching { file.parentFile?.mkdirs(); yaml.save(file) }
             .onFailure { plugin.logger.severe("Could not save holograms.yml: ${it.message}") }
+            .isSuccess
     }
 }
 

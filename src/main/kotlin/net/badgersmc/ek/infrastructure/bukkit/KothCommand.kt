@@ -93,6 +93,15 @@ class KothCommand(
         return options.filter { it.startsWith(args.last(), true) }
     }
 
+    private fun hologramReply(result: net.badgersmc.ek.infrastructure.display.HologramChange, done: String, name: String, type: String = ""): Component =
+        lang.msg(when (result) {
+            net.badgersmc.ek.infrastructure.display.HologramChange.DONE -> done
+            net.badgersmc.ek.infrastructure.display.HologramChange.EXISTS -> "hologram.exists"
+            net.badgersmc.ek.infrastructure.display.HologramChange.UNKNOWN -> "hologram.unknown"
+            net.badgersmc.ek.infrastructure.display.HologramChange.SAVE_FAILED -> "hologram.save_failed"
+            net.badgersmc.ek.infrastructure.display.HologramChange.FILE_UNREADABLE -> "hologram.file_unreadable"
+        }, "name" to name, "type" to type)
+
     private fun hologram(sender: CommandSender, args: Array<out String>) {
         if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
         val service = holograms() ?: return
@@ -117,17 +126,17 @@ class KothCommand(
                 val arena = args.getOrNull(4)?.let { requested -> arenas().keys.firstOrNull { it.equals(requested, true) } ?: requested }
                 if (type.needsArena && (arena == null || arena !in arenas())) { sender.sendMessage(lang.msg("hologram.needs_arena")); return }
                 val at = sender.location
-                val created = service.create(net.badgersmc.ek.infrastructure.display.HologramSpec(name, type, at.world.name,
+                val result = service.create(net.badgersmc.ek.infrastructure.display.HologramSpec(name, type, at.world.name,
                     at.blockX + 0.5, at.y + 2.0, at.blockZ + 0.5, arena.takeIf { type.needsArena },
                     if (type == net.badgersmc.ek.infrastructure.display.HologramType.CUSTOM) listOf("<color:#ffcf1f><bold>%enthusiakoth_next_name%", "<color:#fff6e0>Starts in <color:#ffcf1f>%enthusiakoth_next_koth_time%") else emptyList()))
-                sender.sendMessage(lang.msg(if (created) "hologram.created" else "hologram.exists", "name" to name.lowercase(), "type" to type.id))
+                sender.sendMessage(hologramReply(result, "hologram.created", name.lowercase(), type.id))
             }
             "move" -> {
                 if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
                 val at = sender.location.clone().add(0.0, 2.0, 0.0)
-                sender.sendMessage(lang.msg(if (name != null && service.move(name, at)) "hologram.moved" else "hologram.unknown", "name" to (name ?: "")))
+                sender.sendMessage(if (name == null) lang.msg("hologram.usage") else hologramReply(service.move(name, at), "hologram.moved", name))
             }
-            "remove", "delete" -> sender.sendMessage(lang.msg(if (name != null && service.remove(name)) "hologram.removed" else "hologram.unknown", "name" to (name ?: "")))
+            "remove", "delete" -> sender.sendMessage(if (name == null) lang.msg("hologram.usage") else hologramReply(service.remove(name), "hologram.removed", name))
             else -> sender.sendMessage(lang.msg("hologram.usage"))
         }
     }
@@ -410,10 +419,12 @@ class KothCommand(
             "capture" to formatTime(cfg.schedule.blitz.captureSeconds.toLong())))
         rounds.forEachIndexed { index, occurrence ->
             val ends = occurrence.instant.plusSeconds(cfg.schedule.blitz.roundSeconds.toLong())
+            val running = kothService.eventForArena(occurrence.arenaId)
+                ?.takeIf { !it.isPrivateTest && it.state == net.badgersmc.ek.domain.EventState.ACTIVE } != null
             val state = when {
-                !now.isBefore(ends) -> "done"
-                !now.isBefore(occurrence.instant) -> "live"
-                else -> "upcoming"
+                now.isBefore(occurrence.instant) -> "upcoming"
+                now.isBefore(ends) && running -> "live"
+                else -> "done"
             }
             sender.sendMessage(lang.arenaMsg("command.blitz.round_$state", "round" to (index + 1).toString(),
                 "arena" to (arenas()[occurrence.arenaId]?.name ?: occurrence.arenaId).arenaComponent(),

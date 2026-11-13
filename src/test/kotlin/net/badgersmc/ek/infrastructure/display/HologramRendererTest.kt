@@ -26,10 +26,10 @@ class HologramRendererTest {
         BlitzRound.id(BlitzRound(LocalDate.parse("2026-11-14"), 0, LocalTime.of(18, 0), n, 3, arena), 0), arena, Instant.parse(at))
     private val rounds = listOf(round(1, "capture", "2026-11-14T18:00:00Z"), round(2, "moving", "2026-11-14T18:06:00Z"), round(3, "capture", "2026-11-14T18:12:00Z"))
 
-    private fun renderer(live: LiveArena? = null, top: List<Pair<String, Int>> = emptyList()) = HologramRenderer(
+    private fun renderer(live: LiveArena? = null, top: List<Pair<String, Int>> = emptyList(), liveArena: String = "capture") = HologramRenderer(
         clock = Clock.fixed(now, ZoneOffset.UTC), zone = { ZoneId.of("UTC") }, arenaIds = { listOf("capture", "moving") },
         arenaName = { Component.text(it.replaceFirstChar(Char::uppercase)) }, arenaFamily = { if (it == "moving") "moving" else "capture" },
-        live = { if (it == "capture") live else null }, nextStart = { if (it == "capture") Instant.parse("2026-11-14T18:12:00Z") else null },
+        live = { if (it == liveArena) live else null }, nextStart = { if (it == "capture") Instant.parse("2026-11-14T18:12:00Z") else null },
         upcoming = { rounds.drop(2) }, nextBlitz = { rounds }, blitzRoundSeconds = { 300 }, top = { _, _ -> top },
         placeholder = { if (it == "current_koth") "capture" else "" }, custom = { Component.text(it) })
 
@@ -47,7 +47,10 @@ class HologramRendererTest {
     }
 
     @Test fun `blitz hologram marks each round done, live or upcoming`() {
-        assertEquals(listOf("Weekend Blitz", "Running now", "1. Capture  done", "2. Moving  live", "3. Capture  18:12"), text(HologramType.BLITZ))
+        val running = renderer(LiveArena("FainNoir", Instant.parse("2026-11-14T18:08:00Z"), null), liveArena = "moving")
+        assertEquals(listOf("Weekend Blitz", "Running now", "1. Capture  done", "2. Moving  live", "3. Capture  18:12"), text(HologramType.BLITZ, running))
+        // A round staff stopped early is finished, not live, even inside its slot.
+        assertEquals("2. Moving  done", text(HologramType.BLITZ)[3])
         assertEquals("Capture  18:12 (in 5m 0s)  Blitz 3/3", text(HologramType.SCHEDULE)[1])
     }
 

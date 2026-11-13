@@ -497,7 +497,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             } else null
             net.badgersmc.ek.infrastructure.display.LiveArena(kothService.capperName(event), event.endsAt, percent)
         },
-        nextStart = { id -> scheduleService.previewUpcoming(config(), arenas().filterKeys { it == id }, 1).firstOrNull()?.instant },
+        nextStart = { id -> scheduleService.nextStartFor(id)?.instant },
         upcoming = { count -> scheduleService.previewUpcoming(config(), arenas(), count) },
         nextBlitz = { scheduleService.nextBlitz() },
         blitzRoundSeconds = { config().schedule.blitz.roundSeconds },

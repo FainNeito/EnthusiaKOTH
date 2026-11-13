@@ -234,15 +234,26 @@ class ScheduleService(
     internal fun nextOccurrenceAfter(now: Instant): ScheduledOccurrence? {
         val cfg = cfgLoader()
         if (!cfg.schedule.enabled) return null
-        return occurrencesBetween(now, now.plus(Duration.ofDays(2)), cfg)
+        fun firstWithin(days: Long) = occurrencesBetween(now, now.plus(Duration.ofDays(days)), cfg)
             .filter { it.instant.isAfter(now) }
+            .minWithOrNull(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id })
+        return firstWithin(2) ?: if (cfg.schedule.blitz.enabled) firstWithin(8) else null
+    }
+
+    /** The next start in one arena, from the full schedule so rotations stay as they really run. */
+    fun nextStartFor(arenaId: String): ScheduledOccurrence? {
+        val now = clock.instant()
+        return occurrencesBetween(now, now.plus(Duration.ofDays(8)))
+            .filter { it.arenaId == arenaId && it.instant.isAfter(now) }
             .minWithOrNull(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id })
     }
 
     internal fun occurrencesBetween(from: Instant, to: Instant, cfg: EnthusiaKothConfig = cfgLoader(), candidates: Map<String, KothArena> = arenas()): List<ScheduledOccurrence> {
         if (!cfg.schedule.enabled || to.isBefore(from)) return emptyList()
         val zone = cfg.schedule.zone
-        val startDate = from.atZone(zone).toLocalDate().minusDays(1)
+        val blitz = cfg.schedule.blitz
+        val blitzSpanDays = if (blitz.enabled) (blitz.rounds.toLong() * blitz.slotSeconds + 86_399) / 86_400 else 0L
+        val startDate = from.atZone(zone).toLocalDate().minusDays(1 + blitzSpanDays)
         val endDate = to.atZone(zone).toLocalDate().plusDays(1)
         val result = mutableListOf<ScheduledOccurrence>()
         var date = startDate

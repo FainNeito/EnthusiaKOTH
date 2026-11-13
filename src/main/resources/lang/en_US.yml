@@ -168,6 +168,8 @@ hologram:
   moved: "<prefix><color:#fff6e0>Moved hologram <color:#ffcf1f><name></color> above you."
   removed: "<prefix><color:#fff6e0>Removed hologram <color:#ffcf1f><name></color>."
   unknown: "<error_prefix><color:#ffd0c6>There is no hologram called <name>. See /ekoth hologram list."
+  save_failed: "<error_prefix><color:#ffd0c6>Nothing changed: holograms.yml could not be saved. Check the server log."
+  file_unreadable: "<error_prefix><color:#ffd0c6>Nothing changed: holograms.yml has an error. Fix it, then run /ekoth reload."
   none: "<prefix><color:#fff6e0>No holograms are placed yet. Stand where one should go and use /ekoth hologram create."
   list_header: "<prefix><color:#fff6e0><color:#ffcf1f><count></color> placed holograms:"
   list_entry: "<color:#ffcf1f><name></color> <color:#bfae98><type></color> <color:#fff6e0><where>"

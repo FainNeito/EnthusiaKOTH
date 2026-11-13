@@ -85,9 +85,9 @@ class HologramRenderer(
             val ends = occurrence.instant.plusSeconds(length)
             val label = Component.text("${index + 1}. ", MenuStyle.MUTED).append(arenaName(occurrence.arenaId))
             when {
-                !now.isBefore(ends) -> label.append(muted("  done"))
-                !now.isBefore(occurrence.instant) -> label.append(Component.text("  live", MenuStyle.GOLD))
-                else -> label.append(Component.text("  ${occurrence.instant.atZone(zone()).format(time)}", MenuStyle.CREAM))
+                now.isBefore(occurrence.instant) -> label.append(Component.text("  ${occurrence.instant.atZone(zone()).format(time)}", MenuStyle.CREAM))
+                now.isBefore(ends) && live(occurrence.arenaId) != null -> label.append(Component.text("  live", MenuStyle.GOLD))
+                else -> label.append(muted("  done"))
             }
         }
     }
