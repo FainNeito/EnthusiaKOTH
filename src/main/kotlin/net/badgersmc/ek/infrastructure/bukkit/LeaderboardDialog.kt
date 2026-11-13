@@ -92,16 +92,9 @@ class LeaderboardDialog(
         if (themed) lines += LeaderboardArt.divider() to LeaderboardArt.DIVIDER_ADVANCE
         if (view.side == LeaderboardSide.PLAYERS) lines += board.viewer?.let { yours(it, themed) to LeaderboardArt.ROW_ADVANCE }
             ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED).let { it to TextWidth.of(it) }
-        // Lines are measured as if the art's cursor moves were not there, so each gets the widest box the client allows.
-        if (!themed) return lines.map { (content, _) -> DialogBody.plainMessage(content, BANNER_WIDTH) }
-        return lines.mapIndexed { index, (content, width) ->
-            val slice = when (index) {
-                0 -> LeaderboardArt.Slice.TOP
-                lines.lastIndex -> LeaderboardArt.Slice.BOTTOM
-                else -> LeaderboardArt.Slice.MIDDLE
-            }
-            DialogBody.plainMessage(LeaderboardArt.onPanel(content, width, slice), PANEL_LINE_WIDTH)
-        }
+        if (themed) lines[lines.lastIndex] = lines.last().let { (content, width) -> LeaderboardArt.withPanel(content, width) to width }
+        // Lines are measured before their cursor moves are applied, so each needs room for the art and the text.
+        return lines.map { (content, _) -> DialogBody.plainMessage(content, BANNER_WIDTH) }
     }
 
     private fun rank(rank: Int, themed: Boolean): Component = if (themed) LeaderboardArt.rank(rank)
@@ -162,7 +155,6 @@ class LeaderboardDialog(
         const val WIDTH = 120
         const val ROW_WIDTH = 244
         const val BANNER_WIDTH = 520
-        const val PANEL_LINE_WIDTH = 1024
         val PERIODS = listOf("daily", "weekly", "season", "lifetime")
         val ONE_USE: ClickCallback.Options = ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build()
     }
