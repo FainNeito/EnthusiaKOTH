@@ -84,7 +84,7 @@ object LeaderboardArt {
     fun button(label: String, look: Button, wide: Boolean = false): Component {
         val color: TextColor = when (look) {
             Button.NORMAL -> MenuStyle.CREAM
-            Button.SELECTED -> TextColor.color(0x3A0A07)
+            Button.SELECTED -> TextColor.color(0x7A110C)
             Button.DISABLED -> MenuStyle.MUTED
         }
         val glyph = when {
@@ -93,8 +93,24 @@ object LeaderboardArt {
             look == Button.DISABLED -> BUTTON_DISABLED
             else -> BUTTON
         }
-        val text = Component.text(label, color)
+        // Dark text on the gold button loses its drop shadow, which otherwise smears into the gold.
+        val text = Component.text(label, color).let {
+            if (look == Button.SELECTED) it.shadowColor(net.kyori.adventure.text.format.ShadowColor.none()) else it
+        }
         return over(glyph, if (wide) BUTTON_WIDE_ADVANCE else BUTTON_ADVANCE, text, TextWidth.of(label))
+    }
+
+    private const val PANEL = ''
+    const val PANEL_ADVANCE = 257
+
+    /**
+     * [content] with the button panel hung below it. The panel art draws under its line (negative ascent), so on the
+     * body's last line it lands behind the buttons, which the client draws on top. It is centred under [content] and
+     * takes no width, so the line still centres on [content] alone.
+     */
+    fun withPanel(content: Component, contentWidth: Int): Component {
+        val before = (contentWidth - PANEL_ADVANCE) / 2
+        return Component.text().append(shift(before)).append(glyph(PANEL)).append(shift(-PANEL_ADVANCE - before)).append(content).build()
     }
 
     /** Width of an inline player head object: an 8 px face and the 1 px gap after it. */
@@ -105,6 +121,7 @@ object LeaderboardArt {
         val badge = when (rank) { 1 -> BADGE_GOLD; 2 -> BADGE_SILVER; 3 -> BADGE_BRONZE; else -> BADGE }
         val color: TextColor = if (rank <= 3) TextColor.color(0x3A0A07) else MenuStyle.GOLD
         val number = Component.text(rank.toString(), color)
+            .let { if (rank <= 3) it.shadowColor(net.kyori.adventure.text.format.ShadowColor.none()) else it }
         return over(badge, BADGE_ADVANCE, number, TextWidth.of(number))
     }
 }

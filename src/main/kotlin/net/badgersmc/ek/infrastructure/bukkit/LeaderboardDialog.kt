@@ -85,13 +85,16 @@ class LeaderboardDialog(
             .append(Component.text("${view.side.label}  ", MenuStyle.CREAM))
             .append(Component.text("Page ${board.page} of ${board.pages}", if (themed) MenuStyle.CREAM else MenuStyle.MUTED))
         // The banner line is measured before its cursor moves are applied, so it needs room for the art and the text.
-        val parts = mutableListOf<DialogBody>(DialogBody.plainMessage(if (themed) LeaderboardArt.banner(heading) else heading, BANNER_WIDTH))
-        if (board.rows.isEmpty()) parts += DialogBody.plainMessage(Component.text("No wins yet in this period", MenuStyle.MUTED), ROW_WIDTH)
-        board.rows.forEach { row -> parts += DialogBody.plainMessage(line(row, themed), BANNER_WIDTH) }
-        if (themed) parts += DialogBody.plainMessage(LeaderboardArt.divider(), BANNER_WIDTH)
-        if (view.side == LeaderboardSide.PLAYERS) parts += DialogBody.plainMessage(board.viewer?.let { yours(it, themed) }
-            ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED), BANNER_WIDTH)
-        return parts
+        // Each line with the width it draws at, so the last one can carry the button panel centred under it.
+        val lines = mutableListOf(if (themed) LeaderboardArt.banner(heading) to LeaderboardArt.BANNER_ADVANCE else heading to 0)
+        if (board.rows.isEmpty()) lines += Component.text("No wins yet in this period", MenuStyle.MUTED).let { it to TextWidth.of(it) }
+        board.rows.forEach { row -> lines += line(row, themed) to LeaderboardArt.ROW_ADVANCE }
+        if (themed) lines += LeaderboardArt.divider() to LeaderboardArt.DIVIDER_ADVANCE
+        if (view.side == LeaderboardSide.PLAYERS) lines += board.viewer?.let { yours(it, themed) to LeaderboardArt.ROW_ADVANCE }
+            ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED).let { it to TextWidth.of(it) }
+        if (themed) lines[lines.lastIndex] = lines.last().let { (content, width) -> LeaderboardArt.withPanel(content, width) to width }
+        // Lines are measured before their cursor moves are applied, so each needs room for the art and the text.
+        return lines.map { (content, _) -> DialogBody.plainMessage(content, BANNER_WIDTH) }
     }
 
     private fun rank(rank: Int, themed: Boolean): Component = if (themed) LeaderboardArt.rank(rank)
