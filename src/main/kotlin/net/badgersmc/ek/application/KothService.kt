@@ -86,6 +86,8 @@ class KothService(
     private val rewardedStartIssues: (KothArena) -> List<String> = { emptyList() },
     private val arenaIdentity: (KothArena) -> String = { it.id },
     private val scheduleSound: (Long, () -> Unit) -> Unit = { _, _ -> },
+    /** Runs once a blitz round goes live, after its normal start announcement. */
+    private val blitzRoundStarted: (BlitzRound, KothEvent) -> Unit = { _, _ -> },
 ) {
     private val captureSoundLimiter = CaptureSoundLimiter()
     private val captureSoundGeneration = mutableMapOf<UUID, Long>()
@@ -906,7 +908,9 @@ class KothService(
         }
     }
 
-    private fun startDurableActivation(next: QueuedEvent, arena: KothArena, recovered: Boolean): Boolean {
+    private fun startDurableActivation(next: QueuedEvent, configured: KothArena, recovered: Boolean): Boolean {
+        val blitzRound = next.occurrenceId?.takeIf { next.startSource == EventKind.SCHEDULED }?.let(BlitzRound::parse)
+        val arena = blitzRound?.let { BlitzRound.apply(configured, cfgLoader().schedule.blitz) } ?: configured
         if (conflicts(arena)) return false
         if (!checkRewardedStart(arena, next.startSource)) return false
         val cfg = cfgLoader()
@@ -924,6 +928,9 @@ class KothService(
         )
         activeEvent = event
         activateQueuedEvent(event, cfg, recovered)
+        if (blitzRound != null && event.state == EventState.ACTIVE && !recovered) {
+            runCatching { blitzRoundStarted(blitzRound, event) }.onFailure { logger("KOTH blitz round announcement failed", it) }
+        }
 
         val completed = next.copy(state = QueuedEventState.COMPLETED)
         eventQueue[0] = completed

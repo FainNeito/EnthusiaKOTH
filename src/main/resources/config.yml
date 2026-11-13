@@ -104,6 +104,20 @@ schedule:
     - "00:00"
     - "08:00"
     - "16:00"
+  # Blitz: short KOTH rounds back to back, each in the next arena of the rotation.
+  # Rounds start at fixed slots (start + round x (round-seconds + break-seconds)), so a round
+  # that is captured early still waits for its slot. Only the first round gets the pre-start warning.
+  # Needs schedule.enabled. Rewards and protections are the arena's own.
+  blitz:
+    enabled: false
+    days: [SATURDAY, SUNDAY]
+    start-times: ["18:00"]
+    rounds: 4
+    round-seconds: 300
+    capture-seconds: 60
+    break-seconds: 60
+    # Arena IDs in rotation order. Empty uses every enabled arena.
+    arenas: []
 
 flares:
   enabled: true

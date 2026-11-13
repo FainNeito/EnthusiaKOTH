@@ -154,6 +154,18 @@ private object ScheduleConfigLoader {
         zone = zone,
         preStartWarningSeconds = integer(config, "schedule.pre-start-warning-seconds", 300).coerceAtLeast(0),
         times = strings(config, "schedule.times"),
+        blitz = net.badgersmc.ek.config.BlitzConfig(
+            enabled = boolean(config, "schedule.blitz.enabled", false),
+            days = if (config.contains("schedule.blitz.days")) strings(config, "schedule.blitz.days").mapNotNull { day ->
+                runCatching { java.time.DayOfWeek.valueOf(day.trim().uppercase()) }.getOrNull()
+            }.toSet() else setOf(java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY),
+            startTimes = if (config.contains("schedule.blitz.start-times")) strings(config, "schedule.blitz.start-times") else listOf("18:00"),
+            rounds = integer(config, "schedule.blitz.rounds", 4).coerceIn(1, 48),
+            roundSeconds = integer(config, "schedule.blitz.round-seconds", 300).coerceIn(30, 7200),
+            captureSeconds = integer(config, "schedule.blitz.capture-seconds", 60).coerceIn(5, 7200),
+            breakSeconds = integer(config, "schedule.blitz.break-seconds", 60).coerceIn(0, 3600),
+            arenas = strings(config, "schedule.blitz.arenas").map(String::trim).filter(String::isNotEmpty).distinct(),
+        ),
     )
 }
 
