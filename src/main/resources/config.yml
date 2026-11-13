@@ -215,7 +215,7 @@ display:
   # Moving KOTH: light up the edge of the capture square in the floor as it moves. Client-side only;
   # the world is never changed and the real blocks return when the KOTH ends.
   moving-floor: true
-  # When a KOTH goes live: a title on screen, and a horn, thunder and a burst of light on the point.
+  # When a KOTH goes live: a title on screen, and a beacon, thunder and a burst of light on the point.
   # Only players following the event (or at the arena) see and hear it; nothing is damaged.
   start-title: true
   start-effects: true

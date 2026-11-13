@@ -341,7 +341,8 @@ class KothService(
     private fun announceStartOrBuild(event: KothEvent) {
         val now = clock.instant()
         if (!now.isBefore(event.liveAt)) { goLive(event); return }
-        val seconds = Duration.between(now, event.liveAt).seconds.coerceAtLeast(1)
+        // Rounded up, so a 5 second build reads 5s even though a moment has already passed since it started.
+        val seconds = ((Duration.between(now, event.liveAt).toMillis() + 999) / 1000).coerceAtLeast(1)
         sendEventMessage(event, lang.arenaMsg("koth.rising", "koth_name" to event.arena.name.arenaComponent(), "seconds" to seconds.toString()))
     }
 
@@ -406,7 +407,7 @@ class KothService(
         val now = clock.instant()
         if (now.isBefore(event.liveAt)) {
             // The arena is still building itself: nothing can be captured yet.
-            val seconds = Duration.between(now, event.liveAt).seconds.coerceAtLeast(0) + 1
+            val seconds = ((Duration.between(now, event.liveAt).toMillis() + 999) / 1000).coerceAtLeast(1)
             val bar = lang.arenaMsg("koth.rising_actionbar", "koth_name" to arena.name.arenaComponent(), "seconds" to seconds.toString())
             openingAudience(event).forEach { it.sendActionBar(bar) }
             return

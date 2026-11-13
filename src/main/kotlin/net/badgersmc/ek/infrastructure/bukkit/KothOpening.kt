@@ -19,7 +19,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The moment a KOTH goes live: the arena's name across the screen, a war horn with thunder rolling in behind it, and a
+ * The moment a KOTH goes live: the arena's name across the screen, a beacon powering up with thunder behind it, and a
  * burst of light on the point that rings outward in gold. Everything is sent only to [audience] (players following the
  * event or standing at the arena), so it never reaches the rest of the server, and nothing in the world is touched.
  */
@@ -44,9 +44,8 @@ object KothOpening {
         val point = event.movingPoint?.let { Location(world, it.first, it.second, it.third) }
             ?: Location(world, (zone.minX + zone.maxX) / 2, zone.objectiveY, (zone.minZ + zone.maxZ) / 2)
         val viewers = audience.filter { it.isOnline && it.world.uid == world.uid }
-        // The horn sounds from each player's own position so everyone hears it, wherever they stand.
+        // The beacon sounds from each player's own position so everyone hears it, wherever they stand.
         audience.forEach { player ->
-            player.playSound(player.location, Sound.ITEM_GOAT_HORN_SOUND_0, SoundCategory.MASTER, 0.9f, 0.85f)
             player.playSound(player.location, Sound.BLOCK_BEACON_ACTIVATE, SoundCategory.MASTER, 0.7f, 0.7f)
         }
         viewers.forEach { player ->
