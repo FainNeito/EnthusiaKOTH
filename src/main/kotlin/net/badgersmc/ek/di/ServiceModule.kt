@@ -299,6 +299,8 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         captureAudience = ::captureAudience,
         scheduleSound = { delay, task -> plugin.server.scheduler.runTaskLater(plugin, Runnable { task() }, delay) },
         blitzRoundStarted = { round, event -> announceBlitzRound(round, event) },
+        arenaWarmup = { arena -> arenaBuildService.warmupSeconds(arena.id) },
+        liveEffects = { event, audience -> net.badgersmc.ek.infrastructure.bukkit.KothOpening.play(plugin, langService, config().display, event, audience) },
     )
 
     /** Names the round and, unless it is the last, where and when the chain moves next. */

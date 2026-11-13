@@ -152,6 +152,10 @@ koth:
   no_winner_unverified: "<prefix><color:#fff6e0><captured> held <color:#ffcf1f><koth_name><color:#fff6e0>, but the win could not be verified, so there is no winner this time. Staff can review it."
   no_winner: "<prefix><color:#ff8f82>The <color:#ffcf1f><koth_name><color:#ff8f82> KOTH ended without a winner."
   warning_minutes: "<prefix><color:#fff6e0><koth_name> <color:#fff6e0>starts in <minutes> minutes!"
+  rising: "<prefix><color:#fff6e0>The <koth_name> <color:#fff6e0>arena is rising from its ruins. The KOTH begins in <color:#ffcf1f><seconds>s</color>."
+  rising_actionbar: "<koth_name> <color:#fff6e0>is rising. The KOTH begins in <color:#ffcf1f><seconds>s"
+  live_title: "<koth_name>"
+  live_subtitle: "<color:#fff6e0>The KOTH has begun. <color:#ffcf1f>Take the point!"
   actionbar:
     capturing: "<color:#ffcf1f>Capturing <color:#ffcf1f><koth_name></color> <color:#fff6e0>[<color:#ffcf1f><progress_bar><color:#fff6e0>] <color:#fff6e0><time_left> left"
     contested: "<color:#ffcf1f>Contested! <color:#fff6e0>Clear the point to keep capturing <color:#ffcf1f><koth_name>"

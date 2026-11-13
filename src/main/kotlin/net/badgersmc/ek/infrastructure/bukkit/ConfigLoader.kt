@@ -356,6 +356,8 @@ private object DisplayConfigLoader {
         bossbar = boolean(config, "display.bossbar", true), actionbar = boolean(config, "display.actionbar", true),
         hologram = boolean(config, "display.hologram", false), scoreboard = boolean(config, "display.scoreboard", false),
         movingFloor = boolean(config, "display.moving-floor", true),
+        startTitle = boolean(config, "display.start-title", true),
+        startEffects = boolean(config, "display.start-effects", true),
         bossbarColor = string(config, "display.bossbar-color", "RED"), bossbarOverlay = string(config, "display.bossbar-overlay", "PROGRESS"),
         bossbarTitle = string(config, "display.bossbar-title", ""),
     )

@@ -148,6 +148,12 @@ class ArenaBuildService(
 
     fun isBuilt(arenaId: String) = arenaId in active
 
+    /** Seconds a KOTH in [arenaId] waits while its arena builds itself; 0 when it has nothing to build. */
+    fun warmupSeconds(arenaId: String): Int {
+        val cfg = settings()
+        return if (cfg.enabled && store.hasBuild(arenaId)) cfg.buildSeconds + 1 else 0
+    }
+
     // Recording ---------------------------------------------------------------------------------------------------
 
     enum class Result { DONE, NO_ARENA, NO_WORLD, BUSY, NO_BASE, NO_BUILD, NOTHING_CHANGED, TOO_LARGE, TOO_MANY }
