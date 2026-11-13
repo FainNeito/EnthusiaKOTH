@@ -510,6 +510,37 @@ class KothQueueTest {
         assertTrue(service.queuedEvents().isEmpty())
     }
 
+    @Test
+    fun `a blitz round that cannot start before its slot ends stops holding the queue`() {
+        val moving = arena("moving", family = "moving")
+        val capture = arena("capture")
+        // Default blitz slots are 360 s (300 s round + 60 s break); this round was due 400 s ago.
+        val round = BlitzRound(java.time.LocalDate.parse("2026-08-06"), 0, java.time.LocalTime.of(11, 53), 1, 3, "moving")
+        val stale = QueuedEvent(moving.id, EventKind.SCHEDULED, now.minusSeconds(400), occurrenceId = BlitzRound.id(round, now.minusSeconds(400).toEpochMilli()))
+        val next = QueuedEvent(capture.id, EventKind.SCHEDULED, now.minusSeconds(10))
+        val store = InMemoryEventQueueStore(listOf(stale, next))
+        val logs = mutableListOf<String>()
+        val service = service(store, LockState.ALL_LOCKED, mapOf(moving.id to moving, capture.id to capture), logs)
+
+        service.processQueue()
+
+        assertEquals(listOf("capture"), service.queuedEvents().map { it.arenaId })
+        assertTrue(logs.any { it.startsWith("Skipping blitz round") }, logs.toString())
+    }
+
+    @Test
+    fun `a blitz round inside its slot keeps waiting`() {
+        val moving = arena("moving", family = "moving")
+        val round = BlitzRound(java.time.LocalDate.parse("2026-08-06"), 0, java.time.LocalTime.of(11, 58), 1, 3, "moving")
+        val waiting = QueuedEvent(moving.id, EventKind.SCHEDULED, now.minusSeconds(100), occurrenceId = BlitzRound.id(round, now.minusSeconds(100).toEpochMilli()))
+        val store = InMemoryEventQueueStore(listOf(waiting))
+        val service = service(store, LockState.ALL_LOCKED, mapOf(moving.id to moving))
+
+        service.processQueue()
+
+        assertEquals(listOf("moving"), service.queuedEvents().map { it.arenaId })
+    }
+
     private fun service(
         store: EventQueueStore,
         lock: LockState,

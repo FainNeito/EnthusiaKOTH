@@ -884,6 +884,11 @@ class KothService(
         val now = clock.instant()
         if (now.isBefore(next.nextAttemptAt)) return
         if (!scheduledClaimAllowsActivation(next)) return
+        if (blitzSlotPassed(next, now)) {
+            logger("Skipping blitz round ${next.occurrenceId} in '${next.arenaId}': it could not start before its slot ended", null)
+            removeInvalidQueued(next)
+            return
+        }
 
         val arena = arenaResolver(next.arenaId)
         if (arena == null) {
@@ -913,6 +918,15 @@ class KothService(
         if (!startDurableActivation(activating, arena, recovered = false)) {
             retryActivation(activating, now)
         }
+    }
+
+    /**
+     * A blitz round that still has not started once its slot (round plus break) is over is dropped. Otherwise a round
+     * that can never start, for example one blocked by start readiness, would hold the queue and every round after it.
+     */
+    private fun blitzSlotPassed(next: QueuedEvent, now: Instant): Boolean {
+        if (next.startSource != EventKind.SCHEDULED || BlitzRound.parse(next.occurrenceId) == null) return false
+        return !now.isBefore(next.scheduledAt.plusSeconds(cfgLoader().schedule.blitz.slotSeconds))
     }
 
     private fun resumeActivating(next: QueuedEvent) {
