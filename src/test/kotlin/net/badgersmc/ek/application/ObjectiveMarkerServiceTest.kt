@@ -33,12 +33,13 @@ class ObjectiveMarkerServiceTest {
     }
 
     @Test
-    fun `moving objective marker forms a ring at configured radius`() {
-        val points = ObjectiveMarkerService.movingRingPoints(10.0, 65.0, -4.0, radius = 5.0, segments = 12)
+    fun `moving objective marker outlines the square capture area`() {
+        val points = ObjectiveMarkerService.movingSquarePoints(10.0, 65.0, -4.0, half = 5.0)
 
-        assertEquals(12, points.size)
+        assertEquals(80, points.size)
         points.forEach { point ->
-            assertEquals(5.0, hypot(point.x - 10.0, point.z + 4.0), 0.000001)
+            val edge = maxOf(kotlin.math.abs(point.x - 10.0), kotlin.math.abs(point.z + 4.0))
+            assertEquals(5.0, edge, 0.000001)
             assertEquals(65.0, point.y)
         }
     }

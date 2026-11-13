@@ -6,10 +6,6 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.entity.Player
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.floor
-import kotlin.math.sin
 
 internal data class ObjectiveMarkerPoint(val x: Double, val y: Double, val z: Double)
 
@@ -18,13 +14,12 @@ class ObjectiveMarkerService {
         val moving = event.arena.family.equals("moving", ignoreCase = true)
         if (!moving && !showStaticObjective) return
         val world = Bukkit.getWorld(event.arena.zone.worldName) ?: return
-        val points = if (moving) {
+        if (moving) {
             val point = event.movingPoint ?: return
-            val surfaceY = world.getHighestBlockYAt(floor(point.first).toInt(), floor(point.third).toInt()) + 1.2
-            movingRingPoints(point.first, surfaceY, point.third, event.arena.zone.radius)
-        } else {
-            staticZonePoints(event.arena.zone)
+            showMoving(world, point, event.arena.zone.radius, audience)
+            return
         }
+        val points = staticZonePoints(event.arena.zone)
         audience.asSequence()
             .filter { it.isOnline && it.world.uid == world.uid }
             .forEach { player ->
@@ -42,7 +37,33 @@ class ObjectiveMarkerService {
             }
     }
 
+    /**
+     * The moving point as its capture area really is: the same gold square outline static arenas use, following the
+     * point, plus a short beam over its centre so it can be found from across the arena. Drawn at the point's own height
+     * (the arena's floor), not the highest block, so roofs and floating arenas don't lift it out of reach.
+     */
+    private fun showMoving(world: org.bukkit.World, point: Triple<Double, Double, Double>, radius: Double, audience: Collection<Player>) {
+        val (x, y, z) = point
+        val half = radius.coerceAtLeast(0.5)
+        val outline = movingSquarePoints(x, y + 0.1, z, half)
+        val beam = (1..8).map { ObjectiveMarkerPoint(x, y + 0.5 + it * 0.75, z) }
+        audience.asSequence()
+            .filter { it.isOnline && it.world.uid == world.uid }
+            .forEach { player ->
+                outline.forEach { player.spawnParticle(Particle.DUST, Location(world, it.x, it.y, it.z), 1, 0.0, 0.0, 0.0, 0.0, GOLD_DUST) }
+                beam.forEach { player.spawnParticle(Particle.END_ROD, Location(world, it.x, it.y, it.z), 1, 0.02, 0.05, 0.02, 0.0) }
+            }
+    }
+
     companion object {
+        private val GOLD_DUST = Particle.DustOptions(org.bukkit.Color.fromRGB(255, 190, 40), 1.2f)
+
+        /** The moving capture square's outline, every half block along its edges. */
+        internal fun movingSquarePoints(centerX: Double, y: Double, centerZ: Double, half: Double): List<ObjectiveMarkerPoint> =
+            net.badgersmc.ek.infrastructure.display.ZoneBorderService
+                .squarePoints(centerX - half, centerZ - half, centerX + half, centerZ + half, y)
+                .map { (px, py, pz) -> ObjectiveMarkerPoint(px, py, pz) }
+
         internal fun staticZonePoints(zone: CaptureZone): List<ObjectiveMarkerPoint> {
             val y = zone.objectiveY + 0.35
             val centerX = (zone.minX + zone.maxX) / 2.0
@@ -54,25 +75,6 @@ class ObjectiveMarkerService {
                 ObjectiveMarkerPoint(zone.maxX, y, zone.maxZ),
                 ObjectiveMarkerPoint(centerX, y, centerZ),
             )
-        }
-
-        internal fun movingRingPoints(
-            centerX: Double,
-            y: Double,
-            centerZ: Double,
-            radius: Double,
-            segments: Int = 12,
-        ): List<ObjectiveMarkerPoint> {
-            val safeSegments = segments.coerceAtLeast(4)
-            val safeRadius = radius.coerceAtLeast(0.5)
-            return (0 until safeSegments).map { index ->
-                val angle = (2.0 * PI * index) / safeSegments
-                ObjectiveMarkerPoint(
-                    centerX + cos(angle) * safeRadius,
-                    y,
-                    centerZ + sin(angle) * safeRadius,
-                )
-            }
         }
     }
 }

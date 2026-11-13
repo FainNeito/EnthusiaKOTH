@@ -176,6 +176,7 @@ class KothService(
     companion object {
         private const val QUEUE_RETRY_SECONDS = 10L
         private const val LOST_SOUND_DISTANCE = 32.0
+        private const val MOVING_MARKER_DISTANCE = 64.0
 
         internal fun movingPointAt(
             elapsedSeconds: Double,
@@ -433,7 +434,7 @@ class KothService(
         val recipients = eventRecipients(event)
         objectiveMarkerService.show(
             event,
-            recipients,
+            markerAudience(event, recipients),
             showStaticObjective = event.isPrivateTest && cfg.privateTesting.showObjectiveParticles,
         )
         displayService.showKoth(
@@ -532,6 +533,22 @@ class KothService(
 
     /** A moving point has its own marker that follows it; a fixed outline would sit where the point started. */
     private fun showsCaptureOutline(event: KothEvent) = !event.arena.family.equals("moving", true)
+
+    /**
+     * Who sees the moving point's marker: the usual event audience, plus anyone close enough to chase it, since the
+     * moving arena is rarely inside the regions that receive capture notifications.
+     */
+    private fun markerAudience(event: KothEvent, recipients: List<Player>): List<Player> {
+        if (!event.arena.family.equals("moving", true)) return recipients
+        val point = event.movingPoint ?: return recipients
+        val range = MOVING_MARKER_DISTANCE * MOVING_MARKER_DISTANCE
+        val nearby = Bukkit.getOnlinePlayers().filter { player ->
+            player.world.name == event.arena.zone.worldName && event.isParticipant(player.uniqueId) &&
+                (event.isPrivateTest || notificationsEnabled(player)) &&
+                player.location.let { (it.x - point.first) * (it.x - point.first) + (it.z - point.third) * (it.z - point.third) } <= range
+        }
+        return (recipients + nearby).distinctBy { it.uniqueId }
+    }
 
     private fun playersNearMovingPoint(event: KothEvent): List<Player> {
         val arena = event.arena
