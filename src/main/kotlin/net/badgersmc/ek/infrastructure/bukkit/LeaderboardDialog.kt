@@ -94,7 +94,11 @@ class LeaderboardDialog(
             ?: Component.text("You have no wins in this period yet", MenuStyle.MUTED).let { it to TextWidth.of(it) }
         if (themed) lines[lines.lastIndex] = lines.last().let { (content, width) -> LeaderboardArt.withPanel(content, width) to width }
         // Lines are measured before their cursor moves are applied, so each needs room for the art and the text.
-        return lines.map { (content, _) -> DialogBody.plainMessage(content, BANNER_WIDTH) }
+        // The panel line is the widest (panel plus content), so it gets the largest box the client allows; if it
+        // wrapped, the extra lines would push the buttons down past the bottom of the panel.
+        return lines.mapIndexed { index, (content, _) ->
+            DialogBody.plainMessage(content, if (themed && index == lines.lastIndex) PANEL_LINE_WIDTH else BANNER_WIDTH)
+        }
     }
 
     private fun rank(rank: Int, themed: Boolean): Component = if (themed) LeaderboardArt.rank(rank)
@@ -155,6 +159,7 @@ class LeaderboardDialog(
         const val WIDTH = 120
         const val ROW_WIDTH = 244
         const val BANNER_WIDTH = 520
+        const val PANEL_LINE_WIDTH = 1024
         val PERIODS = listOf("daily", "weekly", "season", "lifetime")
         val ONE_USE: ClickCallback.Options = ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build()
     }
