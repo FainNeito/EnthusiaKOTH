@@ -121,8 +121,15 @@ class KothCommand(
         if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
         if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
         val sounds = net.badgersmc.ek.application.KothSounds
-        val names = if (requested.equals("all", true)) sounds.NAMES else listOfNotNull(sounds.resolve(requested))
-        if (names.isEmpty()) { sender.sendMessage(lang.msg("sound.usage", "sounds" to (sounds.NAMES + "all").joinToString(", "))); return }
+        val names = when {
+            requested.equals("all", true) -> sounds.NAMES
+            requested.equals("victory-drafts", true) -> sounds.DRAFT_NAMES
+            else -> listOfNotNull(sounds.resolve(requested))
+        }
+        if (names.isEmpty()) {
+            sender.sendMessage(lang.msg("sound.usage", "sounds" to (sounds.NAMES + "all" + sounds.DRAFT_NAMES + "victory-drafts").joinToString(", ")))
+            return
+        }
         if (!cfgLoader().captureSounds.enabled) sender.sendMessage(lang.msg("sound.disabled"))
         names.forEachIndexed { index, name ->
             // With "all", each sound gets five seconds to finish before the next one starts.
@@ -298,7 +305,7 @@ class KothCommand(
                 "reports" -> if (admin) progression?.recentMatchIds().orEmpty() else emptyList()
                 "reconcile" -> if (admin) progression?.reviewClaimIds().orEmpty() else emptyList()
                 "reply" -> if (admin) listOf("cancel", "-") else emptyList()
-                "sound", "sounds" -> if (admin) net.badgersmc.ek.application.KothSounds.NAMES + "all" else emptyList()
+                "sound", "sounds" -> if (admin) net.badgersmc.ek.application.KothSounds.let { it.NAMES + "all" + it.DRAFT_NAMES + "victory-drafts" } else emptyList()
                 else -> emptyList()
             }
             3 -> when {

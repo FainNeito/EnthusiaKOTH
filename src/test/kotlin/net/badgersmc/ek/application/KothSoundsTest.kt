@@ -30,6 +30,20 @@ class KothSoundsTest {
         assertEquals(listOf(0L, defaults.winAccent.delayTicks), notes.map { it.delayTicks })
     }
 
+    @Test fun `every victory draft resolves and stays inside what the game can play`() {
+        assertEquals(listOf("victory-triumph", "victory-coronation", "victory-storm", "victory-fireworks", "victory-ascension"), KothSounds.DRAFT_NAMES)
+        KothSounds.DRAFT_NAMES.forEach { name ->
+            assertEquals(name, KothSounds.resolve(name.uppercase()))
+            val notes = KothSounds.cue(name, defaults)
+            assertTrue(notes.isNotEmpty(), name)
+            notes.forEach { note ->
+                assertTrue(note.sound.matches(Regex("minecraft:[a-z0-9_.]+")), note.sound)
+                assertTrue(note.pitch in 0.5f..2.0f && note.volume in 0.01f..1.0f && note.delayTicks in 0L..100L, "$name $note")
+            }
+        }
+        assertNull(KothSounds.resolve("victory-nonsense"))
+    }
+
     @Test fun `a sound with every note off is silent rather than unknown`() {
         val sounds = defaults.copy(lost = SoundCueConfig("", 0f, 1f))
         assertTrue(KothSounds.cue("lost", sounds).isEmpty())
