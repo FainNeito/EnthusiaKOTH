@@ -17,6 +17,9 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
 
+/** The delayed notes of the Triumph victory sound; the notes at tick 0 play at once. */
+private val TRIUMPH_DELAYS = net.badgersmc.ek.config.VICTORY_TRIUMPH.map { it.delayTicks }.filter { it > 0L }
+
 class KothFairnessIntegrationTest {
     private val now = Instant.parse("2026-10-08T16:00:00Z")
     private val guild = UUID.randomUUID()
@@ -109,15 +112,15 @@ class KothFairnessIntegrationTest {
         delayedSounds.sortedBy { it.first }.forEach { it.second() }
         delayedSounds.clear()
         service.tick(); service.tick(); service.tick()
-        assertEquals(listOf(3L, 8L, 13L), delayedSounds.map { it.first })
+        assertEquals(TRIUMPH_DELAYS, delayedSounds.map { it.first })
         delayedSounds.sortedBy { it.first }.forEach { it.second() }
         verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.19f, 0.95f) }
         verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.pling", org.bukkit.SoundCategory.PLAYERS, 0.20f, 1.12f) }
         verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.amethyst_block.chime", org.bukkit.SoundCategory.PLAYERS, 0.07f, 1f) }
-        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bell", org.bukkit.SoundCategory.PLAYERS, 0.45f, 0.75f) }
-        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:entity.player.levelup", org.bukkit.SoundCategory.PLAYERS, 0.55f, 1f) }
-        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bell", org.bukkit.SoundCategory.PLAYERS, 0.38f, 1f) }
-        verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), "minecraft:block.note_block.bell", org.bukkit.SoundCategory.PLAYERS, 0.42f, 1.25f) }
+        // Every note of the Triumph victory sound reaches the winner once.
+        net.badgersmc.ek.config.VICTORY_TRIUMPH.forEach { note ->
+            verify(exactly = 1) { capper.playSound(any<org.bukkit.Location>(), note.sound, org.bukkit.SoundCategory.PLAYERS, note.volume, note.pitch) }
+        }
         verify(exactly = 0) { idle.playSound(any<org.bukkit.Location>(), any<String>(), any<org.bukkit.SoundCategory>(), any<Float>(), any<Float>()) }
     }
 
@@ -161,11 +164,11 @@ class KothFairnessIntegrationTest {
         val service = service(localAudience = true)
         assertTrue(service.startEvent(arena(), teamMode = TeamMode.GUILD))
         service.tick(); delayedSounds.clear(); service.tick()
-        assertEquals(listOf(3L, 8L, 13L), delayedSounds.map { it.first })
+        assertEquals(TRIUMPH_DELAYS, delayedSounds.map { it.first })
         localPlayers.clear()
         every { zone.contains(capper.location) } returns false
         delayedSounds.forEach { it.second() }
-        verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:entity.player.levelup", org.bukkit.SoundCategory.PLAYERS, any<Float>(), any<Float>()) }
+        verify(exactly = 0) { capper.playSound(any<org.bukkit.Location>(), "minecraft:ui.toast.challenge_complete", org.bukkit.SoundCategory.PLAYERS, any<Float>(), any<Float>()) }
     }
 
     @Test fun `sound cues respect notification opt out`() {

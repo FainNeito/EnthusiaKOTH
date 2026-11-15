@@ -59,6 +59,22 @@ sounds:
     sound: 'minecraft:block.note_block.bass'
     volume: 0.35
     pitch: 0.8
+  # The victory sound, "Triumph": a bell arpeggio climbs a C major chord into the advancement fanfare and a
+  # firework burst. Each note plays delay-ticks after the win. Hear it with /ekoth sound victory.
+  # Set "victory: []" to use the older four win slots below instead.
+  victory:
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.45, pitch: 0.707, delay-ticks: 0 }
+    - { sound: 'minecraft:block.note_block.harp', volume: 0.35, pitch: 0.707, delay-ticks: 0 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.45, pitch: 0.891, delay-ticks: 3 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.45, pitch: 1.059, delay-ticks: 6 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.5, pitch: 1.414, delay-ticks: 9 }
+    - { sound: 'minecraft:block.note_block.pling', volume: 0.4, pitch: 1.414, delay-ticks: 9 }
+    - { sound: 'minecraft:ui.toast.challenge_complete', volume: 0.6, pitch: 1.0, delay-ticks: 12 }
+    - { sound: 'minecraft:entity.firework_rocket.large_blast', volume: 0.5, pitch: 1.0, delay-ticks: 12 }
+    - { sound: 'minecraft:entity.firework_rocket.twinkle', volume: 0.45, pitch: 1.0, delay-ticks: 17 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.5, pitch: 1.782, delay-ticks: 22 }
+    - { sound: 'minecraft:block.amethyst_block.chime', volume: 0.5, pitch: 1.0, delay-ticks: 22 }
+  # Older victory sound, used only when victory is empty.
   win:
     sound: 'minecraft:block.note_block.bell'
     volume: 0.45

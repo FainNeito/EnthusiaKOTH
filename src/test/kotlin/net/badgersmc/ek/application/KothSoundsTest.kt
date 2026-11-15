@@ -23,8 +23,13 @@ class KothSoundsTest {
         assertEquals(KothSounds.OPENING, KothSounds.cue("start", defaults))
     }
 
-    @Test fun `victory plays the configured notes in order and skips switched-off ones`() {
-        val sounds = defaults.copy(winAccent2 = SoundCueConfig("", 0f, 1f, 0), winAccent3 = SoundCueConfig("minecraft:x.y", 0f, 1f, 9))
+    @Test fun `the victory sound is Triumph by default`() {
+        assertEquals(KothSounds.cue("victory-triumph", defaults), KothSounds.cue("victory", defaults))
+        assertEquals(11, KothSounds.cue("victory", defaults).size)
+    }
+
+    @Test fun `an empty victory list plays the older win slots in order and skips switched-off ones`() {
+        val sounds = defaults.copy(victory = emptyList(), winAccent2 = SoundCueConfig("", 0f, 1f, 0), winAccent3 = SoundCueConfig("minecraft:x.y", 0f, 1f, 9))
         val notes = KothSounds.cue("victory", sounds)
         assertEquals(listOf(defaults.win.sound, defaults.winAccent.sound), notes.map { it.sound })
         assertEquals(listOf(0L, defaults.winAccent.delayTicks), notes.map { it.delayTicks })

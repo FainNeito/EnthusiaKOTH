@@ -1343,7 +1343,7 @@ class KothService(
         val sounds = when (cue) {
             CaptureCue.CAPTURE -> listOf(settings.capture, settings.captureAccent, settings.captureAccent2, settings.captureAccent3)
             CaptureCue.LOST -> listOf(settings.lost)
-            CaptureCue.WIN -> listOf(settings.win, settings.winAccent, settings.winAccent2, settings.winAccent3)
+            CaptureCue.WIN -> settings.victoryNotes()
         }.filter { it.sound.isNotBlank() && it.volume > 0f }
         if (sounds.isEmpty()) return
         // Only the capture chime is throttled; a lost note plays once per announced leave, so it cannot repeat on its own.

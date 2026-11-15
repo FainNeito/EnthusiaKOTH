@@ -2,6 +2,7 @@ package net.badgersmc.ek.application
 
 import net.badgersmc.ek.config.CaptureSoundsConfig
 import net.badgersmc.ek.config.SoundCueConfig
+import net.badgersmc.ek.config.VICTORY_TRIUMPH
 
 /** One note of a KOTH sound: a namespaced sound played at the listener, [delayTicks] after the sound starts. */
 data class SoundLayer(val sound: String, val volume: Float, val pitch: Float, val delayTicks: Long = 0, val master: Boolean = false)
@@ -35,15 +36,8 @@ object KothSounds {
      * until one is chosen and made the configured victory sound.
      */
     val VICTORY_DRAFTS: Map<String, List<SoundLayer>> = linkedMapOf(
-        // Bright and classic: a bell arpeggio climbs a C major chord into the advancement fanfare and a firework burst.
-        "triumph" to listOf(
-            layer(0, "block.note_block.bell", 0.45f, C4), layer(0, "block.note_block.harp", 0.35f, C4),
-            layer(3, "block.note_block.bell", 0.45f, E4), layer(6, "block.note_block.bell", 0.45f, G4),
-            layer(9, "block.note_block.bell", 0.5f, C5), layer(9, "block.note_block.pling", 0.4f, C5),
-            layer(12, "ui.toast.challenge_complete", 0.6f, 1.0f), layer(12, "entity.firework_rocket.large_blast", 0.5f, 1.0f),
-            layer(17, "entity.firework_rocket.twinkle", 0.45f, 1.0f),
-            layer(22, "block.note_block.bell", 0.5f, E5), layer(22, "block.amethyst_block.chime", 0.5f, 1.0f),
-        ),
+        // The chosen one, now the default victory sound; kept here so the drafts can still be compared against it.
+        "triumph" to VICTORY_TRIUMPH.layers(),
         // Regal: a church bell, a long horn call, the bell again, then a beacon lighting and a totem's flare under a chord.
         "coronation" to listOf(
             layer(0, "block.bell.use", 0.6f, 0.8f),
@@ -101,7 +95,7 @@ object KothSounds {
         "start" -> OPENING
         "capture" -> listOf(sounds.capture, sounds.captureAccent, sounds.captureAccent2, sounds.captureAccent3).layers()
         "lost" -> listOf(sounds.lost).layers()
-        "victory" -> listOf(sounds.win, sounds.winAccent, sounds.winAccent2, sounds.winAccent3).layers()
+        "victory" -> sounds.victoryNotes().layers()
         null -> emptyList()
         else -> VICTORY_DRAFTS[resolved.removePrefix("victory-")].orEmpty()
     }
