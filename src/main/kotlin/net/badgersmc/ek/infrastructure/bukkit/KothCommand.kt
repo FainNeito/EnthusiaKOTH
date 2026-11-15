@@ -116,6 +116,26 @@ class KothCommand(
         }
     }
 
+    /** /ekoth sound <name|all>: plays a KOTH sound to the sender alone, exactly as it is configured now. */
+    private fun previewSound(sender: CommandSender, requested: String?) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
+        val sounds = net.badgersmc.ek.application.KothSounds
+        val names = if (requested.equals("all", true)) sounds.NAMES else listOfNotNull(sounds.resolve(requested))
+        if (names.isEmpty()) { sender.sendMessage(lang.msg("sound.usage", "sounds" to (sounds.NAMES + "all").joinToString(", "))); return }
+        if (!cfgLoader().captureSounds.enabled) sender.sendMessage(lang.msg("sound.disabled"))
+        names.forEachIndexed { index, name ->
+            // With "all", each sound gets five seconds to finish before the next one starts.
+            val play = Runnable {
+                if (!sender.isOnline) return@Runnable
+                val notes = sounds.cue(name, cfgLoader().captureSounds)
+                sender.sendMessage(lang.msg(if (notes.isEmpty()) "sound.silent" else "sound.playing", "sound" to name))
+                KothSoundPlayer.play(plugin, listOf(sender), notes)
+            }
+            if (index == 0) play.run() else plugin.server.scheduler.runTaskLater(plugin, play, index * 100L)
+        }
+    }
+
     /** /ekoth hologram create <name> <type> [arena] | move <name> | remove <name> | list, or null when the line is not a hologram command. */
     internal fun hologramTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
         if (args.getOrNull(0)?.lowercase() !in setOf("hologram", "holo") || args.size < 2) return null
@@ -217,6 +237,7 @@ class KothCommand(
             "blitz" -> blitz(sender)
             "hologram", "holo" -> hologram(sender, args)
             "build" -> arenaBuild(sender, args)
+            "sound", "sounds" -> previewSound(sender, args.getOrNull(1))
             "leaderboard", "lb", "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
             "stats" -> stats(sender, args.getOrNull(1))
             "start" -> start(sender, args.getOrNull(1) ?: "", args.drop(2))
@@ -257,7 +278,7 @@ class KothCommand(
                 if (canStartFromCommand(sender)) add("start")
                 if (canStartPrivate(sender) || canJoinPrivate(sender)) add("private")
                 if (admin) addAll(listOf("setup", "manage", "schedules", "rewards", "displays", "stop", "status", "lock", "holds", "reviewmatch",
-                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "build", "reply", "reload"))
+                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "build", "sound", "reply", "reload"))
             }
             2 -> when (sub) {
                 "start" -> if (canStartFromCommand(sender)) arenaIds else emptyList()
@@ -277,6 +298,7 @@ class KothCommand(
                 "reports" -> if (admin) progression?.recentMatchIds().orEmpty() else emptyList()
                 "reconcile" -> if (admin) progression?.reviewClaimIds().orEmpty() else emptyList()
                 "reply" -> if (admin) listOf("cancel", "-") else emptyList()
+                "sound", "sounds" -> if (admin) net.badgersmc.ek.application.KothSounds.NAMES + "all" else emptyList()
                 else -> emptyList()
             }
             3 -> when {
@@ -340,6 +362,7 @@ class KothCommand(
         row("/ekoth stop [arena]", "End a running KOTH")
         row("/ekoth hologram <create|move|remove|list>", "Place live KOTH holograms")
         row("/ekoth build <arena> <base|save|edit|preview|status|clear>", "Arenas that build themselves when a KOTH starts")
+        row("/ekoth sound <start|capture|lost|victory|all>", "Hear a KOTH sound as players do")
         row("/ekoth holds", "Matches waiting for review")
         if (!detailed) { row("/ekoth help all", "Every staff command"); return }
         row("/ekoth reviewmatch <match> <approve|reject> <note>", "Decide a held match")
