@@ -253,7 +253,9 @@ internal object ArenaConfigLoader {
         }.toMap()
         val values = section(config, path) ?: return emptyMap()
         return buildMap {
-            values.getKeys(false).forEach { chanceText ->
+            // A chance such as "20.0" is split at its dot into a "20" section holding "0", so read the full nested key
+            // back as the chance rather than taking only the top-level keys.
+            values.getKeys(true).filterNot(values::isConfigurationSection).forEach { chanceText ->
                 val command = values.getString(chanceText) ?: return@forEach
                 val chance = chanceText.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: return@forEach
                 put(command, chance)

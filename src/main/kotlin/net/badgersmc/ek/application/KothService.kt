@@ -1390,12 +1390,13 @@ class KothService(
         return if (minutes > 0) "${minutes}m ${remainder}s" else "${remainder}s"
     }
 
-    fun shutdown(reason: CancellationReason = CancellationReason.PLUGIN_DISABLE) {
+    /** Ends every running KOTH. With [announce], their players are told it has ended. */
+    fun shutdown(reason: CancellationReason = CancellationReason.PLUGIN_DISABLE, announce: Boolean = false) {
         if (reason == CancellationReason.RELOAD || reason == CancellationReason.PLUGIN_DISABLE) {
             suppressNextQueueProcess = true
         }
         var refundPending = false
-        allEvents().forEach { cancelEvent(it, reason, announce = false, advanceQueue = false); refundPending = refundPending || lastCancellationRefundPending }
+        allEvents().forEach { cancelEvent(it, reason, announce = announce, advanceQueue = false); refundPending = refundPending || lastCancellationRefundPending }
         lastCancellationRefundPending = refundPending
         persistQueue()
     }

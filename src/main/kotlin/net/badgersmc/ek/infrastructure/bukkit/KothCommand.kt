@@ -65,7 +65,8 @@ class KothCommand(
     private val startService: StartService,
     private val lang: LangService,
     private val arenas: () -> Map<String, KothArena>,
-    private val reloadAction: () -> Unit,
+    /** Reloads the plugin; the flag says whether to tell players of a KOTH it ends. */
+    private val reloadAction: (Boolean) -> Unit,
     private val lockAction: (LockState) -> Unit,
     private val arenaRegionAction: (String, String, String) -> String,
     private val arenaCenterAction: (String, Location) -> String,
@@ -250,7 +251,7 @@ class KothCommand(
             "start" -> start(sender, args.getOrNull(1) ?: "", args.drop(2))
             "stop", "cancel" -> stop(sender, args.getOrNull(1))
             "giveflare" -> giveFlare(sender, args.getOrNull(1) ?: "", args.getOrNull(2) ?: "", args.getOrNull(3)?.toIntOrNull() ?: 1)
-            "reload" -> doReload(sender)
+            "reload" -> doReload(sender, args.getOrNull(1).equals("force", true))
             "private", "test" -> privateTest(sender, args)
             "status" -> status(sender)
             "lock" -> lock(sender, args.getOrNull(1) ?: "")
@@ -305,6 +306,7 @@ class KothCommand(
                 "reports" -> if (admin) progression?.recentMatchIds().orEmpty() else emptyList()
                 "reconcile" -> if (admin) progression?.reviewClaimIds().orEmpty() else emptyList()
                 "reply" -> if (admin) listOf("cancel", "-") else emptyList()
+                "reload" -> if (admin) listOf("force") else emptyList()
                 "sound", "sounds" -> if (admin) net.badgersmc.ek.application.KothSounds.let { it.NAMES + "all" + it.DRAFT_NAMES + "victory-drafts" } else emptyList()
                 else -> emptyList()
             }
@@ -383,7 +385,7 @@ class KothCommand(
         row("/ekoth tp <arena>", "Teleport to an arena")
         row("/ekoth arena <create|region|center|enable|disable> <arena>", "Quick arena changes")
         row("/ekoth readiness", "Check the setup before TEST")
-        row("/ekoth reload", "Reload the configuration")
+        row("/ekoth reload [force]", "Reload the configuration")
     }
 
     private fun gui(sender: CommandSender, mode: TeamMode = TeamMode.SOLO) {
@@ -733,15 +735,25 @@ class KothCommand(
         target.inventory.addItem(flare).values.forEach { target.world.dropItem(target.location, it) }
     }
 
-    private fun doReload(sender: CommandSender) {
+    /** /ekoth reload [force]. A reload ends any running KOTH, so it waits for "force" before doing that. */
+    private fun doReload(sender: CommandSender, force: Boolean) {
         if (!sender.hasPermission("enthusiakoth.admin")) {
             sender.sendMessage(lang.msg("command.error.no_permission"))
             return
         }
-        reloadAction()
+        val running = kothService.allEvents()
+        if (running.isNotEmpty() && !force) {
+            val names = running.foldIndexed(Component.empty()) { index, names, event ->
+                names.append(Component.text(if (index == 0) "" else ", ")).append(event.arena.name.arenaComponent())
+            }
+            sender.sendMessage(lang.arenaMsg("command.reload.running", "arenas" to names))
+            return
+        }
+        reloadAction(running.isNotEmpty())
         if (kothService.lastCancellationRefundPending) {
             sender.sendMessage(lang.msg("command.error.refund_failed"))
         }
+        if (running.isNotEmpty()) sender.sendMessage(lang.msg("command.reload.ended", "count" to running.size.toString()))
         sender.sendMessage(lang.msg("command.error.reloaded"))
     }
 

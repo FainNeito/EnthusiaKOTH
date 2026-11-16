@@ -2,6 +2,9 @@ prefix: "<color:#ffcf1f>[KOTH]</color> "
 error-prefix: "<gradient:#c0261d:#cf4135>[KOTH]</gradient> "
 
 command:
+  reload:
+    running: "<prefix><color:#fff6e0>A KOTH is running at <color:#ffcf1f><arenas></color>, and reloading would end it. Wait for it to finish, or use <color:#ffcf1f>/ekoth reload force</color> to end it now and reload."
+    ended: "<prefix><color:#fff6e0>Ended <color:#ffcf1f><count></color> running KOTH and told its players."
   reply:
     usage: "<prefix><color:#ffcf1f>Put your answer after /ekoth reply, or reply cancel."
     none: "<prefix><color:#fff6e0>Nothing is waiting for a reply. Open the menu and click the setting again."
