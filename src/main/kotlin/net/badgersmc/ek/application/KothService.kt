@@ -88,6 +88,10 @@ class KothService(
     private val scheduleSound: (Long, () -> Unit) -> Unit = { _, _ -> },
     /** Runs once a blitz round goes live, after its normal start announcement. */
     private val blitzRoundStarted: (BlitzRound, KothEvent) -> Unit = { _, _ -> },
+    /** Seconds an arena spends building itself before its KOTH goes live; 0 when it has no recorded build. */
+    private val arenaWarmup: (KothArena) -> Int = { 0 },
+    /** The dramatic opening when a KOTH goes live: title, sounds and effects for [audience]. */
+    private val liveEffects: (KothEvent, List<Player>) -> Unit = { _, _ -> },
 ) {
     private val captureSoundLimiter = CaptureSoundLimiter()
     private val captureSoundGeneration = mutableMapOf<UUID, Long>()
@@ -177,6 +181,7 @@ class KothService(
         private const val QUEUE_RETRY_SECONDS = 10L
         private const val LOST_SOUND_DISTANCE = 32.0
         private const val MOVING_MARKER_DISTANCE = 64.0
+        private const val OPENING_DISTANCE = 96.0
 
         internal fun movingPointAt(
             elapsedSeconds: Double,
@@ -323,14 +328,46 @@ class KothService(
         lifecycle(event, net.badgersmc.ek.api.KothLifecycle.STARTED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
         discordLastUpdates.remove(event.id)
-        sendEventMessage(
-            event,
-            lang.arenaMsg("koth.begin", "koth_name" to event.arena.name.arenaComponent(), "location" to locString(event.arena.zone)),
-        )
+        announceStartOrBuild(event)
         if (!event.isPrivateTest) {
             discordWebhook.sendStart(event.id, event.arena.name, locString(event.arena.zone))
             if (cfg.display.zoneBorder && showsCaptureOutline(event)) zoneBorderService.show(event.arena.zone, event.id.toString())
         }
+    }
+
+    private fun warmupFor(arena: KothArena): Long = runCatching { arenaWarmup(arena) }.getOrDefault(0).coerceIn(0, 120).toLong()
+
+    /** At activation: the KOTH is live at once, or its arena is building and the opening waits for it. */
+    private fun announceStartOrBuild(event: KothEvent) {
+        val now = clock.instant()
+        if (!now.isBefore(event.liveAt)) { goLive(event); return }
+        // Rounded up, so a 5 second build reads 5s even though a moment has already passed since it started.
+        val seconds = ((Duration.between(now, event.liveAt).toMillis() + 999) / 1000).coerceAtLeast(1)
+        sendEventMessage(event, lang.arenaMsg("koth.rising", "koth_name" to event.arena.name.arenaComponent(), "seconds" to seconds.toString()))
+    }
+
+    /** The KOTH opens: the usual start line, then the dramatic opening for everyone following it. */
+    private fun goLive(event: KothEvent) {
+        if (event.liveAnnounced) return
+        event.liveAnnounced = true
+        sendEventMessage(
+            event,
+            lang.arenaMsg("koth.begin", "koth_name" to event.arena.name.arenaComponent(), "location" to locString(event.arena.zone)),
+        )
+        runCatching { liveEffects(event, openingAudience(event)) }.onFailure { logger("KOTH '${event.arena.id}' opening effects failed", it) }
+    }
+
+    /** Who sees the build countdown and the opening: the event's audience plus anyone at the arena. */
+    private fun openingAudience(event: KothEvent): List<Player> {
+        val zone = event.arena.zone
+        val cx = (zone.minX + zone.maxX) / 2
+        val cz = (zone.minZ + zone.maxZ) / 2
+        val nearby = Bukkit.getOnlinePlayers().filter { player ->
+            player.world.name == zone.worldName && event.isParticipant(player.uniqueId) &&
+                (event.isPrivateTest || notificationsEnabled(player)) &&
+                player.location.let { (it.x - cx) * (it.x - cx) + (it.z - cz) * (it.z - cz) } <= OPENING_DISTANCE * OPENING_DISTANCE
+        }
+        return (eventRecipients(event, captureOnly = false) + nearby).distinctBy { it.uniqueId }
     }
 
     private fun activateQueuedEvent(event: KothEvent, cfg: EnthusiaKothConfig, recovered: Boolean) {
@@ -341,10 +378,7 @@ class KothService(
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
         discordLastUpdates.remove(event.id)
         runActivationStep(event, if (recovered) "recovery start announcement" else "start announcement") {
-            sendEventMessage(
-                event,
-                lang.arenaMsg("koth.begin", "koth_name" to event.arena.name.arenaComponent(), "location" to locString(event.arena.zone)),
-            )
+            announceStartOrBuild(event)
         }
         if (!recovered && !event.isPrivateTest) {
             runActivationStep(event, "Discord start notification") {
@@ -371,6 +405,14 @@ class KothService(
     private fun tickActive(event: KothEvent, cfg: EnthusiaKothConfig) {
         val arena = event.arena
         val now = clock.instant()
+        if (now.isBefore(event.liveAt)) {
+            // The arena is still building itself: nothing can be captured yet.
+            val seconds = ((Duration.between(now, event.liveAt).toMillis() + 999) / 1000).coerceAtLeast(1)
+            val bar = lang.arenaMsg("koth.rising_actionbar", "koth_name" to arena.name.arenaComponent(), "seconds" to seconds.toString())
+            openingAudience(event).forEach { it.sendActionBar(bar) }
+            return
+        }
+        if (!event.liveAnnounced) goLive(event)
         if (!now.isBefore(event.endsAt)) {
             finishEvent(event, resolveWinner(event))
             return
@@ -804,11 +846,13 @@ class KothService(
         if (!cfg.locks.state.allows(kind)) return false
         val now = clock.instant()
         val start = now.plusSeconds(delaySeconds.coerceAtLeast(0).toLong())
+        val live = start.plusSeconds(warmupFor(arena))
         val event = KothEvent(
             id = UUID.randomUUID(),
             arena = arena,
             startsAt = start,
-            endsAt = start.plusSeconds((durationOverride ?: arena.durationSeconds).toLong()),
+            endsAt = live.plusSeconds((durationOverride ?: arena.durationSeconds).toLong()),
+            liveAt = live,
             state = if (delaySeconds > 0) EventState.STARTING else EventState.ACTIVE,
             teamMode = if (arena.ignoreFactions) TeamMode.SOLO else teamMode,
             paymentReceipt = paymentReceipt,
@@ -955,11 +999,13 @@ class KothService(
         if (!cfg.locks.state.allows(next.startSource)) return false
         val activationId = next.activationId ?: return false
         val now = clock.instant()
+        val live = now.plusSeconds(warmupFor(arena))
         val event = KothEvent(
             id = activationId,
             arena = arena,
             startsAt = now,
-            endsAt = now.plusSeconds(arena.durationSeconds.toLong()),
+            endsAt = live.plusSeconds(arena.durationSeconds.toLong()),
+            liveAt = live,
             state = EventState.ACTIVE,
             teamMode = if (arena.ignoreFactions) TeamMode.SOLO else next.teamMode,
             source = next.startSource,
@@ -1092,7 +1138,8 @@ class KothService(
             id = UUID.randomUUID(),
             arena = arena.copy(durationSeconds = duration, captureSeconds = capture),
             startsAt = now.plusSeconds(lobbySeconds.toLong()),
-            endsAt = now.plusSeconds((lobbySeconds + duration).toLong()),
+            endsAt = now.plusSeconds(lobbySeconds + warmupFor(arena) + duration),
+            liveAt = now.plusSeconds(lobbySeconds + warmupFor(arena)),
             state = if (lobbySeconds > 0) EventState.STARTING else EventState.ACTIVE,
             teamMode = if (arena.ignoreFactions) TeamMode.SOLO else teamMode,
             owner = ownerId,

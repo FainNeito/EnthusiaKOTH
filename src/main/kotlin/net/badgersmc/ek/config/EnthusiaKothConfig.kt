@@ -26,6 +26,24 @@ data class EnthusiaKothConfig(
     val seasonStart: String? = null,
     val captureNotificationRegions: List<String> = listOf("spawn", "warzone", "market"),
     val captureSounds: CaptureSoundsConfig = CaptureSoundsConfig(),
+    val arenaBuild: ArenaBuildConfig = ArenaBuildConfig(),
+)
+
+/** Arenas that build themselves from their base form when a KOTH starts (see /ekoth build). */
+data class ArenaBuildConfig(
+    val enabled: Boolean = true,
+    val buildSeconds: Int = 4,
+    val teardownSeconds: Int = 3,
+    val previewSeconds: Int = 10,
+    /** How far below and above the capture point the recorded region reaches. */
+    val below: Int = 8,
+    val above: Int = 24,
+    /** Margin around the capture zone when the arena has no protection region. */
+    val margin: Int = 16,
+    val maxBlocks: Int = 20_000,
+    val maxScanBlocks: Long = 2_000_000,
+    /** Seconds a built arena stays up after a KOTH is won there, before it comes down. */
+    val victoryHoldSeconds: Int = 8,
 )
 
 data class SoundCueConfig(val sound: String, val volume: Float, val pitch: Float, val delayTicks: Long = 0)
@@ -113,7 +131,7 @@ data class DiscordConfig(
     val embeds: Map<DiscordMessageType, DiscordEmbedTemplate> = DiscordEmbedDefaults.templates,
     val startRoleId: String = "",
 )
-data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val movingFloor: Boolean = true, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
+data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val movingFloor: Boolean = true, val startTitle: Boolean = true, val startEffects: Boolean = true, val championBanners: Boolean = true, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
 data class FamilyRulesConfig(val rules: Map<String, RuleSet> = emptyMap())
 data class PrivateTestingConfig(val lobbySeconds: Int = 0, val quickMatchDurationSeconds: Int = 120, val quickCaptureSeconds: Int = 15, val showObjectiveParticles: Boolean = true)
 data class LockConfig(val state: LockState = LockState.UNLOCKED)

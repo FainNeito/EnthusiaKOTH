@@ -31,7 +31,11 @@ data class KothEvent(
     val source: EventKind = EventKind.ADMIN,
     /** The scheduled occurrence this event was started for, when it came from the schedule. */
     val occurrenceId: String? = null,
+    /** When capturing opens. Later than [startsAt] while the arena builds itself; the match runs from here to [endsAt]. */
+    val liveAt: Instant = startsAt,
 ) {
+    /** Set once the KOTH has been announced as live, so the opening plays exactly once. */
+    @Volatile var liveAnnounced: Boolean = false
     val scores: MutableMap<TeamId, Double> = ConcurrentHashMap()
     val scoringParticipation = ScoringParticipation()
     val participants: MutableSet<UUID> = ConcurrentHashMap.newKeySet()
