@@ -183,6 +183,7 @@ arena-build:
     nothing-changed: "<error_prefix><color:#ffd0c6>Nothing differs from the base form of <arena>. Build the full form first."
     too-large: "<error_prefix><color:#ffd0c6>The area to record for <arena> is <count> blocks, over arena-build.max-scan-blocks. Give the arena a smaller protection region."
     too-many: "<error_prefix><color:#ffd0c6>The build changes <count> blocks, over the limit of <limit> (arena-build.max-blocks)."
+    has-contents: "<error_prefix><color:#ffd0c6>The build replaces <count> blocks that hold something in the base form, such as a chest, sign or banner. Putting the base back would lose their items or text. Move them out of the build area, or keep them in the built form too, then save again."
 
 sound:
   usage: "<prefix><color:#fff6e0>Hear a KOTH sound as players do: <color:#ffcf1f>/ekoth sound <name></color>. Sounds: <color:#ffcf1f><sounds></color>."

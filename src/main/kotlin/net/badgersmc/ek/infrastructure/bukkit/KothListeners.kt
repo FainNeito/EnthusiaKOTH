@@ -49,6 +49,13 @@ class KothListeners(
         }
     }
 
+    /** Dragging items across a KOTH menu would drop them into it, and they would be lost when it closes. */
+    @EventHandler
+    fun onMenuDrag(event: org.bukkit.event.inventory.InventoryDragEvent) {
+        val holder = event.view.topInventory.holder
+        if (holder is KothGuiHolder || holder is KothStartConfirmHolder) event.isCancelled = true
+    }
+
     @EventHandler
     fun onStartConfirmClick(event: InventoryClickEvent) {
         val holder = event.view.topInventory.holder as? KothStartConfirmHolder ?: return

@@ -175,7 +175,7 @@ class ArenaBuildService(
 
     // Recording ---------------------------------------------------------------------------------------------------
 
-    enum class Result { DONE, NO_ARENA, NO_WORLD, BUSY, NO_BASE, NO_BUILD, NOTHING_CHANGED, TOO_LARGE, TOO_MANY }
+    enum class Result { DONE, NO_ARENA, NO_WORLD, BUSY, NO_BASE, NO_BUILD, NOTHING_CHANGED, TOO_LARGE, TOO_MANY, HAS_CONTENTS }
 
     /** Saves the arena's region as it stands now as its base form. */
     fun recordBase(arenaId: String): Pair<Result, Int> {
@@ -206,6 +206,11 @@ class ArenaBuildService(
         val build = base.diff(arenaId) { x, y, z -> world.getBlockAt(x, y, z).blockData.asString }
         if (build.blocks.isEmpty()) return Result.NOTHING_CHANGED to 0
         if (build.blocks.size > settings().maxBlocks) return Result.TOO_MANY to build.blocks.size
+        // Refuse rather than record a build that would wipe a chest's items or a sign's text every time it comes down.
+        val withContents = ArenaBuild.blocksWithContents(build.blocks) { state ->
+            runCatching { data(state).createBlockState() is org.bukkit.block.TileState }.getOrDefault(false)
+        }
+        if (withContents.isNotEmpty()) return Result.HAS_CONTENTS to withContents.size
         active.remove(arenaId)?.task?.cancel()
         store.saveBuild(build)
         restoreNow(build)

@@ -13,6 +13,13 @@ data class BuildBlock(val x: Int, val y: Int, val z: Int, val base: String, val 
 data class ArenaBuild(val arenaId: String, val world: String, val blocks: List<BuildBlock>) {
     companion object {
         /**
+         * Changed blocks whose base form holds contents, such as a chest's items, a sign's text or a banner's pattern.
+         * Only block states are recorded, so building over one and putting the base back would lose those contents.
+         */
+        fun blocksWithContents(blocks: List<BuildBlock>, holdsContents: (String) -> Boolean): List<BuildBlock> =
+            blocks.filter { it.base.substringBefore('[') != it.built.substringBefore('[') && holdsContents(it.base) }
+
+        /**
          * The order the arena builds itself in: bottom layer first, and within a layer from the capture point outward,
          * so it rises out of the ground around the point. Teardown runs the same list backwards.
          */
