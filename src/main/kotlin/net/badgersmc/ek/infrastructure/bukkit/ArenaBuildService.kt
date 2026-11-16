@@ -51,6 +51,8 @@ class ArenaBuildService(
     private val tearingDown = mutableMapOf<String, Pair<ArenaBuild, BukkitTask>>()
     /** Arenas standing a little longer after a win, so the victors see their banners go up. */
     private val holding = mutableMapOf<String, BukkitTask>()
+    /** Arenas staff have put into their built form with /ekoth build edit and not yet saved. */
+    private val editing = mutableSetOf<String>()
     private val parsed = mutableMapOf<String, BlockData>()
 
     /** Puts back any arena the server stopped in the middle of. Call once on enable. */
@@ -66,6 +68,11 @@ class ArenaBuildService(
     @EventHandler(priority = EventPriority.MONITOR)
     fun onLifecycle(event: KothLifecycleEvent) {
         val arena = event.snapshot.arenaId
+        if (arena in editing) {
+            // Staff are part way through editing this arena: leave their work exactly as it is.
+            if (event.lifecycle == KothLifecycle.STARTED) plugin.logger.warning("Arena '$arena' is being edited, so it did not build itself for this KOTH")
+            return
+        }
         when (event.lifecycle) {
             KothLifecycle.STARTED -> runCatching { build(arena) }.onFailure { plugin.logger.severe("Arena '$arena' could not build itself: ${it.message}") }
             KothLifecycle.COMPLETED, KothLifecycle.CANCELLED -> {
@@ -165,13 +172,22 @@ class ArenaBuildService(
         active.keys.toList().forEach { teardown(it, instant = true) }
     }
 
-    fun isBuilt(arenaId: String) = arenaId in active
+    fun isBuilt(arenaId: String) = arenaId in active || arenaId in editing
 
-    /** Seconds a KOTH in [arenaId] waits while its arena builds itself; 0 when it has nothing to build. */
+    /**
+     * Seconds a KOTH in [arenaId] waits while its arena builds itself. 0 when nothing would build: no recorded build,
+     * the arena already standing (for example during a victory hold) or being edited, or its world not loaded.
+     */
     fun warmupSeconds(arenaId: String): Int {
         val cfg = settings()
-        return if (cfg.enabled && store.hasBuild(arenaId)) cfg.buildSeconds + 1 else 0
+        if (!cfg.enabled || arenaId in active || arenaId in editing) return 0
+        val build = store.loadBuild(arenaId)?.takeIf { it.blocks.isNotEmpty() } ?: return 0
+        return if (Bukkit.getWorld(build.world) != null) cfg.buildSeconds + 1 else 0
     }
+
+    /** Where the recorded build places banners, or null when the arena has no build. */
+    fun bannerPositions(arenaId: String): List<Triple<Int, Int, Int>>? =
+        store.loadBuild(arenaId)?.blocks?.filter { data(it.built).material.name.endsWith("_BANNER") }?.map { Triple(it.x, it.y, it.z) }
 
     // Recording ---------------------------------------------------------------------------------------------------
 
@@ -212,6 +228,7 @@ class ArenaBuildService(
         }
         if (withContents.isNotEmpty()) return Result.HAS_CONTENTS to withContents.size
         active.remove(arenaId)?.task?.cancel()
+        editing.remove(arenaId)
         store.saveBuild(build)
         restoreNow(build)
         store.endJournal(arenaId)
@@ -224,13 +241,14 @@ class ArenaBuildService(
         val build = store.loadBuild(arenaId) ?: return Result.NO_BUILD to 0
         val world = Bukkit.getWorld(build.world) ?: return Result.NO_WORLD to 0
         store.startJournal(build)
+        editing += arenaId
         build.blocks.forEach { set(world, it, it.built); decorateIfBanner(arenaId, world, it) }
         return Result.DONE to build.blocks.size
     }
 
     /** Builds the arena, then takes it down again after the preview time. */
     fun preview(arenaId: String): Pair<Result, Int> {
-        if (arenaBusy(arenaId) || arenaId in active) return Result.BUSY to 0
+        if (arenaBusy(arenaId) || arenaId in active || arenaId in editing) return Result.BUSY to 0
         if (!store.hasBuild(arenaId)) return Result.NO_BUILD to 0
         val placed = build(arenaId)
         if (placed == 0) return Result.NO_BUILD to 0
@@ -240,13 +258,13 @@ class ArenaBuildService(
     }
 
     fun clear(arenaId: String): Result {
-        if (arenaBusy(arenaId) || arenaId in active) return Result.BUSY
+        if (arenaBusy(arenaId) || arenaId in active || arenaId in editing) return Result.BUSY
         store.clear(arenaId)
         return Result.DONE
     }
 
     fun status(arenaId: String): Triple<Boolean, Int?, Boolean> =
-        Triple(store.hasBase(arenaId), store.loadBuild(arenaId)?.blocks?.size, arenaId in active)
+        Triple(store.hasBase(arenaId), store.loadBuild(arenaId)?.blocks?.size, isBuilt(arenaId))
 
     // Helpers -----------------------------------------------------------------------------------------------------
 

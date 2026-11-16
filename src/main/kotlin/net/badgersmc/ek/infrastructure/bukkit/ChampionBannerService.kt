@@ -41,6 +41,11 @@ class ChampionBannerService(
     private val regionBounds: (KothArena) -> CaptureZone?,
     private val guildName: (UUID) -> String?,
     private val guildBanner: (UUID) -> BannerDesign?,
+    /**
+     * Where the arena's recorded build places banners, or null when it has no build. An arena with a build only ever
+     * restyles those, since every other banner in its region is part of the base form and would never change back.
+     */
+    private val buildBanners: (String) -> List<Triple<Int, Int, Int>>? = { null },
 ) : Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -74,6 +79,9 @@ class ChampionBannerService(
         val design = design(arenaId) ?: return 0
         val arena = arenas()[arenaId] ?: return 0
         val world = Bukkit.getWorld(arena.zone.worldName) ?: return 0
+        buildBanners(arenaId)?.let { positions ->
+            return positions.count { (x, y, z) -> world.isChunkLoaded(x shr 4, z shr 4) && restyle(world.getBlockAt(x, y, z), design) }
+        }
         val region = regionBounds(arena)
         val area = region ?: arena.zone
         // A protection region is the arena's edge; without one, look a little beyond the capture zone.

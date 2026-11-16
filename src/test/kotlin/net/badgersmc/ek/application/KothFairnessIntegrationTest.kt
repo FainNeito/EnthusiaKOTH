@@ -280,4 +280,18 @@ class KothFairnessIntegrationTest {
             heardLost(capper, 1)
         }
     }
+
+    @Test fun `the lost note waits out the cooldown when a holder loses the point again at once`() {
+        val service = service()
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        service.tick()
+        every { zone.contains(capper.location) } returns false
+        service.tick()
+        every { zone.contains(capper.location) } returns true
+        service.tick()
+        every { zone.contains(capper.location) } returns false
+        service.tick()
+        // The test clock never moves, so the second loss falls inside sounds.control-cooldown-seconds.
+        heardLost(capper, 1)
+    }
 }

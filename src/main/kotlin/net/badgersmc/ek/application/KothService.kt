@@ -94,6 +94,8 @@ class KothService(
     private val liveEffects: (KothEvent, List<Player>) -> Unit = { _, _ -> },
 ) {
     private val captureSoundLimiter = CaptureSoundLimiter()
+    /** The lost note's own cooldown, so a point flipping between teams every second doesn't play it every second. */
+    private val lostSoundLimiter = CaptureSoundLimiter()
     private val captureSoundGeneration = mutableMapOf<UUID, Long>()
     private val protectedMatches = mutableMapOf<UUID, ProtectedMatch>()
     /** Why reward protection turned a completed capture into no winner, so players are told instead of guessing. */
@@ -733,6 +735,7 @@ class KothService(
     private fun cleanupEvent(event: KothEvent) {
         withheldReasons.remove(event.id)
         captureSoundLimiter.remove(event.id)
+        lostSoundLimiter.remove(event.id)
         captureSoundGeneration.remove(event.id)
         protectedMatches.remove(event.id)
         progressionMatches.remove(event.id)
@@ -1354,8 +1357,9 @@ class KothService(
             CaptureCue.WIN -> settings.victoryNotes()
         }.filter { it.sound.isNotBlank() && it.volume > 0f }
         if (sounds.isEmpty()) return
-        // Only the capture chime is throttled; a lost note plays once per announced leave, so it cannot repeat on its own.
+        // The capture chime and the lost note each wait out sounds.control-cooldown-seconds; the victory sound never does.
         if (cue == CaptureCue.CAPTURE && !captureSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
+        if (cue == CaptureCue.LOST && !lostSoundLimiter.allow(event.id, clock.millis(), settings.cooldownSeconds)) return
         val extra = alsoTo.filter { event.isPrivateTest || notificationsEnabled(it) }
         val audience = (captureSoundRecipients(event) + extra).map { it.uniqueId }.toSet()
         val controller = event.currentController

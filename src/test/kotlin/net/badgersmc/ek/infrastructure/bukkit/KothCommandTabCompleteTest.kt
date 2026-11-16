@@ -95,4 +95,16 @@ class KothCommandTabCompleteTest {
         assertTrue(complete(player(), "reviewmatch", "").isEmpty())
         assertTrue(complete(player(), "reviewmatch", "x", "").isEmpty())
     }
+
+    @Test fun `a double click on Start asks to start only once`() {
+        val plugin = mockk<org.bukkit.plugin.java.JavaPlugin>(relaxed = true)
+        val cmd = KothCommand(plugin, { mockk(relaxed = true) }, mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            { emptyMap() }, {}, {}, { _, _, _ -> "" }, { _, _ -> "" }, { _, _ -> "" }, { emptyList() })
+        val holder = KothStartConfirmHolder("capture", net.badgersmc.ek.domain.TeamMode.SOLO)
+        val staff = player(admin = true)
+        cmd.handleConfirmClick(staff, KothStartConfirmHolder.START_SLOT, holder)
+        cmd.handleConfirmClick(staff, KothStartConfirmHolder.START_SLOT, holder)
+        verify(exactly = 1) { plugin.server.scheduler.runTask(plugin, any<Runnable>()) }
+    }
 }

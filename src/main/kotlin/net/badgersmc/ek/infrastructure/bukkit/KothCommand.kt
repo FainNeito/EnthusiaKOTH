@@ -50,6 +50,8 @@ class KothGuiHolder(
 /** The confirmation step between clicking an arena and paying to start it. */
 class KothStartConfirmHolder(val arenaId: String, val teamMode: TeamMode) : InventoryHolder {
     lateinit var backingInventory: Inventory
+    /** Set by the first Start click, so a double click can never ask to start (and pay) twice. */
+    var started = false
     override fun getInventory(): Inventory = backingInventory
     companion object { const val START_SLOT = 11; const val BACK_SLOT = 15 }
 }
@@ -967,14 +969,14 @@ class KothCommand(
 
     fun handleConfirmClick(player: Player, slot: Int, holder: KothStartConfirmHolder) {
         when (slot) {
-            KothStartConfirmHolder.START_SLOT -> plugin.server.scheduler.runTask(plugin, Runnable {
+            KothStartConfirmHolder.START_SLOT -> if (!holder.started) { holder.started = true; plugin.server.scheduler.runTask(plugin, Runnable {
                 val arena = arenas()[holder.arenaId]
                 player.closeInventory()
                 if (arena == null || !player.isOnline) return@Runnable
                 val result = startService.start(StartRequest(actor = startActor(player), arena = arena, source = StartSource.GUI,
                     tier = StartTier.BASIC, teamMode = holder.teamMode))
                 sendStartResult(player, holder.arenaId, result, true)
-            })
+            }) }
             KothStartConfirmHolder.BACK_SLOT -> plugin.server.scheduler.runTask(plugin, Runnable { if (player.isOnline) gui(player, holder.teamMode) })
         }
     }
