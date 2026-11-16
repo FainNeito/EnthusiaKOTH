@@ -171,6 +171,9 @@ class SqlProgressionStore(private val source: DataSource, private val policy: ()
             while(r.next()) add(ProgressionClaim(r.getString("id"),UUID.fromString(r.getString("player")),r.getString("kind"),r.getString("value"),1,r.getString("status"),r.getString("detail")))
         } }
     } }
+    fun reviewClaimIds(): List<String> = source.connection.use { c -> c.createStatement().use { s ->
+        s.executeQuery("SELECT id FROM koth_claims WHERE status='REVIEW' LIMIT 100").use { r -> buildList { while(r.next()) add(r.getString(1)) } }
+    } }
     fun reviewClaims(): List<String> = source.connection.use { c -> c.createStatement().use { s ->
         s.executeQuery("SELECT id,player,kind,detail FROM koth_claims WHERE status='REVIEW' LIMIT 100").use { r -> buildList {
             while(r.next()) add("${r.getString(1)} owner=${r.getString(2)} ${r.getString(3)}: ${r.getString(4)}")

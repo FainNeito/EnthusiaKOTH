@@ -15,7 +15,7 @@ AxKoth provides a tagged wand, left/right corner selection, same-world/missing
 selection validation, named creation, redefine, teleport/info/list commands and
 mode-specific inventory editors. Its bundled editor notice says reload is needed
 to apply edits. Its selected region is the capture zone itself. Enthusia needs
-both a protected arena boundary and a smaller circular objective; conflating
+both a protected arena boundary and a smaller square objective; conflating
 these would change existing combat/death semantics.
 
 This implementation adopts the interaction pattern: a staff arena list, private

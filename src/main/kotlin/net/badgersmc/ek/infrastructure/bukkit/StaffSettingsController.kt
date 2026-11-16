@@ -39,8 +39,10 @@ class StaffSettingsController(
     private val schedule: ScheduleService, private val applySaved: () -> Unit, private val lang: LangService,
 ) : Listener {
     private val drafts = mutableMapOf<UUID, StaffSettingsDraft>()
-    private data class Prompt(val token: UUID, val draft: StaffSettingsDraft, val page: StaffSettingsPage, val key: String)
+    private data class Prompt(val token: UUID, val draft: StaffSettingsDraft, val page: StaffSettingsPage, val key: String, val opened: Long = System.nanoTime())
     private val prompts = ConcurrentHashMap<UUID, Prompt>()
+    /** When this player's pending settings prompt opened, or null when none is waiting. */
+    fun promptOpenedAt(player: UUID): Long? = prompts[player]?.opened
     private fun text(key: String, vararg values: Pair<String, Any?>) = lang.arenaMsg("staff.$key", *values)
     private fun allowed(player: Player): Boolean {
         if (player.hasPermission("enthusiakoth.admin")) return true
@@ -74,52 +76,58 @@ class StaffSettingsController(
     }
     fun shutdown() { drafts.clear(); prompts.clear() }
     @EventHandler fun quit(event: PlayerQuitEvent) { drafts.remove(event.player.uniqueId); prompts.remove(event.player.uniqueId) }
-    private fun icon(material: Material, key: String, value: Any? = "", lore: List<net.kyori.adventure.text.Component> = listOf(text("click"))) = ItemStack(material).apply {
-        editMeta { it.displayName(text(key, "value" to (value?.toString() ?: "-"))); it.lore(lore) }
-    }
+    private fun icon(material: Material, key: String, value: Any? = "", lore: List<net.kyori.adventure.text.Component> = listOf(text("open-hint")), glow: Boolean = false) =
+        MenuStyle.item(material, text(key, "value" to (value?.toString() ?: "-")), lore, glow)
     private fun root(d: StaffSettingsDraft) = "arenas.${d.arenaId}"
     private fun render(player: Player, d: StaffSettingsDraft, page: StaffSettingsPage) {
         val holder = StaffSettingsHolder(player.uniqueId, d, page)
-        val inv = Bukkit.createInventory(holder, 54, text("title", "value" to (d.arenaId?.let { (arenas()[it]?.name ?: it).arenaComponent().append(net.kyori.adventure.text.Component.text(" ($it)")) } ?: "Global"))); holder.backing = inv
-        fun item(slot: Int, material: Material, key: String, value: Any? = "", lore: List<net.kyori.adventure.text.Component> = listOf(text("click"))) { inv.setItem(slot, icon(material, key, value, lore)) }
+        val inv = Bukkit.createInventory(holder, 54, text("title", "value" to (d.arenaId?.let { (arenas()[it]?.name ?: it).arenaComponent() } ?: "All arenas"))); holder.backing = inv
+        fun item(slot: Int, material: Material, key: String, value: Any? = "", lore: List<net.kyori.adventure.text.Component> = listOf(text("open-hint"))) { inv.setItem(slot, icon(material, key, value, lore)) }
+        fun toggle(slot: Int, key: String, on: Boolean) = item(slot, if (on) Material.LIME_DYE else Material.GRAY_DYE, key, MenuStyle.onOff(on), listOf(text("toggle-hint")))
+        val prompt = listOf(text("prompt-hint"))
         when (page) {
             StaffSettingsPage.HOME -> {
                 item(10, Material.CLOCK, "schedule"); if (d.arenaId != null) item(12, Material.CHEST, "rewards")
-                item(14, Material.BEACON, "displays"); item(16, Material.PAPER, "preview")
+                item(14, Material.BEACON, "displays"); item(16, Material.SPYGLASS, "preview")
             }
             StaffSettingsPage.SCHEDULE -> {
-                item(10, Material.LEVER, "schedule-enabled", d.values["schedule.enabled"] ?: false)
-                item(11, Material.COMPASS, "timezone", d.values["general.timezone"] ?: "America/New_York")
-                item(12, Material.CLOCK, "rotation-times", d.values["schedule.times"] ?: emptyList<String>())
-                if (d.arenaId != null) item(14, Material.CLOCK, "arena-times", d.values["${root(d)}.schedule"] ?: emptyList<String>())
+                toggle(10, "schedule-enabled", d.values["schedule.enabled"] == true)
+                item(11, Material.COMPASS, "timezone", d.values["general.timezone"] ?: "America/New_York", prompt)
+                item(12, Material.CLOCK, "rotation-times", MenuStyle.list(d.values["schedule.times"]), prompt)
+                if (d.arenaId != null) item(14, Material.CLOCK, "arena-times", MenuStyle.list(d.values["${root(d)}.schedule"]), prompt)
                 item(16, Material.MAP, "upcoming", lore = upcoming(d).ifEmpty { listOf(text("no-upcoming")) })
             }
             StaffSettingsPage.REWARDS -> {
                 if (d.arenaId == null) return render(player, d, StaffSettingsPage.HOME)
-                item(10, Material.COMMAND_BLOCK, "fixed", d.values["${root(d)}.rewards"] ?: emptyList<String>())
-                item(11, Material.DROPPER, "chance", chanceRows(d).map { "${it["chance"]}% ${it["command"]}" })
-                item(13, Material.GOLD_NUGGET, "solo-money", moneyValue(d, "solo"))
-                item(14, Material.GOLD_BLOCK, "guild-money", moneyValue(d, "guild"))
+                item(10, Material.COMMAND_BLOCK, "fixed", MenuStyle.list(d.values["${root(d)}.rewards"]), prompt)
+                item(11, Material.DROPPER, "chance", MenuStyle.list(chanceRows(d).map { "${it["chance"]}% ${it["command"]}" }), prompt)
+                item(13, Material.GOLD_NUGGET, "solo-money", moneyValue(d, "solo"), prompt)
+                item(14, Material.GOLD_BLOCK, "guild-money", moneyValue(d, "guild"), prompt)
                 item(16, Material.PAPER, "reward-preview", lore = rewardPreview(d))
             }
             StaffSettingsPage.DISPLAYS -> {
                 listOf("bossbar", "actionbar", "zone-border", "hologram", "scoreboard").forEachIndexed { index, key ->
-                    item(10 + index, Material.LEVER, "display-$key", d.values["display.$key"] ?: (index < 3))
+                    toggle(10 + index, "display-$key", (d.values["display.$key"] ?: (index < 3)) == true)
                 }
-                item(19, Material.RED_DYE, "color", d.values["display.bossbar-color"] ?: "RED")
-                item(20, Material.REPEATER, "overlay", d.values["display.bossbar-overlay"] ?: "PROGRESS")
-                item(22, Material.TARGET, "capacity", d.values["events.max-concurrent"] ?: 1)
-                item(24, Material.MAP, "season", d.values["leaderboards.season-start"] ?: "-")
-                item(25, Material.PAPER, "bar-title", d.values["display.bossbar-title"] ?: "-")
+                val cycle = listOf(text("cycle-hint"))
+                item(19, Material.RED_DYE, "color", MenuStyle.label((d.values["display.bossbar-color"] ?: "RED").toString()), cycle)
+                item(20, Material.REPEATER, "overlay", MenuStyle.label((d.values["display.bossbar-overlay"] ?: "PROGRESS").toString()), cycle)
+                item(22, Material.TARGET, "capacity", d.values["events.max-concurrent"] ?: 1, listOf(text("capacity-hint")))
+                item(24, Material.MAP, "season", d.values["leaderboards.season-start"]?.toString()?.ifBlank { null } ?: "Not set", prompt)
+                item(25, Material.PAPER, "bar-title", d.values["display.bossbar-title"]?.toString()?.ifBlank { null } ?: "Default", prompt)
             }
             StaffSettingsPage.PREVIEW -> {
                 item(10, Material.CLOCK, "upcoming", lore = upcoming(d).ifEmpty { listOf(text("no-upcoming")) })
                 if (d.arenaId != null) item(12, Material.CHEST, "reward-preview", lore = rewardPreview(d))
-                item(14, Material.MAP, "audience", cfg().captureNotificationRegions.joinToString(", "), listOf(text("audience-hint")))
+                item(14, Material.MAP, "audience", cfg().captureNotificationRegions.joinToString(", ").ifBlank { "No regions (only players on the point)" }, listOf(text("audience-hint")))
                 item(16, Material.PAPER, "draft", d.changes.size, listOf(text("draft-hint")))
             }
         }
-        item(45, Material.BARRIER, "cancel"); item(47, Material.WOODEN_AXE, "area-setup"); item(48, Material.ARROW, "back"); item(49, Material.EMERALD, "save")
+        item(45, Material.BARRIER, "cancel", lore = listOf(text("cancel-hint")))
+        item(47, Material.GRASS_BLOCK, "area-setup", lore = listOf(text("area-setup-hint")))
+        if (page != StaffSettingsPage.HOME) item(48, Material.ARROW, "back", lore = listOf(text("back-hint")))
+        item(49, Material.EMERALD, "save", lore = listOf(MenuStyle.line("Unsaved changes", d.changes.size), text("save-hint")))
+        MenuStyle.fill(inv)
         player.openInventory(inv)
     }
     private fun moneyValue(d: StaffSettingsDraft, mode: String): Any {
@@ -226,11 +234,13 @@ class StaffSettingsController(
         }, 1200L)
     }
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true) fun chat(event: AsyncChatEvent) {
-        val request = prompts[event.player.uniqueId] ?: return
-        event.isCancelled = true
-        val raw = PlainTextComponentSerializer.plainText().serialize(event.message()).trim()
+        if (answer(event.player, PlainTextComponentSerializer.plainText().serialize(event.message()))) event.isCancelled = true
+    }
+    /** A reply to a pending settings prompt, from /ekoth reply or plain chat. Returns false when nothing is waiting. */
+    fun answer(player: Player, text: String): Boolean {
+        val request = prompts[player.uniqueId] ?: return false
+        val raw = text.trim()
         plugin.server.scheduler.runTask(plugin, Runnable {
-            val player = event.player
             if (!prompts.remove(player.uniqueId, request) || !player.isOnline || !allowed(player) || drafts[player.uniqueId] !== request.draft) return@Runnable
             guard(player) {
                 val d = request.draft
@@ -258,5 +268,6 @@ class StaffSettingsController(
                 render(player, d, request.page)
             }
         })
+        return true
     }
 }

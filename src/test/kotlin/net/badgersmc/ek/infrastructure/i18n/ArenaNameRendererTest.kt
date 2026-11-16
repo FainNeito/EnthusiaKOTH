@@ -23,7 +23,7 @@ class ArenaNameRendererTest {
             override val dataFolder = directory.toFile()
             override val resourceClassLoader = KothLang::class.java.classLoader
         }
-        return LangService(host, Locale("en_US"), KothLang::class.java).also { it.reload() }
+        return LangService(host, Locale("en_US"), KothLang::class.java).also { it.reload(); it.registerKothTags() }
     }
     private fun leaves(component: Component, parent: Style = Style.empty()): List<Pair<String, Style>> {
         val inherited = component.style().merge(parent, Style.Merge.Strategy.IF_ABSENT_ON_TARGET)
@@ -40,12 +40,17 @@ class ArenaNameRendererTest {
         }
         assertEquals("Crête & Summit 🏆", plain.serialize("Crête & Summit 🏆".arenaComponent()))
     }
+    @Test fun `error lines use the configurable error prefix in crimson`() {
+        val result = lang().msg("command.error.no_permission")
+        assertEquals("[KOTH] You don't have permission.", plain.serialize(result))
+        assertEquals(TextColor.color(0xC0261D), leaves(result).first { it.first.startsWith("[") }.second.color())
+    }
     @Test fun `actual Nexus templates preserve prefix and scope arena styling`() {
         val service = lang()
         service.registerGlobalResolver("entered", Placeholder.parsed("entered", "<aqua>FainNoir"))
         val result = service.arenaMsg("koth.enter", "koth_name" to "&#12ABEF&lSummit 🏆".arenaComponent(), "captime" to "3m")
         assertTrue(plain.serialize(result).contains("FainNoir entered the Summit 🏆 KOTH! Cap in 3m!"))
-        assertTrue(plain.serialize(result).contains("Koth"))
+        assertTrue(plain.serialize(result).startsWith("[KOTH] FainNoir"))
         val rendered = leaves(result)
         val name = rendered.first { it.first.contains("Summit") }.second
         val after = rendered.first { it.first.contains("KOTH!") }.second
@@ -61,7 +66,8 @@ class ArenaNameRendererTest {
         assertFalse(plain.serialize(result).contains("TextComponent"))
         val rendered = leaves(result)
         assertEquals(TextColor.color(0xFF5555), rendered.first { it.first.contains("Summit") }.second.color())
-        assertEquals(TextColor.color(0xAAAAAA), rendered.first { it.first.contains("1m 45s") }.second.color())
+        // The time keeps the studio gold from the bossbar template rather than inheriting the arena name colour.
+        assertEquals(TextColor.color(0xFFCF1F), rendered.first { it.first.contains("1m 45s") }.second.color())
     }
     @Test fun `scheduled warning renders a formatted name using the real language service`() {
         val result = lang().arenaMsg("koth.warning_minutes", "koth_name" to "&#FFAA00Summit 🏆".arenaComponent(), "minutes" to "5")

@@ -112,7 +112,8 @@ class ArenaSetupControllerTest {
         val retained = field.get(ui) as MutableMap<UUID, ArenaSetupDraft>
         retained[id] = draft
         val before = draft.arena
-        for ((page, hidden) in listOf(ArenaSetupPage.AREA to 14, ArenaSetupPage.REVIEW to 23, ArenaSetupPage.RULES to 10, ArenaSetupPage.REVIEW to 13, ArenaSetupPage.RULES to 13)) {
+        // Each slot is a control on another page (or Mode, which only a new arena may change), so it must do nothing here.
+        for ((page, hidden) in listOf(ArenaSetupPage.AREA to 25, ArenaSetupPage.REVIEW to 25, ArenaSetupPage.RULES to 22, ArenaSetupPage.REVIEW to 8, ArenaSetupPage.RULES to 8, ArenaSetupPage.REVIEW to 19)) {
             val holder = ArenaSetupHolder(id, draft, editorPage = page)
             val top = mockk<Inventory>(relaxed = true)
             val event = mockk<InventoryClickEvent>(relaxed = true)
@@ -147,7 +148,7 @@ class ArenaSetupControllerTest {
         every { click.view.topInventory } returns top
         every { click.clickedInventory } returns top
         every { click.whoClicked } returns player
-        every { click.rawSlot } returns 13
+        every { click.rawSlot } returns 8
         every { plugin.server.scheduler.runTask(plugin, any<Runnable>()) } answers { secondArg<Runnable>().run(); mockk(relaxed = true) }
         ui.click(click)
         verify { player.closeInventory() }

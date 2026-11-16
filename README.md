@@ -118,7 +118,7 @@ The bundled current implementation uses a custom named redstone-torch item by de
 
 ### Capture KOTH
 
-A standard capture-zone KOTH. Players/guilds fight for control of a fixed circular objective.
+A standard capture-zone KOTH. Players/guilds fight for control of a fixed square objective.
 
 Important configurable behavior includes:
 
@@ -167,7 +167,7 @@ Maces support a configurable mace policy rather than only a simple boolean. The 
 
 Each KOTH arena can bind directly to a named WorldGuard region with `worldguard-region`. When a binding is present, the WorldGuard region geometry is authoritative for permanent KOTH arena protection; the legacy `protected-region` cuboid remains as a backward-compatible fallback for arenas that are not yet bound.
 
-The capture objective is independent of the arena boundary. `center` selects the objective center and `radius` is a true horizontal circular radius.
+The capture objective is independent of the arena boundary. `center` selects the objective center and `radius` is how far the square objective reaches from it in each direction (radius 5 is a 10 x 10 square). A faint gold outline marks its edges while the KOTH runs.
 
 Staff can create and configure arena geometry and basic rules entirely in game:
 
