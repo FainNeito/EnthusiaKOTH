@@ -5,12 +5,12 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 class CaptureSoundPolicyTest {
-    @Test fun `only controller transitions produce a cue`() {
-        assertEquals(CaptureCue.CAPTURE, CaptureSoundPolicy.transition(null, "solo:a"))
-        assertNull(CaptureSoundPolicy.transition("solo:a", "solo:a"))
-        assertEquals(CaptureCue.LOST, CaptureSoundPolicy.transition("solo:a", null))
-        assertEquals(CaptureCue.CAPTURE, CaptureSoundPolicy.transition("solo:a", "guild:b"))
-        assertNull(CaptureSoundPolicy.transition(null, null))
+    @Test fun `a change of holder is a loss for the old one and a capture for the new one`() {
+        assertNull(CaptureSoundPolicy.lostBy(null, "solo:a")); assertEquals("solo:a", CaptureSoundPolicy.capturedBy(null, "solo:a"))
+        assertNull(CaptureSoundPolicy.lostBy("solo:a", "solo:a")); assertNull(CaptureSoundPolicy.capturedBy("solo:a", "solo:a"))
+        assertEquals("solo:a", CaptureSoundPolicy.lostBy("solo:a", null)); assertNull(CaptureSoundPolicy.capturedBy("solo:a", null))
+        assertEquals("solo:a", CaptureSoundPolicy.lostBy("solo:a", "guild:b")); assertEquals("guild:b", CaptureSoundPolicy.capturedBy("solo:a", "guild:b"))
+        assertNull(CaptureSoundPolicy.lostBy<String>(null, null)); assertNull(CaptureSoundPolicy.capturedBy<String>(null, null))
     }
     @Test fun `cooldown applies to an event independently and cleans up`() {
         val limiter = CaptureSoundLimiter(); val a = UUID.randomUUID(); val b = UUID.randomUUID()

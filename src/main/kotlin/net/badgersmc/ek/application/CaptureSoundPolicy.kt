@@ -5,13 +5,6 @@ import java.util.UUID
 enum class CaptureCue { CAPTURE, LOST, WIN }
 
 object CaptureSoundPolicy {
-    fun transition(previous: Any?, current: Any?): CaptureCue? = when {
-        previous == current -> null
-        current != null -> CaptureCue.CAPTURE
-        previous != null -> CaptureCue.LOST
-        else -> null
-    }
-
     /** The holder that lost the point this tick, whether it went empty, contested or straight to another holder. */
     fun <T : Any> lostBy(previous: T?, current: T?): T? = previous?.takeIf { it != current }
 

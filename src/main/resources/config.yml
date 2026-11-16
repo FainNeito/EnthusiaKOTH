@@ -274,6 +274,7 @@ arenas:
     protected-region:
       corner-1: { x: -32.0, y: -64.0, z: -32.0 }
       corner-2: { x: 32.0, y: 320.0, z: 32.0 }
+    # The capture area is the square the outline draws: radius blocks from the centre to each side, corners included.
     radius: 5.0
     duration-seconds: 900
     capture-seconds: 120

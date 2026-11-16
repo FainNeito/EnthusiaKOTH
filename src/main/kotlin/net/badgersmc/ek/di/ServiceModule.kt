@@ -487,6 +487,12 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         clock,
     ).also { it.register() }
 
+    /** Schedule lookups for holograms, kept for 15 seconds rather than recomputed every second. */
+    private val hologramNextStart = net.badgersmc.ek.infrastructure.display.Memo<String, java.time.Instant?>(15_000) { clock.millis() }
+    private val hologramUpcoming = net.badgersmc.ek.infrastructure.display.Memo<Int, List<net.badgersmc.ek.application.ScheduledOccurrence>>(15_000) { clock.millis() }
+    private val hologramBlitz = net.badgersmc.ek.infrastructure.display.Memo<Unit, List<net.badgersmc.ek.application.ScheduledOccurrence>>(15_000) { clock.millis() }
+    /** Leaderboard rows for holograms, kept for 30 seconds so the wins table is not read every second. */
+    private val hologramTop = net.badgersmc.ek.infrastructure.display.Memo<Pair<String, Int>, List<Pair<String, Int>>>(30_000) { clock.millis() }
     private val hologramRenderer = net.badgersmc.ek.infrastructure.display.HologramRenderer(
         clock = clock,
         zone = { config().schedule.zone },
@@ -501,12 +507,12 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
             } else null
             net.badgersmc.ek.infrastructure.display.LiveArena(kothService.capperName(event), event.endsAt, percent)
         },
-        nextStart = { id -> scheduleService.nextStartFor(id)?.instant },
-        upcoming = { count -> scheduleService.previewUpcoming(config(), arenas(), count) },
-        nextBlitz = { scheduleService.nextBlitz() },
+        nextStart = { id -> hologramNextStart.get(id) { scheduleService.nextStartFor(id)?.instant } },
+        upcoming = { count -> hologramUpcoming.get(count) { scheduleService.previewUpcoming(config(), arenas(), count) } },
+        nextBlitz = { hologramBlitz.get(Unit) { scheduleService.nextBlitz() } },
         blitzRoundSeconds = { config().schedule.blitz.roundSeconds },
         occurrenceLive = kothService::isOccurrenceLive,
-        top = { prefix, count ->
+        top = { prefix, count -> hologramTop.get(prefix to count) {
             statsRepository.allWins().entries.filter { it.key.startsWith("$prefix:") }
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).take(count)
                 .map { (key, wins) ->
@@ -516,7 +522,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
                     } ?: key.substringAfter(':').take(8)
                     name to wins
                 }
-        },
+        } },
         placeholder = { key -> papiExpansion.onPlaceholderRequest(null, key) },
         custom = { line ->
             net.badgersmc.ek.infrastructure.display.customLine(line) { token ->
@@ -536,8 +542,9 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         },
         guildName = { lumaGuildsAdapter.guildName(it) },
         guildBanner = { lumaGuildsAdapter.guildBanner(it) },
+        buildBanners = { arenaId -> arenaBuildService.bannerPositions(arenaId) },
     ).also { plugin.server.pluginManager.registerEvents(it, plugin) }
-    val arenaBuildService = net.badgersmc.ek.infrastructure.bukkit.ArenaBuildService(
+    val arenaBuildService: net.badgersmc.ek.infrastructure.bukkit.ArenaBuildService = net.badgersmc.ek.infrastructure.bukkit.ArenaBuildService(
         plugin = plugin,
         store = net.badgersmc.ek.application.ArenaBuildStore(File(plugin.dataFolder, "arena-builds")),
         arenas = { arenas() },
