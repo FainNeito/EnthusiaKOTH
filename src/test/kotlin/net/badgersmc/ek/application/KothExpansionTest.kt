@@ -83,13 +83,13 @@ class KothExpansionTest {
         s.activeEvent!!.scores[TeamId(TeamMode.GUILD, UUID.randomUUID())] = 2.0
         now = now.plusSeconds(60); s.tick(); assertNull(messages.last().snapshot.winner)
         verify(exactly = 0) { stats.recordTimedWin(any(), any(), any(), any()) }
-        verify(exactly = 1) { discord.sendNoWinner(any(), "a") }
+        verify(exactly = 1) { discord.sendNoWinner(any(), "A") }
         verify(exactly = 0) { discord.sendCapture(any(), any(), any(), any()) }
     }
     @Test fun `public cancellation sends terminal webhook while private events send none`() {
         val s = service(); s.startEvent(arena("a")); val id = s.activeEvent!!.id
         assertTrue(s.forceEnd(announce = false))
-        verify(exactly = 1) { discord.sendCancelled(id, "a", "Stopped by staff") }
+        verify(exactly = 1) { discord.sendCancelled(id, "A", "Stopped by staff") }
         clearMocks(discord)
         s.startPrivateTest(arena("p"), UUID.randomUUID(), EnthusiaKothConfig(), TeamMode.SOLO, PrivateTestAccess.OWNER_ONLY, false)
         s.forceEnd(announce = false)

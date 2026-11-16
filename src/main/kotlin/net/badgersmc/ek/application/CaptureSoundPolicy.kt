@@ -11,6 +11,12 @@ object CaptureSoundPolicy {
         previous != null -> CaptureCue.LOST
         else -> null
     }
+
+    /** The holder that lost the point this tick, whether it went empty, contested or straight to another holder. */
+    fun <T : Any> lostBy(previous: T?, current: T?): T? = previous?.takeIf { it != current }
+
+    /** The holder that took the point this tick, from nobody or from another holder. */
+    fun <T : Any> capturedBy(previous: T?, current: T?): T? = current?.takeIf { it != previous }
 }
 
 /** Event-scoped throttle; a backwards clock never accelerates the next allowed cue. */

@@ -241,4 +241,43 @@ class KothFairnessIntegrationTest {
         service.tick()
         verify(exactly = 0) { Bukkit.dispatchCommand(any(), any()) }
     }
+
+    private val lostNote = Triple("minecraft:block.note_block.bass", 0.35f, 0.8f)
+    private fun heardLost(player: Player, times: Int) = verify(exactly = times) {
+        player.playSound(any<org.bukkit.Location>(), lostNote.first, org.bukkit.SoundCategory.PLAYERS, lostNote.second, lostNote.third)
+    }
+    private fun idleCanCapture() {
+        every { idle.isValid } returns true
+        every { idle.isDead } returns false
+        every { idle.gameMode } returns GameMode.SURVIVAL
+        every { Bukkit.getOfflinePlayer(any<UUID>()) } returns mockk(relaxed = true)
+    }
+
+    @Test fun `a capture holder who steps off hears the lost note once`() {
+        val service = service()
+        assertTrue(service.startEvent(arena().copy(captureSeconds = 31), teamMode = TeamMode.GUILD))
+        service.tick()
+        every { zone.contains(capper.location) } returns false
+        service.tick(); service.tick()
+        heardLost(capper, 1)
+    }
+
+    @Test fun `every arena type plays the lost note when a holder is pushed straight off by another`() {
+        // Moving shares this path but needs a loaded world to place its point, which this harness has not got.
+        listOf("conquest", "score", "capture").forEach { family ->
+            clearMocks(capper, idle, answers = false, recordedCalls = true, childMocks = false, verificationMarks = true, exclusionRules = false)
+            idleCanCapture()
+            every { zone.contains(capper.location) } returns true
+            every { zone.contains(idle.location) } returns false
+            val service = service()
+            val arena = KothArena(family, family, zone, durationSeconds = 600, captureSeconds = 300, contestWhenMultipleCappers = false)
+            assertTrue(service.startEvent(arena, teamMode = TeamMode.SOLO), family)
+            service.tick()
+            heardLost(capper, 0)
+            every { zone.contains(capper.location) } returns false
+            every { zone.contains(idle.location) } returns true
+            service.tick()
+            heardLost(capper, 1)
+        }
+    }
 }
