@@ -28,7 +28,7 @@ Ordinary player-facing subcommands implemented by the plugin include:
 
 - `/ekoth gui` — open the KOTH selection/status GUI.
 - `/ekoth schedule` — show scheduled KOTH times when scheduling is enabled.
-- `/ekoth top [page]` — show KOTH wins leaderboard pages.
+- `/ekoth leaderboard [period] [page]` (alias `top`) — open the KOTH leaderboard dialog; the console gets the chat list.
 - `/ekoth stats [player]` — show KOTH win statistics.
 - `/ekoth notifications` — toggle public KOTH messages, warnings and passive displays; saved in player data. `/ekoth messages` is an alias.
 - `/ekoth start <arena> [basic|advanced] [solo|guild]` — request a manual KOTH start when the arena/start mode is available.
@@ -229,7 +229,7 @@ The current live snapshot has KOTH reward money values at 0 and no enabled arena
 
 ## Statistics and leaderboards
 
-KOTH wins are stored in SQLite-backed statistics storage. `/ekoth top` pages through ranked wins and `/ekoth stats` exposes individual win totals. The code also contains migration support for older YAML statistics.
+KOTH wins are stored in SQLite-backed statistics storage. `/ekoth leaderboard` pages through ranked wins and `/ekoth stats` exposes individual win totals. The code also contains migration support for older YAML statistics.
 
 PlaceholderAPI integration exposes KOTH state/stat information for other server displays.
 Formatted arena labels and capture progress/countdowns are documented in [display-placeholders.md](docs/display-placeholders.md). Existing ID and event-timer placeholders retain their meanings.
@@ -289,7 +289,7 @@ Increasing it allows separate nonoverlapping public arenas; private tests remain
 exclusive. Unresolvable WorldGuard geometry blocks concurrency. With multiple
 events, `/ekoth stop <arena>` must identify the event.
 
-`/ekoth top [lifetime|daily|weekly|season] [page]` uses timestamped wins for new
+`/ekoth leaderboard [lifetime|daily|weekly|season] [page]` uses timestamped wins for new
 period views, in the configured schedule timezone. Weeks start Monday. Set
 `leaderboards.season-start` to an ISO date to enable season results. Legacy wins
 remain lifetime-only. Optional `display.hologram` and `display.sidebar` default

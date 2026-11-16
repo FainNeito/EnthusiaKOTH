@@ -13,7 +13,8 @@ command:
     header: "<error_prefix><shadow:#000000:1><color:#c0261d><bold>EnthusiaKOTH</bold> <color:#bfae98>Commands"
     gui: "<prefix><color:#fff6e0>/ekoth gui <color:#fff6e0>- Open KOTH GUI"
     schedule: "<prefix><color:#fff6e0>/ekoth schedule <color:#fff6e0>- Show KOTH schedule"
-    top: "<prefix><color:#fff6e0>/ekoth top [page] <color:#fff6e0>- KOTH leaderboard"
+    blitz: "<prefix><color:#fff6e0>/ekoth blitz <color:#fff6e0>- Show the next weekend blitz"
+    top: "<prefix><color:#fff6e0>/ekoth leaderboard [period] [page] <color:#fff6e0>- KOTH leaderboard"
     stats: "<prefix><color:#fff6e0>/ekoth stats [player] <color:#fff6e0>- Your KOTH stats"
     start: "<error_prefix><color:#ffd0c6>/ekoth start <arena> [solo|guild] [basic|advanced] <color:#ffd0c6>- Start a KOTH"
     stop: "<error_prefix><color:#ffd0c6>/ekoth stop <color:#ffd0c6>- Force-end active KOTH"
@@ -69,6 +70,13 @@ command:
     time_left: "<shadow:#000000:1><color:#fff6e0>  Time left: <color:#ffcf1f><time>"
     next_scheduled: "<shadow:#000000:1><color:#fff6e0>Next scheduled: <color:#ffcf1f><time>"
 
+  blitz:
+    none: "<prefix><color:#fff6e0>No KOTH blitz is scheduled this week."
+    header: "<shadow:#000000:1><color:#fff6e0><strikethrough>-----</strikethrough><color:#ffcf1f><bold>KOTH Blitz</bold><color:#fff6e0><strikethrough>-----</strikethrough>"
+    summary: "<color:#fff6e0><day> at <color:#ffcf1f><time></color> <color:#bfae98>(<zone>)</color>: <color:#ffcf1f><rounds></color> rounds of <color:#ffcf1f><length></color>, capture in <color:#ffcf1f><capture></color>."
+    round_upcoming: "<color:#bfae98>Round <round></color> <color:#ffcf1f><arena></color> <color:#fff6e0>at <time>"
+    round_live: "<color:#ffcf1f><bold>Round <round></bold></color> <color:#ffcf1f><arena></color> <color:#fff6e0>live now"
+    round_done: "<color:#bfae98>Round <round> <arena> <color:#bfae98>finished"
   schedule:
     header: "<shadow:#000000:1><color:#fff6e0><strikethrough>-----</strikethrough><color:#ffcf1f><bold>KOTH Schedule</bold><color:#fff6e0><strikethrough>-----</strikethrough>"
     time_now: "<shadow:#000000:1><color:#ff8f82>Time Now: <color:#ffcf1f><time>"
@@ -150,6 +158,25 @@ koth:
     held: "<color:#ff8f82><capper> still holds <color:#ffcf1f><koth_name></color><color:#ff8f82>. <color:#fff6e0>Stay on the point to take it."
     starting: "<color:#fff6e0>You are on the <color:#ffcf1f><koth_name></color> <color:#fff6e0>point."
   reminder: "<prefix><color:#fff6e0>Reminder that the <color:#ffcf1f><koth_name><color:#fff6e0> KOTH is still active! <capper> <color:#bfae98>(<time_left>)</color> is currently capturing."
+
+hologram:
+  usage: "<prefix><color:#fff6e0>Use <color:#ffcf1f>/ekoth hologram create <name> <type> [arena]</color>, <color:#ffcf1f>move <name></color>, <color:#ffcf1f>remove <name></color> or <color:#ffcf1f>list</color>. Types: arena, schedule, blitz, top-players, top-guilds, placeholders, custom."
+  bad_name: "<error_prefix><color:#ffd0c6>Hologram names use letters, numbers, - and _ (up to 32)."
+  needs_arena: "<error_prefix><color:#ffd0c6>Arena holograms need an arena: /ekoth hologram create <name> arena <arena>."
+  created: "<prefix><color:#fff6e0>Placed the <color:#ffcf1f><type></color> hologram <color:#ffcf1f><name></color> above you."
+  exists: "<error_prefix><color:#ffd0c6>A hologram called <name> already exists. Move or remove it first."
+  moved: "<prefix><color:#fff6e0>Moved hologram <color:#ffcf1f><name></color> above you."
+  removed: "<prefix><color:#fff6e0>Removed hologram <color:#ffcf1f><name></color>."
+  unknown: "<error_prefix><color:#ffd0c6>There is no hologram called <name>. See /ekoth hologram list."
+  save_failed: "<error_prefix><color:#ffd0c6>Nothing changed: holograms.yml could not be saved. Check the server log."
+  file_unreadable: "<error_prefix><color:#ffd0c6>Nothing changed: holograms.yml has an error. Fix it, then run /ekoth reload."
+  none: "<prefix><color:#fff6e0>No holograms are placed yet. Stand where one should go and use /ekoth hologram create."
+  list_header: "<prefix><color:#fff6e0><color:#ffcf1f><count></color> placed holograms:"
+  list_entry: "<color:#ffcf1f><name></color> <color:#bfae98><type></color> <color:#fff6e0><where>"
+
+blitz:
+  round: "<prefix><color:#fff6e0>Blitz round <color:#ffcf1f><round></color> of <rounds> at <color:#ffcf1f><arena><color:#fff6e0>. Next up: <color:#ffcf1f><next><color:#fff6e0> in <color:#ffcf1f><time><color:#fff6e0>."
+  final_round: "<prefix><color:#fff6e0>Final blitz round, <rounds> of <rounds>, at <color:#ffcf1f><arena><color:#fff6e0>. Make it count."
 
 protection:
   no_break: "<shadow:#000000:1><color:#ff8f82>You cannot break blocks inside the active KOTH zone!"

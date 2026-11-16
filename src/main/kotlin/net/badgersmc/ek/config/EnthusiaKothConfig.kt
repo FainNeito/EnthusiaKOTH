@@ -51,7 +51,25 @@ data class FairnessConfig(
 )
 
 data class ManualStartConfig(val enabled: Boolean = true, val basicCost: Double = 0.0, val advancedCost: Double = 0.0, val delaySeconds: Int = 0)
-data class ScheduleConfig(val enabled: Boolean = false, val zone: ZoneId = ZoneId.of("America/New_York"), val preStartWarningSeconds: Int = 300, val times: List<String> = listOf("00:00", "08:00", "16:00"))
+data class ScheduleConfig(val enabled: Boolean = false, val zone: ZoneId = ZoneId.of("America/New_York"), val preStartWarningSeconds: Int = 300, val times: List<String> = listOf("00:00", "08:00", "16:00"), val blitz: BlitzConfig = BlitzConfig())
+
+/**
+ * A blitz chains short KOTH rounds back to back, each in a different arena, starting at fixed times on chosen days.
+ * Round slots are fixed in advance (start + round index x (round + break)), so every round is a durable scheduled occurrence.
+ */
+data class BlitzConfig(
+    val enabled: Boolean = false,
+    val days: Set<java.time.DayOfWeek> = setOf(java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY),
+    val startTimes: List<String> = listOf("18:00"),
+    val rounds: Int = 4,
+    val roundSeconds: Int = 300,
+    val captureSeconds: Int = 60,
+    val breakSeconds: Int = 60,
+    /** Arena IDs in rotation order; empty uses every enabled arena. */
+    val arenas: List<String> = emptyList(),
+) {
+    val slotSeconds: Long get() = roundSeconds.toLong() + breakSeconds.toLong()
+}
 data class FlareConfig(val enabled: Boolean = true, val item: FlareItemConfig = FlareItemConfig())
 data class FlareItemConfig(val material: String = "REDSTONE_TORCH", val name: String = "&c{KOTH} Koth Flare", val lore: List<String> = listOf("&7Right-Click to start a &c{KOTH} &7koth!"))
 data class ProgressBarConfig(val enabled: Boolean = true, val length: Int = 10, val character: String = "|")
@@ -95,7 +113,7 @@ data class DiscordConfig(
     val embeds: Map<DiscordMessageType, DiscordEmbedTemplate> = DiscordEmbedDefaults.templates,
     val startRoleId: String = "",
 )
-data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
+data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val movingFloor: Boolean = true, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
 data class FamilyRulesConfig(val rules: Map<String, RuleSet> = emptyMap())
 data class PrivateTestingConfig(val lobbySeconds: Int = 0, val quickMatchDurationSeconds: Int = 120, val quickCaptureSeconds: Int = 15, val showObjectiveParticles: Boolean = true)
 data class LockConfig(val state: LockState = LockState.UNLOCKED)

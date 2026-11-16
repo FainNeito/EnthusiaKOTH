@@ -133,6 +133,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         progressionClaims.clearReadiness()
         registerArenaIdentities()
         langService.reload()
+        hologramService.reload()
         kothService.processQueue()
     }
 
@@ -297,7 +298,22 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         toggleNotifications = notificationPreferences::toggle,
         captureAudience = ::captureAudience,
         scheduleSound = { delay, task -> plugin.server.scheduler.runTaskLater(plugin, Runnable { task() }, delay) },
+        blitzRoundStarted = { round, event -> announceBlitzRound(round, event) },
     )
+
+    /** Names the round and, unless it is the last, where and when the chain moves next. */
+    private fun announceBlitzRound(round: net.badgersmc.ek.application.BlitzRound, event: net.badgersmc.ek.domain.KothEvent) {
+        if (event.isPrivateTest) return
+        val arena = event.arena.name.arenaComponent()
+        val next = scheduleService.blitzRounds(round).getOrNull(round.round)
+        val message = if (round.isLast || next == null) langService.arenaMsg("blitz.final_round", "arena" to arena, "rounds" to round.rounds.toString())
+        else langService.arenaMsg("blitz.round", "arena" to arena, "round" to round.round.toString(), "rounds" to round.rounds.toString(),
+            "next" to (arenas()[next.arenaId]?.name ?: next.arenaId).arenaComponent(),
+            "time" to formatSeconds(java.time.Duration.between(clock.instant(), next.instant).seconds.coerceAtLeast(0)))
+        Bukkit.getOnlinePlayers().filter(notificationPreferences::enabled).forEach { it.sendMessage(message) }
+    }
+
+    private fun formatSeconds(total: Long): String = if (total >= 60) "${total / 60}m ${total % 60}s" else "${total}s"
     val startService = StartService(
         config = { config() },
         pluginReady = { plugin.isEnabled },
@@ -438,6 +454,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         setup = arenaSetupController,
         settings = staffSettingsController,
         progression = progressionController,
+        holograms = { hologramService },
     ).also(::registerCommand)
     val kothListeners = KothListeners(
         cfgLoader = { config() },
@@ -465,6 +482,46 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         { arenas() },
         clock,
     ).also { it.register() }
+
+    private val hologramRenderer = net.badgersmc.ek.infrastructure.display.HologramRenderer(
+        clock = clock,
+        zone = { config().schedule.zone },
+        arenaIds = { arenas().keys },
+        arenaName = { id -> (arenas()[id]?.name ?: id).arenaComponent() },
+        arenaFamily = { id -> arenas()[id]?.family },
+        live = live@ { id ->
+            val event = kothService.eventForArena(id)?.takeIf { !it.isPrivateTest && it.state == net.badgersmc.ek.domain.EventState.ACTIVE } ?: return@live null
+            val controller = event.currentController
+            val percent = if (event.arena.family.equals("capture", true)) {
+                ((controller?.let { event.scores[it] } ?: 0.0) / event.arena.captureSeconds.coerceAtLeast(1) * 100.0).coerceIn(0.0, 100.0)
+            } else null
+            net.badgersmc.ek.infrastructure.display.LiveArena(kothService.capperName(event), event.endsAt, percent)
+        },
+        nextStart = { id -> scheduleService.nextStartFor(id)?.instant },
+        upcoming = { count -> scheduleService.previewUpcoming(config(), arenas(), count) },
+        nextBlitz = { scheduleService.nextBlitz() },
+        blitzRoundSeconds = { config().schedule.blitz.roundSeconds },
+        occurrenceLive = kothService::isOccurrenceLive,
+        top = { prefix, count ->
+            statsRepository.allWins().entries.filter { it.key.startsWith("$prefix:") }
+                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).take(count)
+                .map { (key, wins) ->
+                    val id = runCatching { java.util.UUID.fromString(key.substringAfter(':')) }.getOrNull()
+                    val name = statsRepository.displayName(key) ?: id?.let {
+                        if (prefix == "guild") lumaGuildsAdapter.guildName(it) else Bukkit.getOfflinePlayer(it).name
+                    } ?: key.substringAfter(':').take(8)
+                    name to wins
+                }
+        },
+        placeholder = { key -> papiExpansion.onPlaceholderRequest(null, key) },
+        custom = { line ->
+            net.badgersmc.ek.infrastructure.display.customLine(line) { token ->
+                if (!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) null
+                else runCatching { me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(null as org.bukkit.OfflinePlayer?, token) }.getOrNull()
+            }
+        },
+    )
+    val hologramService = net.badgersmc.ek.infrastructure.display.KothHologramService(plugin, hologramRenderer::render).also { it.start() }
 
     init {
         registerArenaIdentities()
@@ -572,6 +629,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
     }
 
     fun shutdown() {
+        hologramService.shutdown()
         arenaSetupController.shutdown()
         staffSettingsController.shutdown()
         scheduleService.flush()

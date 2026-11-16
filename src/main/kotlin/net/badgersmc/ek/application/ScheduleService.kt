@@ -71,8 +71,9 @@ class ScheduleService(
         val warningHorizon = maxOf(warningSeconds.toLong(), discordWarningSeconds)
         val occurrences = occurrencesBetween(from, now.plusSeconds(warningHorizon), cfg)
 
+        val warned = occurrences.filter { BlitzRound.parse(it.id)?.isFirst != false }
         if (warningSeconds > 0) {
-            occurrences.forEach { occurrence ->
+            warned.forEach { occurrence ->
                 val warningAt = occurrence.instant.minusSeconds(warningSeconds.toLong())
                 if (warningAt.isAfter(from) && !warningAt.isAfter(now)) {
                     val claim = "warning:${occurrence.id}"
@@ -87,7 +88,7 @@ class ScheduleService(
         }
 
         if (discordWarningSeconds > 0) {
-            occurrences.forEach { occurrence ->
+            warned.forEach { occurrence ->
                 val warningAt = occurrence.instant.minusSeconds(discordWarningSeconds)
                 if (warningAt.isAfter(from) && !warningAt.isAfter(now)) {
                     val claim = "discord-warning:${occurrence.id}:$discordMinutes"
@@ -226,27 +227,40 @@ class ScheduleService(
         val result = mutableListOf<ScheduledOccurrence>()
         addArenaOccurrences(date, cfg.schedule.zone, result)
         addLegacyOccurrences(date, cfg.schedule.zone, cfg, result)
+        addBlitzOccurrences(date, cfg.schedule.zone, cfg, result)
         return result.sortedWith(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id })
     }
 
     internal fun nextOccurrenceAfter(now: Instant): ScheduledOccurrence? {
         val cfg = cfgLoader()
         if (!cfg.schedule.enabled) return null
-        return occurrencesBetween(now, now.plus(Duration.ofDays(2)), cfg)
+        fun firstWithin(days: Long) = occurrencesBetween(now, now.plus(Duration.ofDays(days)), cfg)
             .filter { it.instant.isAfter(now) }
+            .minWithOrNull(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id })
+        return firstWithin(2) ?: if (cfg.schedule.blitz.enabled) firstWithin(8) else null
+    }
+
+    /** The next start in one arena, from the full schedule so rotations stay as they really run. */
+    fun nextStartFor(arenaId: String): ScheduledOccurrence? {
+        val now = clock.instant()
+        return occurrencesBetween(now, now.plus(Duration.ofDays(8)))
+            .filter { it.arenaId == arenaId && it.instant.isAfter(now) }
             .minWithOrNull(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id })
     }
 
     internal fun occurrencesBetween(from: Instant, to: Instant, cfg: EnthusiaKothConfig = cfgLoader(), candidates: Map<String, KothArena> = arenas()): List<ScheduledOccurrence> {
         if (!cfg.schedule.enabled || to.isBefore(from)) return emptyList()
         val zone = cfg.schedule.zone
-        val startDate = from.atZone(zone).toLocalDate().minusDays(1)
+        val blitz = cfg.schedule.blitz
+        val blitzSpanDays = if (blitz.enabled) (blitz.rounds.toLong() * blitz.slotSeconds + 86_399) / 86_400 else 0L
+        val startDate = from.atZone(zone).toLocalDate().minusDays(1 + blitzSpanDays)
         val endDate = to.atZone(zone).toLocalDate().plusDays(1)
         val result = mutableListOf<ScheduledOccurrence>()
         var date = startDate
         while (!date.isAfter(endDate)) {
             addArenaOccurrences(date, zone, result, candidates.values)
             addLegacyOccurrences(date, zone, cfg, result, candidates.values)
+            addBlitzOccurrences(date, zone, cfg, result, candidates.values)
             date = date.plusDays(1)
         }
         val warningSeconds = maxOf(
@@ -296,6 +310,49 @@ class ScheduleService(
                 teamMode = scheduledTeamMode(arena, date, index, configured),
             )
         }
+    }
+
+    private fun addBlitzOccurrences(
+        date: LocalDate,
+        zone: ZoneId,
+        cfg: EnthusiaKothConfig,
+        result: MutableList<ScheduledOccurrence>,
+        candidates: Collection<KothArena> = arenas().values,
+    ) {
+        val blitz = cfg.schedule.blitz
+        if (!blitz.enabled || date.dayOfWeek !in blitz.days) return
+        blitz.startTimes.forEachIndexed { index, configured ->
+            val time = parseOrLog("blitz:$index", configured) ?: return@forEachIndexed
+            val order = BlitzRound.rotation(blitz, candidates, date, index)
+            if (order.isEmpty()) return@forEachIndexed
+            val first = ZonedDateTime.of(date, time, zone).toInstant()
+            repeat(blitz.rounds) { offset ->
+                val arena = order[offset % order.size]
+                val instant = first.plusSeconds(offset * blitz.slotSeconds)
+                val round = BlitzRound(date, index, time, offset + 1, blitz.rounds, arena.id)
+                result += ScheduledOccurrence(
+                    id = BlitzRound.id(round, instant.toEpochMilli()),
+                    arenaId = arena.id,
+                    instant = instant,
+                    teamMode = scheduledTeamMode(arena, date, offset, "blitz:$configured"),
+                )
+            }
+        }
+    }
+
+    /** The scheduled rounds of the blitz [round] belongs to, in order. */
+    fun blitzRounds(round: BlitzRound): List<ScheduledOccurrence> =
+        occurrencesForDate(round.date).filter { BlitzRound.parse(it.id)?.let { it.startIndex == round.startIndex } == true }
+
+    /** The next blitz that has not finished: its rounds in order, or empty when none is scheduled within a week. */
+    fun nextBlitz(): List<ScheduledOccurrence> {
+        val now = clock.instant()
+        val cfg = cfgLoader()
+        if (!cfg.schedule.enabled || !cfg.schedule.blitz.enabled) return emptyList()
+        val upcoming = occurrencesBetween(now.minusSeconds(cfg.schedule.blitz.slotSeconds), now.plus(Duration.ofDays(8)), cfg)
+            .filter { BlitzRound.parse(it.id) != null && it.instant.plusSeconds(cfg.schedule.blitz.roundSeconds.toLong()).isAfter(now) }
+            .minWithOrNull(compareBy<ScheduledOccurrence> { it.instant }.thenBy { it.id }) ?: return emptyList()
+        return blitzRounds(BlitzRound.parse(upcoming.id)!!)
     }
 
     private fun scheduledTeamMode(arena: KothArena, date: LocalDate, index: Int, configured: String): TeamMode {

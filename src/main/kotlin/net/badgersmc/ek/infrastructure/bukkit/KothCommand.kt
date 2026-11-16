@@ -74,7 +74,72 @@ class KothCommand(
     private val setup: ArenaSetupController? = null,
     private val settings: StaffSettingsController? = null,
     private val progression: ProgressionController? = null,
+    private val holograms: () -> net.badgersmc.ek.infrastructure.display.KothHologramService? = { null },
 ) : CommandExecutor, TabCompleter {
+
+    /** /ekoth hologram create <name> <type> [arena] | move <name> | remove <name> | list, or null when the line is not a hologram command. */
+    internal fun hologramTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
+        if (args.getOrNull(0)?.lowercase() !in setOf("hologram", "holo") || args.size < 2) return null
+        if (!sender.hasPermission("enthusiakoth.admin")) return emptyList()
+        val action = args[1].lowercase()
+        val names = holograms()?.names().orEmpty()
+        val options = when (args.size) {
+            2 -> listOf("create", "move", "remove", "list")
+            3 -> when (action) { "move", "remove", "tp" -> names; "create" -> listOf("<name>"); else -> emptyList() }
+            4 -> if (action == "create") net.badgersmc.ek.infrastructure.display.HologramType.entries.map { it.id } else emptyList()
+            5 -> if (action == "create" && net.badgersmc.ek.infrastructure.display.HologramType.parse(args[3])?.needsArena == true) arenas().keys.sorted() else emptyList()
+            else -> emptyList()
+        }
+        return options.filter { it.startsWith(args.last(), true) }
+    }
+
+    private fun hologramReply(result: net.badgersmc.ek.infrastructure.display.HologramChange, done: String, name: String, type: String = ""): Component =
+        lang.msg(when (result) {
+            net.badgersmc.ek.infrastructure.display.HologramChange.DONE -> done
+            net.badgersmc.ek.infrastructure.display.HologramChange.EXISTS -> "hologram.exists"
+            net.badgersmc.ek.infrastructure.display.HologramChange.UNKNOWN -> "hologram.unknown"
+            net.badgersmc.ek.infrastructure.display.HologramChange.SAVE_FAILED -> "hologram.save_failed"
+            net.badgersmc.ek.infrastructure.display.HologramChange.FILE_UNREADABLE -> "hologram.file_unreadable"
+        }, "name" to name, "type" to type)
+
+    private fun hologram(sender: CommandSender, args: Array<out String>) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        val service = holograms() ?: return
+        val action = args.getOrNull(1)?.lowercase()
+        val name = args.getOrNull(2)
+        when (action) {
+            "list" -> {
+                val all = service.all()
+                if (all.isEmpty()) { sender.sendMessage(lang.msg("hologram.none")); return }
+                sender.sendMessage(lang.msg("hologram.list_header", "count" to all.size.toString()))
+                all.forEach { spec ->
+                    sender.sendMessage(lang.msg("hologram.list_entry", "name" to spec.name,
+                        "type" to (spec.type.id + (spec.arena?.let { " $it" } ?: "")),
+                        "where" to "${spec.world} ${spec.x.toInt()}, ${spec.y.toInt()}, ${spec.z.toInt()}"))
+                }
+            }
+            "create" -> {
+                if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
+                val type = net.badgersmc.ek.infrastructure.display.HologramType.parse(args.getOrNull(3))
+                if (name == null || type == null) { sender.sendMessage(lang.msg("hologram.usage")); return }
+                if (!net.badgersmc.ek.infrastructure.display.KothHologramService.validName(name)) { sender.sendMessage(lang.msg("hologram.bad_name")); return }
+                val arena = args.getOrNull(4)?.let { requested -> arenas().keys.firstOrNull { it.equals(requested, true) } ?: requested }
+                if (type.needsArena && (arena == null || arena !in arenas())) { sender.sendMessage(lang.msg("hologram.needs_arena")); return }
+                val at = sender.location
+                val result = service.create(net.badgersmc.ek.infrastructure.display.HologramSpec(name, type, at.world.name,
+                    at.blockX + 0.5, at.y + 2.0, at.blockZ + 0.5, arena.takeIf { type.needsArena },
+                    if (type == net.badgersmc.ek.infrastructure.display.HologramType.CUSTOM) listOf("<color:#ffcf1f><bold>%enthusiakoth_next_name%", "<color:#fff6e0>Starts in <color:#ffcf1f>%enthusiakoth_next_koth_time%") else emptyList()))
+                sender.sendMessage(hologramReply(result, "hologram.created", name.lowercase(), type.id))
+            }
+            "move" -> {
+                if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
+                val at = sender.location.clone().add(0.0, 2.0, 0.0)
+                sender.sendMessage(if (name == null) lang.msg("hologram.usage") else hologramReply(service.move(name, at), "hologram.moved", name))
+            }
+            "remove", "delete" -> sender.sendMessage(if (name == null) lang.msg("hologram.usage") else hologramReply(service.remove(name), "hologram.removed", name))
+            else -> sender.sendMessage(lang.msg("hologram.usage"))
+        }
+    }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (args.isEmpty()) {
@@ -110,7 +175,9 @@ class KothCommand(
             "tp" -> arenaTeleport(sender, args.getOrNull(1))
             "gui" -> gui(sender)
             "schedule" -> schedule(sender)
-            "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
+            "blitz" -> blitz(sender)
+            "hologram", "holo" -> hologram(sender, args)
+            "leaderboard", "lb", "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
             "stats" -> stats(sender, args.getOrNull(1))
             "start" -> start(sender, args.getOrNull(1) ?: "", args.drop(2))
             "stop", "cancel" -> stop(sender, args.getOrNull(1))
@@ -136,6 +203,7 @@ class KothCommand(
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
+        hologramTabOptions(sender, args)?.let { return it.toMutableList() }
         val admin = sender.hasPermission("enthusiakoth.admin")
         val arenaIds = arenas().keys.sorted()
         val players = { Bukkit.getOnlinePlayers().map { it.name }.sorted() }
@@ -144,15 +212,15 @@ class KothCommand(
         // One spelling per command is suggested; aliases such as cancel, editor, test and messages still work.
         val options: List<String> = when (args.size) {
             1 -> buildList {
-                addAll(listOf("gui", "schedule", "top", "stats", "notifications", "claims", "challenges", "results", "eligibility", "help"))
+                addAll(listOf("gui", "schedule", "blitz", "leaderboard", "stats", "notifications", "claims", "challenges", "results", "eligibility", "help"))
                 if (canStartFromCommand(sender)) add("start")
                 if (canStartPrivate(sender) || canJoinPrivate(sender)) add("private")
                 if (admin) addAll(listOf("setup", "manage", "schedules", "rewards", "displays", "stop", "status", "lock", "holds", "reviewmatch",
-                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "reply", "reload"))
+                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "reply", "reload"))
             }
             2 -> when (sub) {
                 "start" -> if (canStartFromCommand(sender)) arenaIds else emptyList()
-                "top" -> listOf("daily", "weekly", "season", "lifetime")
+                "leaderboard", "lb", "top" -> listOf("daily", "weekly", "season", "lifetime")
                 "stats" -> players()
                 "help" -> if (admin) listOf("all") else emptyList()
                 "private", "test" -> buildList {
@@ -219,7 +287,8 @@ class KothCommand(
         row("/ekoth", "Open the KOTH menu")
         row("/ekoth gui", "See the arenas and start one")
         row("/ekoth schedule", "When the next events start")
-        row("/ekoth top [daily|weekly|season]", "Leaderboard")
+        row("/ekoth blitz", "The next weekend blitz, round by round")
+        row("/ekoth leaderboard [daily|weekly|season]", "Leaderboard")
         row("/ekoth stats [player]", "KOTH wins")
         row("/ekoth notifications", "Turn KOTH chat messages on or off")
         if (canStartFromCommand(sender)) row("/ekoth start <arena> [solo|guild] [basic|advanced]", "Start an arena")
@@ -228,6 +297,7 @@ class KothCommand(
         row("/ekoth setup [arena]", "Create or edit arenas")
         row("/ekoth manage [arena]", "Schedules, rewards and displays")
         row("/ekoth stop [arena]", "End a running KOTH")
+        row("/ekoth hologram <create|move|remove|list>", "Place live KOTH holograms")
         row("/ekoth holds", "Matches waiting for review")
         if (!detailed) { row("/ekoth help all", "Every staff command"); return }
         row("/ekoth reviewmatch <match> <approve|reject> <note>", "Decide a held match")
@@ -330,7 +400,75 @@ class KothCommand(
         }
     }
 
+    /** The next weekend blitz: when it opens and which arena each round is in. */
+    private fun blitz(sender: CommandSender) {
+        val cfg = cfgLoader()
+        val rounds = scheduleService.nextBlitz()
+        if (!cfg.schedule.enabled || !cfg.schedule.blitz.enabled || rounds.isEmpty()) {
+            sender.sendMessage(lang.msg("command.blitz.none"))
+            return
+        }
+        val zone = cfg.schedule.zone
+        val now = java.time.Instant.now()
+        val first = rounds.first().instant.atZone(zone)
+        sender.sendMessage(lang.msg("command.blitz.header"))
+        sender.sendMessage(lang.msg("command.blitz.summary",
+            "day" to first.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH),
+            "time" to first.format(DateTimeFormatter.ofPattern("HH:mm")), "zone" to zone.id,
+            "rounds" to rounds.size.toString(), "length" to formatTime(cfg.schedule.blitz.roundSeconds.toLong()),
+            "capture" to formatTime(cfg.schedule.blitz.captureSeconds.toLong())))
+        rounds.forEachIndexed { index, occurrence ->
+            val state = net.badgersmc.ek.application.BlitzRound.status(now, occurrence.instant, cfg.schedule.blitz.roundSeconds,
+                kothService.isOccurrenceLive(occurrence.id)).name.lowercase()
+            sender.sendMessage(lang.arenaMsg("command.blitz.round_$state", "round" to (index + 1).toString(),
+                "arena" to (arenas()[occurrence.arenaId]?.name ?: occurrence.arenaId).arenaComponent(),
+                "time" to occurrence.instant.atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm"))))
+        }
+    }
+
+    private val leaderboardDialog by lazy {
+        LeaderboardDialog(plugin,
+            wins = { period ->
+                if (period == "lifetime") stats.allWins()
+                else net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)?.let(stats::winsIn)
+            },
+            periods = { listOfNotNull("daily", "weekly", "season".takeIf { cfgLoader().seasonStart != null }, "lifetime") },
+            name = ::formatStatUser,
+            head = ::leaderboardHead,
+            art = {
+                when (plugin.config.getString("leaderboards.dialog-art", "auto")?.lowercase()) {
+                    "on", "true" -> true
+                    "off", "false" -> false
+                    else -> Bukkit.getPluginManager().isPluginEnabled("Nexo")
+                }
+            })
+    }
+
+    /**
+     * A player's head as an inline text object. The skin comes from the server's copy of their profile when it has one
+     * (online, or cached from an earlier join); otherwise the client looks it up by name.
+     */
+    private fun leaderboardHead(key: String): Component? {
+        if (!key.startsWith("solo:")) return null
+        val id = runCatching { UUID.fromString(key.substringAfter(':')) }.getOrNull() ?: return null
+        val profile = (Bukkit.getPlayer(id) ?: Bukkit.getOfflinePlayer(id)).playerProfile
+        val head = net.kyori.adventure.text.`object`.ObjectContents.playerHead().id(id)
+        val name = profile.name ?: formatStatUser(key)
+        if (name.length in 1..16 && name.all { it.isLetterOrDigit() || it == '_' }) head.name(name)
+        profile.properties.filter { it.name == "textures" }.forEach { property ->
+            head.profileProperty(net.kyori.adventure.text.`object`.PlayerHeadObjectContents.property(property.name, property.value, property.signature))
+        }
+        return Component.`object`(head.build())
+    }
+
     private fun top(sender: CommandSender, page: Int, period: String = "lifetime") {
+        if (sender is Player) {
+            if (period != "lifetime" && net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart) == null) {
+                sender.sendMessage(lang.msg("staff.error.period")); return
+            }
+            leaderboardDialog.open(sender, LeaderboardDialog.View(period.lowercase(), LeaderboardSide.PLAYERS, page))
+            return
+        }
         val window = net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)
         if (period != "lifetime" && window == null) { sender.sendMessage(lang.msg("staff.error.period")); return }
         val wins = if (window == null) stats.allWins() else stats.winsIn(window)
