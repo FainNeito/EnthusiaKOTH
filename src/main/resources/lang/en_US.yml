@@ -196,7 +196,7 @@ arena-build:
 arena-layout:
   usage: "<prefix><color:#fff6e0>Layouts are the designs an arena can build. <color:#ffcf1f>/ekoth layout list <arena></color>, <color:#ffcf1f>use <arena> <name></color>, <color:#ffcf1f>save <arena> <name></color> (records what stands there now), <color:#ffcf1f>import <arena> <name> <schematic></color>, <color:#ffcf1f>preview <arena> [name]</color>, <color:#ffcf1f>rename <arena> <name> <new-name></color>, <color:#ffcf1f>delete <arena> <name></color> and <color:#ffcf1f>rotation <arena> <fixed|weekly|random></color>."
   none: "<prefix><color:#fff6e0><arena> has no layouts yet. Save its base form with <color:#ffcf1f>/ekoth build <arena> base</color>, then add one with <color:#ffcf1f>/ekoth layout save</color> or <color:#ffcf1f>/ekoth layout import</color>."
-  list-header: "<prefix><color:#ffcf1f><arena></color><color:#fff6e0> has <color:#ffcf1f><count></color> layouts, and picks <reason>:"
+  list-header: "<prefix><color:#fff6e0>Layouts of <color:#ffcf1f><arena></color> (<count>). It builds <reason>:"
   list-entry: "<color:#bfae98>  <name> <color:#7d6a74>- <count> blocks"
   list-entry-active: "<color:#ffcf1f>  <name> <color:#7d6a74>- <count> blocks <color:#ffcf1f>(builds next)"
   rotation-name-fixed: "the one chosen with /ekoth layout use"

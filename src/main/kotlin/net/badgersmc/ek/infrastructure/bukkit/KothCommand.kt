@@ -184,7 +184,10 @@ class KothCommand(
         fun reply(result: ArenaBuildService.Result, done: String, count: Int = 0, layout: String? = name, schematic: String = "", reason: String = "") =
             say(if (result == ArenaBuildService.Result.DONE) done else "arena-build.error.${result.name.lowercase().replace('_', '-')}",
                 count, layout, schematic, reason)
-        if (action != "list" && action != "preview" && name == null) { sender.sendMessage(lang.msg("arena-layout.usage")); return }
+        // Each action takes a fixed number of words, so "rename summit old Two Words" is refused rather than half read.
+        val words = mapOf("list" to 3..3, "use" to 4..4, "save" to 4..4, "import" to 5..5, "preview" to 3..4,
+            "rename" to 5..5, "delete" to 4..4, "rotation" to 4..4).getValue(action!!)
+        if (args.size !in words) { sender.sendMessage(lang.msg("arena-layout.usage")); return }
         when (action) {
             "list" -> {
                 val layouts = service.layouts(arena)
