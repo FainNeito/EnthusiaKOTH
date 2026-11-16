@@ -59,6 +59,28 @@ data class CaptureSoundsConfig(
     val winAccent: SoundCueConfig = SoundCueConfig("minecraft:entity.player.levelup", 0.55f, 1f, 3),
     val winAccent2: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bell", 0.38f, 1f, 8),
     val winAccent3: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bell", 0.42f, 1.25f, 13),
+    /** Every note of the victory sound. When empty, the four older win slots above are played instead. */
+    val victory: List<SoundCueConfig> = VICTORY_TRIUMPH,
+) {
+    fun victoryNotes(): List<SoundCueConfig> = victory.ifEmpty { listOf(win, winAccent, winAccent2, winAccent3) }
+}
+
+/**
+ * The victory sound, "Triumph": a bell arpeggio climbs a C major chord into the advancement fanfare and a firework
+ * burst, then rings out on a high bell and chime. Note-block pitches: C4 0.707, E4 0.891, G4 1.059, C5 1.414, E5 1.782.
+ */
+val VICTORY_TRIUMPH: List<SoundCueConfig> = listOf(
+    SoundCueConfig("minecraft:block.note_block.bell", 0.45f, 0.707f, 0),
+    SoundCueConfig("minecraft:block.note_block.harp", 0.35f, 0.707f, 0),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.45f, 0.891f, 3),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.45f, 1.059f, 6),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.5f, 1.414f, 9),
+    SoundCueConfig("minecraft:block.note_block.pling", 0.4f, 1.414f, 9),
+    SoundCueConfig("minecraft:ui.toast.challenge_complete", 0.6f, 1.0f, 12),
+    SoundCueConfig("minecraft:entity.firework_rocket.large_blast", 0.5f, 1.0f, 12),
+    SoundCueConfig("minecraft:entity.firework_rocket.twinkle", 0.45f, 1.0f, 17),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.5f, 1.782f, 22),
+    SoundCueConfig("minecraft:block.amethyst_block.chime", 0.5f, 1.0f, 22),
 )
 
 data class FairnessConfig(

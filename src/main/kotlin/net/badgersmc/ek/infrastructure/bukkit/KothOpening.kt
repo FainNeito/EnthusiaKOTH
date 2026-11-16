@@ -10,8 +10,6 @@ import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Particle
-import org.bukkit.Sound
-import org.bukkit.SoundCategory
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import java.time.Duration
@@ -26,20 +24,6 @@ import kotlin.math.sin
 object KothOpening {
     private val GOLD = Particle.DustOptions(Color.fromRGB(255, 207, 31), 1.6f)
     private val CRIMSON = Particle.DustOptions(Color.fromRGB(192, 38, 29), 1.4f)
-
-    private data class Cue(val delayTicks: Long, val sound: Sound, val volume: Float, val pitch: Float)
-
-    /**
-     * The opening call, built only from vanilla sounds: a beacon shutting down at half pitch as a low drone, a warden's
-     * roar pitched far down as the bellow, the same roar a fifth higher as the answer, and thunder rolling in behind.
-     */
-    private val CALL = listOf(
-        Cue(0L, Sound.BLOCK_BEACON_DEACTIVATE, 1.0f, 0.5f),
-        Cue(0L, Sound.ENTITY_WARDEN_ROAR, 0.75f, 0.5f),
-        Cue(4L, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.4f, 0.6f),
-        Cue(14L, Sound.ENTITY_WARDEN_ROAR, 0.7f, 0.75f),
-        Cue(14L, Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.35f, 0.5f),
-    )
 
     fun play(plugin: JavaPlugin, lang: LangService, display: DisplayConfig, event: KothEvent, audience: List<Player>) {
         if (audience.isEmpty()) return
@@ -60,10 +44,7 @@ object KothOpening {
         val viewers = audience.filter { it.isOnline && it.world.uid == world.uid }
         // A sinister call: a dying drone underneath, a deep bellow, then a second, higher bellow answering it.
         // Each sound plays at the player's own position so everyone hears it, wherever they stand.
-        CALL.forEach { (delay, sound, volume, pitch) ->
-            val play = { audience.filter { it.isOnline }.forEach { it.playSound(it.location, sound, SoundCategory.MASTER, volume, pitch) } }
-            if (delay == 0L) play() else plugin.server.scheduler.runTaskLater(plugin, Runnable { play() }, delay)
-        }
+        KothSoundPlayer.play(plugin, audience, net.badgersmc.ek.application.KothSounds.OPENING)
         viewers.forEach { player ->
             // The flash takes a colour on newer clients and nothing on older ones.
             val flashAt = point.clone().add(0.0, 1.0, 0.0)

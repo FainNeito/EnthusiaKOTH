@@ -21,6 +21,24 @@ class CaptureSoundConfigTest {
         assertEquals(0.2f, changed.lost.volume)
         assertEquals(defaults.win, changed.win)
     }
+    @Test fun `the victory list is read note by note and falls back to the win slots when empty`() {
+        val yaml = YamlConfiguration()
+        assertEquals(net.badgersmc.ek.config.VICTORY_TRIUMPH, CaptureSoundConfigLoader.load(yaml).victoryNotes())
+        yaml.set("sounds.victory", listOf(
+            mapOf("sound" to "minecraft:block.bell.use", "volume" to 3.0, "pitch" to 0.1, "delay-ticks" to 500),
+            mapOf("sound" to "not a sound", "volume" to 0.5),
+            mapOf("sound" to "minecraft:entity.player.levelup", "volume" to 0),
+            mapOf("sound" to "minecraft:ui.toast.challenge_complete"),
+        ))
+        val notes = CaptureSoundConfigLoader.load(yaml).victoryNotes()
+        assertEquals(listOf("minecraft:block.bell.use", "minecraft:ui.toast.challenge_complete"), notes.map { it.sound })
+        assertEquals(net.badgersmc.ek.config.SoundCueConfig("minecraft:block.bell.use", 1f, 0.5f, 100), notes.first())
+        assertEquals(net.badgersmc.ek.config.SoundCueConfig("minecraft:ui.toast.challenge_complete", 0.5f, 1f, 0), notes.last())
+        yaml.set("sounds.victory", emptyList<Any>())
+        val legacy = CaptureSoundConfigLoader.load(yaml)
+        assertEquals(listOf(legacy.win, legacy.winAccent, legacy.winAccent2, legacy.winAccent3), legacy.victoryNotes())
+    }
+
     @Test fun `values are bounded and invalid sound identifiers are disabled`() {
         val yaml = YamlConfiguration()
         yaml.set("sounds.capture.sound", "not a sound")

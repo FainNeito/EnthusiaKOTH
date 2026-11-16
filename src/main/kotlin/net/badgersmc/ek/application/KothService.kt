@@ -454,9 +454,14 @@ class KothService(
         }
         if (previousController != event.currentController) lifecycle(event, net.badgersmc.ek.api.KothLifecycle.CONTROL_CHANGED)
         if (events[event.id] !== event || event.state != EventState.ACTIVE) return
-        CaptureSoundPolicy.transition(previousController, event.currentController)
-            ?.takeUnless { it == CaptureCue.LOST && event.leaveAnnouncedFor == previousController }
-            ?.let { cue -> runCatching { playCaptureSound(event, cue) }.onFailure { logger("KOTH capture sound failed", it) } }
+        // In every arena type, whoever held the point and no longer does hears the lost note, along with team members
+        // nearby. That includes a holder pushed straight off by another team, who also hears the new holder's chime.
+        CaptureSoundPolicy.lostBy(previousController, event.currentController)?.let { team ->
+            runCatching { playCaptureSound(event, CaptureCue.LOST, nearbyTeamMembers(event, team)) }.onFailure { logger("KOTH capture sound failed", it) }
+        }
+        CaptureSoundPolicy.capturedBy(previousController, event.currentController)?.let {
+            runCatching { playCaptureSound(event, CaptureCue.CAPTURE) }.onFailure { logger("KOTH capture sound failed", it) }
+        }
         val controller = event.currentController
         protectedMatches[event.id]?.observe(teamsInZone, controller,
             controller != null && (event.scores[controller] ?: 0.0) > (previousScores[controller] ?: 0.0))
@@ -524,7 +529,7 @@ class KothService(
     private fun announceLeave(event: KothEvent, controller: TeamId) {
         if (event.leaveAnnouncedFor == controller) return
         event.leaveAnnouncedFor = controller
-        runCatching { playCaptureSound(event, CaptureCue.LOST, nearbyTeamMembers(event, controller)) }.onFailure { logger("KOTH capture sound failed", it) }
+        // The lost note itself is played by tick(), the same way for every arena type.
         sendEventMessage(
             event,
             lang.arenaMsg(
@@ -1326,9 +1331,12 @@ class KothService(
     /** Online members of [team] within hearing distance of the point, such as a holder who just stepped off. */
     private fun nearbyTeamMembers(event: KothEvent, team: TeamId): List<Player> {
         val zone = event.arena.zone
-        val centerX = (zone.minX + zone.maxX) / 2.0
-        val centerZ = (zone.minZ + zone.maxZ) / 2.0
-        val reach = (LOST_SOUND_DISTANCE + maxOf(zone.maxX - zone.minX, zone.maxZ - zone.minZ) / 2.0).let { it * it }
+        // A moving point is measured from where it is now, not from the middle of the square it travels.
+        val moving = event.movingPoint?.takeIf { event.arena.family.equals("moving", true) }
+        val centerX = moving?.first ?: ((zone.minX + zone.maxX) / 2.0)
+        val centerZ = moving?.third ?: ((zone.minZ + zone.maxZ) / 2.0)
+        val halfWidth = if (moving != null) zone.radius else maxOf(zone.maxX - zone.minX, zone.maxZ - zone.minZ) / 2.0
+        val reach = (LOST_SOUND_DISTANCE + halfWidth).let { it * it }
         return Bukkit.getOnlinePlayers().filter { player ->
             event.isParticipant(player.uniqueId) && player.world.name == zone.worldName && teamFor(player, event) == team &&
                 (player.location.x - centerX).let { it * it } + (player.location.z - centerZ).let { it * it } <= reach
@@ -1343,7 +1351,7 @@ class KothService(
         val sounds = when (cue) {
             CaptureCue.CAPTURE -> listOf(settings.capture, settings.captureAccent, settings.captureAccent2, settings.captureAccent3)
             CaptureCue.LOST -> listOf(settings.lost)
-            CaptureCue.WIN -> listOf(settings.win, settings.winAccent, settings.winAccent2, settings.winAccent3)
+            CaptureCue.WIN -> settings.victoryNotes()
         }.filter { it.sound.isNotBlank() && it.volume > 0f }
         if (sounds.isEmpty()) return
         // Only the capture chime is throttled; a lost note plays once per announced leave, so it cannot repeat on its own.
@@ -1382,12 +1390,13 @@ class KothService(
         return if (minutes > 0) "${minutes}m ${remainder}s" else "${remainder}s"
     }
 
-    fun shutdown(reason: CancellationReason = CancellationReason.PLUGIN_DISABLE) {
+    /** Ends every running KOTH. With [announce], their players are told it has ended. */
+    fun shutdown(reason: CancellationReason = CancellationReason.PLUGIN_DISABLE, announce: Boolean = false) {
         if (reason == CancellationReason.RELOAD || reason == CancellationReason.PLUGIN_DISABLE) {
             suppressNextQueueProcess = true
         }
         var refundPending = false
-        allEvents().forEach { cancelEvent(it, reason, announce = false, advanceQueue = false); refundPending = refundPending || lastCancellationRefundPending }
+        allEvents().forEach { cancelEvent(it, reason, announce = announce, advanceQueue = false); refundPending = refundPending || lastCancellationRefundPending }
         lastCancellationRefundPending = refundPending
         persistQueue()
     }

@@ -39,5 +39,6 @@ object ArenaName {
             }
         }
     }
-    fun resolve(id: String, raw: String?): String = parse(raw) ?: id
+    /** The display name, or without one the arena ID with a capital first letter ("conquest" shows as "Conquest"). */
+    fun resolve(id: String, raw: String?): String = parse(raw) ?: id.replaceFirstChar { it.titlecase(java.util.Locale.ROOT) }
 }

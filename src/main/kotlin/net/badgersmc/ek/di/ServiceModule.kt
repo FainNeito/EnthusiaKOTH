@@ -121,9 +121,10 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         return "KOTH arena '$arenaId' is now ${if (enabled) "enabled" else "disabled"}."
     }
 
-    fun reload() {
+    /** Reloads everything. A running KOTH is ended; with [announceEnded] its players are told. */
+    fun reload(announceEnded: Boolean = false) {
         scheduleService.flush()
-        kothService.shutdown(CancellationReason.RELOAD)
+        kothService.shutdown(CancellationReason.RELOAD, announce = announceEnded)
         scheduleService.reload()
         restrictionService.clear()
         configLoader.reload()
@@ -447,7 +448,7 @@ class ServiceModule(private val plugin: EnthusiaKothPlugin) {
         startService = startService,
         lang = langService,
         arenas = { arenas() },
-        reloadAction = { reload() },
+        reloadAction = { announceEnded -> reload(announceEnded) },
         lockAction = { setLockState(it) },
         arenaRegionAction = { arenaId, worldName, regionId -> bindArenaRegion(arenaId, worldName, regionId) },
         arenaCenterAction = { arenaId, location -> setArenaCenter(arenaId, location) },

@@ -56,4 +56,13 @@ class ArenaBuildTest {
         assertNull(store.loadBuild("moving"))
         assertTrue(folder.walkTopDown().none { it.name.endsWith(".tmp") })
     }
+
+    @Test fun `blocks whose base form holds contents are found, unless the build keeps the same block`() {
+        val holds = { state: String -> state.startsWith("minecraft:chest") || state.startsWith("minecraft:oak_sign") }
+        val chestToStone = BuildBlock(0, 80, 0, "minecraft:chest[facing=north]", "minecraft:stone")
+        val chestTurned = BuildBlock(1, 80, 0, "minecraft:chest[facing=north]", "minecraft:chest[facing=south]")
+        val signToAir = BuildBlock(2, 80, 0, "minecraft:oak_sign[rotation=0]", "minecraft:air")
+        val airToStone = BuildBlock(3, 80, 0, "minecraft:air", "minecraft:stone")
+        assertEquals(listOf(chestToStone, signToAir), ArenaBuild.blocksWithContents(listOf(chestToStone, chestTurned, signToAir, airToStone), holds))
+    }
 }

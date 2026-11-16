@@ -253,7 +253,9 @@ internal object ArenaConfigLoader {
         }.toMap()
         val values = section(config, path) ?: return emptyMap()
         return buildMap {
-            values.getKeys(false).forEach { chanceText ->
+            // A chance such as "20.0" is split at its dot into a "20" section holding "0", so read the full nested key
+            // back as the chance rather than taking only the top-level keys.
+            values.getKeys(true).filterNot(values::isConfigurationSection).forEach { chanceText ->
                 val command = values.getString(chanceText) ?: return@forEach
                 val chance = chanceText.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: return@forEach
                 put(command, chance)
@@ -416,6 +418,23 @@ internal object CaptureSoundConfigLoader {
             lost = cue("lost", defaults.lost), win = cue("win", defaults.win),
             winAccent = cue("win-accent", defaults.winAccent), winAccent2 = cue("win-accent-2", defaults.winAccent2),
             winAccent3 = cue("win-accent-3", defaults.winAccent3),
+            // A missing list keeps the default victory sound; an empty one goes back to the four win slots.
+            victory = if (!config.contains("sounds.victory")) defaults.victory
+                else config.getMapList("sounds.victory").take(MAX_VICTORY_NOTES).mapNotNull(::victoryNote),
         )
+    }
+
+    private const val MAX_VICTORY_NOTES = 32
+
+    /** One note of sounds.victory. A note with an invalid sound or no volume is dropped. */
+    private fun victoryNote(raw: Map<*, *>): net.badgersmc.ek.config.SoundCueConfig? {
+        val name = (raw["sound"] as? String)?.trim().orEmpty()
+        if (!name.matches(Regex("[a-z0-9_.-]+:[a-z0-9_./-]+"))) return null
+        fun bounded(key: String, default: Double, min: Double, max: Double): Float =
+            ((raw[key] as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: default).coerceIn(min, max).toFloat()
+        val volume = bounded("volume", 0.5, 0.0, 1.0)
+        if (volume <= 0f) return null
+        val delay = ((raw["delay-ticks"] as? Number)?.toLong() ?: 0L).coerceIn(0L, 100L)
+        return net.badgersmc.ek.config.SoundCueConfig(name, volume, bounded("pitch", 1.0, 0.5, 2.0), delay)
     }
 }

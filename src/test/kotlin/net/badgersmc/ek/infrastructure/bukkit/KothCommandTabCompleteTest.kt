@@ -51,6 +51,26 @@ class KothCommandTabCompleteTest {
         assertEquals(listOf("spawn"), complete(player(admin = true), "arena", "region", "capture", "sp"))
     }
 
+    @Test fun `reload waits for force while a KOTH is running`() {
+        val koth = mockk<net.badgersmc.ek.application.KothService>(relaxed = true)
+        val event = mockk<net.badgersmc.ek.domain.KothEvent>(relaxed = true)
+        every { event.arena.name } returns "Conquest"
+        every { koth.allEvents() } returns listOf(event)
+        val reloads = mutableListOf<Boolean>()
+        val cmd = KothCommand(mockk(relaxed = true), { mockk(relaxed = true) }, koth, mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            { emptyMap() }, { reloads.add(it) }, {}, { _, _, _ -> "" }, { _, _ -> "" }, { _, _ -> "" }, { emptyList() })
+        val staff = player(admin = true)
+        cmd.onCommand(staff, bukkit, "ekoth", arrayOf("reload"))
+        assertTrue(reloads.isEmpty())
+        cmd.onCommand(staff, bukkit, "ekoth", arrayOf("reload", "force"))
+        assertEquals(listOf(true), reloads)
+        every { koth.allEvents() } returns emptyList()
+        cmd.onCommand(staff, bukkit, "ekoth", arrayOf("reload"))
+        assertEquals(listOf(true, false), reloads)
+        assertEquals(listOf("force"), complete(staff, "reload", ""))
+    }
+
     @Test fun `reply answers the prompt that opened last`() {
         val setup = mockk<ArenaSetupController>(relaxed = true)
         val settings = mockk<StaffSettingsController>(relaxed = true)
