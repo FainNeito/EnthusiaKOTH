@@ -24,6 +24,19 @@ class EnthusiaKothPlugin : JavaPlugin() {
             }
             return true
         }
+
+        /** Returns the startup refusal reason for the given LumaGuilds state, or null when KOTH may enable. */
+        internal fun lumaGuildsStartupProblem(version: String?, enabled: Boolean): String? {
+            if (version == null || !isVersionAtLeast(version, MIN_LUMAGUILDS_VERSION)) {
+                return "EnthusiaKOTH requires LumaGuilds >= $MIN_LUMAGUILDS_VERSION because guild rewards use GuildLookup.getGuildMemberIds(); " +
+                    "found ${version ?: "no loaded LumaGuilds plugin"}"
+            }
+            if (!enabled) {
+                return "EnthusiaKOTH requires LumaGuilds to be enabled; LumaGuilds $version is installed but not enabled " +
+                    "(it likely failed during its own startup - check earlier LumaGuilds errors, e.g. a missing Vault dependency)"
+            }
+            return null
+        }
     }
 
     lateinit var services: ServiceModule
@@ -34,12 +47,9 @@ class EnthusiaKothPlugin : JavaPlugin() {
         saveDefaultConfig()
 
         val lumaGuilds = server.pluginManager.getPlugin("LumaGuilds")
-        val lumaVersion = lumaGuilds?.pluginMeta?.version
-        if (lumaVersion == null || !isVersionAtLeast(lumaVersion, MIN_LUMAGUILDS_VERSION)) {
-            logger.severe(
-                "EnthusiaKOTH requires LumaGuilds >= $MIN_LUMAGUILDS_VERSION because guild rewards use GuildLookup.getGuildMemberIds(); " +
-                    "found ${lumaVersion ?: "no loaded LumaGuilds plugin"}",
-            )
+        val lumaProblem = lumaGuildsStartupProblem(lumaGuilds?.pluginMeta?.version, lumaGuilds?.isEnabled == true)
+        if (lumaProblem != null) {
+            logger.severe(lumaProblem)
             server.pluginManager.disablePlugin(this)
             return
         }
