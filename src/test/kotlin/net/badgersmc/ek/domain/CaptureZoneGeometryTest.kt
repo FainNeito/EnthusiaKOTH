@@ -20,19 +20,19 @@ class CaptureZoneGeometryTest {
     )
 
     @Test
-    fun `circular capture includes points on radius`() {
-        assertTrue(zone.containsCircular(Location(world, 3.0, 80.0, 4.0)))
+    fun `square capture includes the corners its outline draws`() {
+        assertTrue(zone.contains(Location(world, 4.9, 80.0, 4.9)))
+        assertTrue(zone.contains(Location(world, -5.0, 80.0, 5.0)))
     }
 
     @Test
-    fun `circular capture excludes square corner inside old cuboid check`() {
-        val diagonal = Location(world, 4.0, 80.0, 4.0)
-        assertTrue(zone.contains(diagonal))
-        assertFalse(zone.containsCircular(diagonal))
+    fun `square capture excludes anything past an edge`() {
+        assertFalse(zone.contains(Location(world, 5.1, 80.0, 0.0)))
+        assertFalse(zone.contains(Location(world, 0.0, 80.0, -5.1)))
     }
 
     @Test
-    fun `circular capture respects vertical bounds`() {
-        assertFalse(zone.containsCircular(Location(world, 0.0, 90.0, 0.0)))
+    fun `square capture respects vertical bounds`() {
+        assertFalse(zone.contains(Location(world, 0.0, 90.0, 0.0)))
     }
 }

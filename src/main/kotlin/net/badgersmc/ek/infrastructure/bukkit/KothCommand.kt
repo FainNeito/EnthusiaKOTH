@@ -47,6 +47,13 @@ class KothGuiHolder(
     override fun getInventory(): Inventory = backingInventory
 }
 
+/** The confirmation step between clicking an arena and paying to start it. */
+class KothStartConfirmHolder(val arenaId: String, val teamMode: TeamMode) : InventoryHolder {
+    lateinit var backingInventory: Inventory
+    override fun getInventory(): Inventory = backingInventory
+    companion object { const val START_SLOT = 11; const val BACK_SLOT = 15 }
+}
+
 class KothCommand(
     private val plugin: org.bukkit.plugin.java.JavaPlugin,
     private val cfgLoader: () -> EnthusiaKothConfig,
@@ -58,7 +65,8 @@ class KothCommand(
     private val startService: StartService,
     private val lang: LangService,
     private val arenas: () -> Map<String, KothArena>,
-    private val reloadAction: () -> Unit,
+    /** Reloads the plugin; the flag says whether to tell players of a KOTH it ends. */
+    private val reloadAction: (Boolean) -> Unit,
     private val lockAction: (LockState) -> Unit,
     private val arenaRegionAction: (String, String, String) -> String,
     private val arenaCenterAction: (String, Location) -> String,
@@ -71,6 +79,8 @@ class KothCommand(
     private val acceptCrownBinding: (String, String, UUID) -> Boolean = { _, _, _ -> false },
     /** Crown finals still open for acceptance, as occurrence ID to policy revision, for "binding" or "helmet-loss". */
     private val openCrownFinals: (String) -> Map<String, String> = { emptyMap() },
+    private val holograms: () -> net.badgersmc.ek.infrastructure.display.KothHologramService? = { null },
+    private val arenaBuild: () -> ArenaBuildService? = { null },
 ) : CommandExecutor, TabCompleter {
 
     /** /ekoth crown accept-binding|accept-helmet-loss <final> <revision>, or null when the line is not a crown command. */
@@ -84,6 +94,135 @@ class KothCommand(
             else -> emptyList()
         }
         return options.filter { it.startsWith(args.last(), true) }
+    }
+
+    /** /ekoth build <arena> <base|save|edit|preview|status|clear>, or null when the line is not a build command. */
+    internal fun buildTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
+        if (!args.getOrNull(0).equals("build", true) || args.size < 2) return null
+        if (!sender.hasPermission("enthusiakoth.admin")) return emptyList()
+        val options = when (args.size) {
+            2 -> arenas().keys.sorted()
+            3 -> listOf("base", "save", "edit", "preview", "status", "clear")
+            else -> emptyList()
+        }
+        return options.filter { it.startsWith(args.last(), true) }
+    }
+
+    private fun arenaBuild(sender: CommandSender, args: Array<out String>) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        val service = arenaBuild() ?: return
+        val arena = args.getOrNull(1)?.let { requested -> arenas().keys.firstOrNull { it.equals(requested, true) } }
+        val action = args.getOrNull(2)?.lowercase()
+        if (arena == null || action == null) { sender.sendMessage(lang.msg("arena-build.usage")); return }
+        fun reply(result: ArenaBuildService.Result, count: Int, done: String) = sender.sendMessage(lang.msg(
+            if (result == ArenaBuildService.Result.DONE) done else "arena-build.error.${result.name.lowercase().replace('_', '-')}",
+            "arena" to arena, "count" to "%,d".format(count), "limit" to "%,d".format(cfgLoader().arenaBuild.maxBlocks)))
+        when (action) {
+            "base" -> service.recordBase(arena).let { (r, n) -> reply(r, n, "arena-build.base-saved") }
+            "save" -> service.recordBuild(arena).let { (r, n) -> reply(r, n, "arena-build.saved") }
+            "edit" -> service.edit(arena).let { (r, n) -> reply(r, n, "arena-build.editing") }
+            "preview" -> service.preview(arena).let { (r, n) -> reply(r, n, "arena-build.previewing") }
+            "clear" -> reply(service.clear(arena), 0, "arena-build.cleared")
+            "status" -> {
+                val (base, blocks, built) = service.status(arena)
+                sender.sendMessage(lang.msg("arena-build.status", "arena" to arena,
+                    "base" to if (base) "saved" else "not saved",
+                    "build" to (blocks?.let { "%,d blocks".format(it) } ?: "not recorded"),
+                    "state" to if (built) "built form" else "base form"))
+            }
+            else -> sender.sendMessage(lang.msg("arena-build.usage"))
+        }
+    }
+
+    /** /ekoth sound <name|all>: plays a KOTH sound to the sender alone, exactly as it is configured now. */
+    private fun previewSound(sender: CommandSender, requested: String?) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
+        val sounds = net.badgersmc.ek.application.KothSounds
+        val names = when {
+            requested.equals("all", true) -> sounds.NAMES
+            requested.equals("victory-drafts", true) -> sounds.DRAFT_NAMES
+            else -> listOfNotNull(sounds.resolve(requested))
+        }
+        if (names.isEmpty()) {
+            sender.sendMessage(lang.msg("sound.usage", "sounds" to (sounds.NAMES + "all" + sounds.DRAFT_NAMES + "victory-drafts").joinToString(", ")))
+            return
+        }
+        if (!cfgLoader().captureSounds.enabled) sender.sendMessage(lang.msg("sound.disabled"))
+        names.forEachIndexed { index, name ->
+            // With "all", each sound gets five seconds to finish before the next one starts.
+            val play = Runnable {
+                if (!sender.isOnline) return@Runnable
+                val notes = sounds.cue(name, cfgLoader().captureSounds)
+                sender.sendMessage(lang.msg(if (notes.isEmpty()) "sound.silent" else "sound.playing", "sound" to name))
+                KothSoundPlayer.play(plugin, listOf(sender), notes)
+            }
+            if (index == 0) play.run() else plugin.server.scheduler.runTaskLater(plugin, play, index * 100L)
+        }
+    }
+
+    /** /ekoth hologram create <name> <type> [arena] | move <name> | remove <name> | list, or null when the line is not a hologram command. */
+    internal fun hologramTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
+        if (args.getOrNull(0)?.lowercase() !in setOf("hologram", "holo") || args.size < 2) return null
+        if (!sender.hasPermission("enthusiakoth.admin")) return emptyList()
+        val action = args[1].lowercase()
+        val names = holograms()?.names().orEmpty()
+        val options = when (args.size) {
+            2 -> listOf("create", "move", "remove", "list")
+            3 -> when (action) { "move", "remove", "tp" -> names; "create" -> listOf("<name>"); else -> emptyList() }
+            4 -> if (action == "create") net.badgersmc.ek.infrastructure.display.HologramType.entries.map { it.id } else emptyList()
+            5 -> if (action == "create" && net.badgersmc.ek.infrastructure.display.HologramType.parse(args[3])?.needsArena == true) arenas().keys.sorted() else emptyList()
+            else -> emptyList()
+        }
+        return options.filter { it.startsWith(args.last(), true) }
+    }
+
+    private fun hologramReply(result: net.badgersmc.ek.infrastructure.display.HologramChange, done: String, name: String, type: String = ""): Component =
+        lang.msg(when (result) {
+            net.badgersmc.ek.infrastructure.display.HologramChange.DONE -> done
+            net.badgersmc.ek.infrastructure.display.HologramChange.EXISTS -> "hologram.exists"
+            net.badgersmc.ek.infrastructure.display.HologramChange.UNKNOWN -> "hologram.unknown"
+            net.badgersmc.ek.infrastructure.display.HologramChange.SAVE_FAILED -> "hologram.save_failed"
+            net.badgersmc.ek.infrastructure.display.HologramChange.FILE_UNREADABLE -> "hologram.file_unreadable"
+        }, "name" to name, "type" to type)
+
+    private fun hologram(sender: CommandSender, args: Array<out String>) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        val service = holograms() ?: return
+        val action = args.getOrNull(1)?.lowercase()
+        val name = args.getOrNull(2)
+        when (action) {
+            "list" -> {
+                val all = service.all()
+                if (all.isEmpty()) { sender.sendMessage(lang.msg("hologram.none")); return }
+                sender.sendMessage(lang.msg("hologram.list_header", "count" to all.size.toString()))
+                all.forEach { spec ->
+                    sender.sendMessage(lang.msg("hologram.list_entry", "name" to spec.name,
+                        "type" to (spec.type.id + (spec.arena?.let { " $it" } ?: "")),
+                        "where" to "${spec.world} ${spec.x.toInt()}, ${spec.y.toInt()}, ${spec.z.toInt()}"))
+                }
+            }
+            "create" -> {
+                if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
+                val type = net.badgersmc.ek.infrastructure.display.HologramType.parse(args.getOrNull(3))
+                if (name == null || type == null) { sender.sendMessage(lang.msg("hologram.usage")); return }
+                if (!net.badgersmc.ek.infrastructure.display.KothHologramService.validName(name)) { sender.sendMessage(lang.msg("hologram.bad_name")); return }
+                val arena = args.getOrNull(4)?.let { requested -> arenas().keys.firstOrNull { it.equals(requested, true) } ?: requested }
+                if (type.needsArena && (arena == null || arena !in arenas())) { sender.sendMessage(lang.msg("hologram.needs_arena")); return }
+                val at = sender.location
+                val result = service.create(net.badgersmc.ek.infrastructure.display.HologramSpec(name, type, at.world.name,
+                    at.blockX + 0.5, at.y + 2.0, at.blockZ + 0.5, arena.takeIf { type.needsArena },
+                    if (type == net.badgersmc.ek.infrastructure.display.HologramType.CUSTOM) listOf("<color:#ffcf1f><bold>%enthusiakoth_next_name%", "<color:#fff6e0>Starts in <color:#ffcf1f>%enthusiakoth_next_koth_time%") else emptyList()))
+                sender.sendMessage(hologramReply(result, "hologram.created", name.lowercase(), type.id))
+            }
+            "move" -> {
+                if (sender !is Player) { sender.sendMessage(lang.msg("command.error.not_a_player")); return }
+                val at = sender.location.clone().add(0.0, 2.0, 0.0)
+                sender.sendMessage(if (name == null) lang.msg("hologram.usage") else hologramReply(service.move(name, at), "hologram.moved", name))
+            }
+            "remove", "delete" -> sender.sendMessage(if (name == null) lang.msg("hologram.usage") else hologramReply(service.remove(name), "hologram.removed", name))
+            else -> sender.sendMessage(lang.msg("hologram.usage"))
+        }
     }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
@@ -105,6 +244,19 @@ class KothCommand(
                 } else sender.sendMessage(lang.msg("crown.sacrifice-refused"))
             }
             "help" -> sendHelp(sender, args.getOrNull(1).equals("all", true))
+            "reply" -> if (sender !is Player) sender.sendMessage(lang.msg("command.error.not_a_player")) else {
+                val text = args.drop(1).joinToString(" ")
+                val setupAt = setup?.promptOpenedAt(sender.uniqueId)
+                val settingsAt = settings?.promptOpenedAt(sender.uniqueId)
+                // With both prompts pending, the one opened last is the one the player is answering.
+                val answered = when {
+                    text.isBlank() -> { sender.sendMessage(lang.msg("command.reply.usage")); true }
+                    settingsAt != null && (setupAt == null || settingsAt > setupAt) -> settings?.answer(sender, text) == true
+                    setupAt != null -> setup?.answer(sender, text) == true
+                    else -> false
+                }
+                if (!answered) sender.sendMessage(lang.msg("command.reply.none"))
+            }
             "history", "reports", "readiness", "reconcile", "holds", "reviewmatch", "claims", "challenges", "eligibility", "results" -> progression?.command(sender,args.mapIndexed { i,s -> if(i==0) s.lowercase() else s }.toTypedArray())
             "manage", "schedules", "rewards", "displays" -> if (sender is Player) {
                 if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return true }
@@ -118,12 +270,16 @@ class KothCommand(
             "tp" -> arenaTeleport(sender, args.getOrNull(1))
             "gui" -> gui(sender)
             "schedule" -> schedule(sender)
-            "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
+            "blitz" -> blitz(sender)
+            "hologram", "holo" -> hologram(sender, args)
+            "build" -> arenaBuild(sender, args)
+            "sound", "sounds" -> previewSound(sender, args.getOrNull(1))
+            "leaderboard", "lb", "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
             "stats" -> stats(sender, args.getOrNull(1))
             "start" -> start(sender, args.getOrNull(1) ?: "", args.drop(2))
             "stop", "cancel" -> stop(sender, args.getOrNull(1))
             "giveflare" -> giveFlare(sender, args.getOrNull(1) ?: "", args.getOrNull(2) ?: "", args.getOrNull(3)?.toIntOrNull() ?: 1)
-            "reload" -> doReload(sender)
+            "reload" -> doReload(sender, args.getOrNull(1).equals("force", true))
             "private", "test" -> privateTest(sender, args)
             "status" -> status(sender)
             "lock" -> lock(sender, args.getOrNull(1) ?: "")
@@ -145,128 +301,184 @@ class KothCommand(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
         crownTabOptions(sender, args)?.let { return it.toMutableList() }
-        if (args.size == 1) {
-            val options = mutableListOf("gui", "schedule", "top", "stats", "private", "notifications", "claims", "challenges", "eligibility", "results", "crown")
-            if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {
-                options += "start"
+        hologramTabOptions(sender, args)?.let { return it.toMutableList() }
+        buildTabOptions(sender, args)?.let { return it.toMutableList() }
+        val admin = sender.hasPermission("enthusiakoth.admin")
+        val arenaIds = arenas().keys.sorted()
+        val players = { Bukkit.getOnlinePlayers().map { it.name }.sorted() }
+        val sub = args.getOrNull(0)?.lowercase() ?: ""
+        val privateStart = (sub == "private" || sub == "test") && args.getOrNull(1).equals("start", true) && canStartPrivate(sender)
+        // One spelling per command is suggested; aliases such as cancel, editor, test and messages still work.
+        val options: List<String> = when (args.size) {
+            1 -> buildList {
+                addAll(listOf("gui", "schedule", "blitz", "leaderboard", "stats", "notifications", "claims", "challenges", "results", "eligibility", "crown", "help"))
+                if (canStartFromCommand(sender)) add("start")
+                if (canStartPrivate(sender) || canJoinPrivate(sender)) add("private")
+                if (admin) addAll(listOf("setup", "manage", "schedules", "rewards", "displays", "stop", "status", "lock", "holds", "reviewmatch",
+                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "build", "sound", "reply", "reload"))
             }
-            if (canStartPrivate(sender) || canJoinPrivate(sender)) options += "test"
-            if (sender.hasPermission("enthusiakoth.admin")) {
-                options += listOf("history", "reports", "readiness", "reconcile", "holds", "reviewmatch")
-                options += listOf("stop", "cancel", "giveflare", "reload", "status", "lock", "arena", "setup", "editor", "wand", "manage", "schedules", "rewards", "displays", "info", "tp")
-            }
-            return options.distinct().filter { it.startsWith(args[0], ignoreCase = true) }.toMutableList()
-        }
-        if (args.size == 2) {
-            when (args[0].lowercase()) {
-                "start" -> return arenas().keys.filter { it.startsWith(args[1], true) }.toMutableList()
-                "private", "test" -> return listOf("start", "join", "leave", "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
-                "lock" -> return LockState.entries.map { it.name.lowercase() }.filter { it.startsWith(args[1], true) }.toMutableList()
-                "arena" -> if (sender.hasPermission("enthusiakoth.admin")) {
-                    return listOf("create", "region", "center", "enable", "disable").filter { it.startsWith(args[1], true) }.toMutableList()
+            2 -> when (sub) {
+                "start" -> if (canStartFromCommand(sender)) arenaIds else emptyList()
+                "leaderboard", "lb", "top" -> listOf("daily", "weekly", "season", "lifetime")
+                "stats" -> players()
+                "help" -> if (admin) listOf("all") else emptyList()
+                "private", "test" -> buildList {
+                    if (canStartPrivate(sender)) addAll(listOf("start", "cancel"))
+                    if (canJoinPrivate(sender)) addAll(listOf("join", "leave"))
                 }
-                "top" -> return listOf("lifetime", "daily", "weekly", "season").filter { it.startsWith(args[1], true) }.toMutableList()
-                "manage", "schedules", "rewards", "displays", "info", "tp", "stop", "cancel" -> if (sender.hasPermission("enthusiakoth.admin")) return (cfgLoader().arenas.keys + "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
-                "setup", "editor" -> if (sender.hasPermission("enthusiakoth.admin")) return (cfgLoader().arenas.keys + "cancel").filter { it.startsWith(args[1], true) }.toMutableList()
-            }
-        }
-        if (args.size == 3 && args[0].equals("arena", true) && sender.hasPermission("enthusiakoth.admin")) {
-            return cfgLoader().arenas.keys.filter { it.startsWith(args[2], true) }.toMutableList()
-        }
-        if (args.size == 4 && args[0].equals("arena", true) && args[1].equals("region", true) && sender is Player) {
-            return arenaRegionSuggestions(sender.world.name).filter { it.startsWith(args[3], true) }.toMutableList()
-        }
-        if (args.size == 4 && args[0].equals("arena", true) && args[1].equals("create", true) && sender.hasPermission("enthusiakoth.admin")) {
-            return listOf("capture", "moving", "conquest", "score").filter { it.startsWith(args[3], true) }.toMutableList()
-        }
-        if (args.size == 3 && args[0].equals("start", true)) {
-            return listOf("solo", "guild", "basic", "advanced").filter { it.startsWith(args[2], true) }.toMutableList()
-        }
-        if (args.size == 4 && args[0].equals("start", true)) {
-            val first = args[2].lowercase()
-            val options = if (first in setOf("basic", "advanced")) listOf("solo", "guild") else listOf("basic", "advanced")
-            return options.filter { it.startsWith(args[3], true) }.toMutableList()
-        }
-        if (args.size >= 3 && (args[0].equals("private", true) || args[0].equals("test", true)) && args[1].equals("start", true)) {
-            val options = when (args.size) {
-                3 -> arenas().keys.toList()
-                4 -> listOf("solo", "guild")
-                5 -> listOf("self", "staff")
-                6 -> listOf("quick", "production")
+                "lock" -> if (admin) LockState.entries.map { it.name.lowercase() } else emptyList()
+                "arena" -> if (admin) listOf("create", "region", "center", "enable", "disable") else emptyList()
+                "setup", "editor", "manage", "schedules", "rewards", "displays" -> if (admin) arenaIds + "cancel" else emptyList()
+                "info", "tp", "stop", "cancel" -> if (admin) arenaIds else emptyList()
+                "giveflare" -> if (admin) players() else emptyList()
+                "reviewmatch" -> if (admin) progression?.heldMatchIds().orEmpty() else emptyList()
+                "reports" -> if (admin) progression?.recentMatchIds().orEmpty() else emptyList()
+                "reconcile" -> if (admin) progression?.reviewClaimIds().orEmpty() else emptyList()
+                "reply" -> if (admin) listOf("cancel", "-") else emptyList()
+                "reload" -> if (admin) listOf("force") else emptyList()
+                "sound", "sounds" -> if (admin) net.badgersmc.ek.application.KothSounds.let { it.NAMES + "all" + it.DRAFT_NAMES + "victory-drafts" } else emptyList()
                 else -> emptyList()
             }
-            return options.filter { it.startsWith(args.last(), true) }.toMutableList()
-        }
-        return mutableListOf()
-    }
-
-    private fun sendHelp(sender: CommandSender, detailed:Boolean = false) {
-        sender.sendMessage(lang.msg("command.help.header"))
-        if(!detailed) {
-            sender.sendMessage(Component.text("/ekoth - Events and KOTH menu"))
-            sender.sendMessage(Component.text("/rewards > KOTH - Challenges and earned rewards"))
-            sender.sendMessage(Component.text("/ekoth schedule - Upcoming events"))
-            if(sender.hasPermission("enthusiakoth.admin")) sender.sendMessage(Component.text("/ekoth setup - Area > Rules > Review"))
-            sender.sendMessage(Component.text("/ekoth help all - All commands"))
-            return
-        }
-        listOf("gui", "schedule", "top", "stats").forEach { sender.sendMessage(lang.msg("command.help.$it")) }
-        sender.sendMessage(lang.msg("command.help.notifications"))
-        if (sender.hasPermission("enthusiakoth.start.basic") || sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) {
-            sender.sendMessage(lang.msg("command.help.start"))
-        }
-        if (canStartPrivate(sender) || canJoinPrivate(sender)) sender.sendMessage(lang.msg("command.help.private_usage"))
-        if (sender.hasPermission("enthusiakoth.admin")) {
-            listOf("stop", "cancel", "giveflare", "reload", "status", "lock").forEach {
-                sender.sendMessage(lang.msg("command.help.$it"))
+            3 -> when {
+                sub == "start" && canStartFromCommand(sender) -> listOf("solo", "guild") + startTiers(sender)
+                !admin && !privateStart -> emptyList()
+                sub == "giveflare" -> arenaIds
+                sub == "arena" && !args[1].equals("create", true) -> arenaIds
+                sub == "reviewmatch" -> listOf("approve", "reject")
+                sub == "reconcile" -> listOf("paid", "retry")
+                privateStart -> arenaIds
+                else -> emptyList()
             }
-            sender.sendMessage(Component.text("/ekoth arena region <arena> <worldguard-region> | center <arena> | enable <arena> | disable <arena>"))
-            sender.sendMessage(lang.msg("setup.help"))
-            sender.sendMessage(lang.msg("staff.help"))
+            4 -> when {
+                sub == "start" && canStartFromCommand(sender) ->
+                    if (args[2].lowercase() in setOf("basic", "advanced")) listOf("solo", "guild") else startTiers(sender)
+                privateStart -> listOf("solo", "guild")
+                !admin -> emptyList()
+                sub == "giveflare" -> listOf("1", "5", "10")
+                sub == "arena" && args[1].equals("region", true) && sender is Player -> arenaRegionSuggestions(sender.world.name)
+                sub == "arena" && args[1].equals("create", true) -> listOf("capture", "moving", "conquest", "score")
+                else -> emptyList()
+            }
+            5 -> if (privateStart) listOf("self", "staff") else emptyList()
+            6 -> if (privateStart) listOf("quick", "production") else emptyList()
+            else -> emptyList()
         }
+        return options.filter { it.startsWith(args.last(), true) }.toMutableList()
     }
 
-    private fun gui(sender: CommandSender) {
+    /** Advanced starts need their own permission; basic is open to anyone who may start. */
+    private fun startTiers(sender: CommandSender): List<String> = buildList {
+        add("basic")
+        if (sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")) add("advanced")
+    }
+
+    private fun canStartFromCommand(sender: CommandSender): Boolean = sender.hasPermission("enthusiakoth.start.basic") ||
+        sender.hasPermission("enthusiakoth.start.advanced") || sender.hasPermission("enthusiakoth.admin")
+
+    /** Each line can be clicked to put the command in the chat box, ready to finish. */
+    private fun sendHelp(sender: CommandSender, detailed: Boolean = false) {
+        sender.sendMessage(lang.msg("command.help.header"))
+        fun row(usage: String, description: String) {
+            val typed = usage.substringBefore(" <").substringBefore(" [") + " "
+            sender.sendMessage(Component.text(usage, MenuStyle.GOLD)
+                .clickEvent(net.kyori.adventure.text.event.ClickEvent.suggestCommand(typed))
+                .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Component.text("Click to type this command")))
+                .append(Component.text(" - $description", MenuStyle.CREAM)))
+        }
+        row("/ekoth", "Open the KOTH menu")
+        row("/ekoth gui", "See the arenas and start one")
+        row("/ekoth schedule", "When the next events start")
+        row("/ekoth blitz", "The next weekend blitz, round by round")
+        row("/ekoth leaderboard [daily|weekly|season]", "Leaderboard")
+        row("/ekoth stats [player]", "KOTH wins")
+        row("/ekoth notifications", "Turn KOTH chat messages on or off")
+        if (canStartFromCommand(sender)) row("/ekoth start <arena> [solo|guild] [basic|advanced]", "Start an arena")
+        if (canStartPrivate(sender) || canJoinPrivate(sender)) row("/ekoth private <start|join|leave|cancel>", "Private test events")
+        if (!sender.hasPermission("enthusiakoth.admin")) return
+        row("/ekoth setup [arena]", "Create or edit arenas")
+        row("/ekoth manage [arena]", "Schedules, rewards and displays")
+        row("/ekoth stop [arena]", "End a running KOTH")
+        row("/ekoth hologram <create|move|remove|list>", "Place live KOTH holograms")
+        row("/ekoth build <arena> <base|save|edit|preview|status|clear>", "Arenas that build themselves when a KOTH starts")
+        row("/ekoth sound <start|capture|lost|victory|all>", "Hear a KOTH sound as players do")
+        row("/ekoth holds", "Matches waiting for review")
+        if (!detailed) { row("/ekoth help all", "Every staff command"); return }
+        row("/ekoth reviewmatch <match> <approve|reject> <note>", "Decide a held match")
+        row("/ekoth reports <match>", "Full report for one match")
+        row("/ekoth history", "Recent matches")
+        row("/ekoth reconcile <claim> <paid|retry> <note>", "Settle a payout that needs review")
+        row("/ekoth status", "What's running and what's next")
+        row("/ekoth lock <unlocked|manual_locked|all_locked>", "Allow or block starts")
+        row("/ekoth giveflare <player> <arena> [amount]", "Give KOTH flares")
+        row("/ekoth info <arena>", "Arena details")
+        row("/ekoth tp <arena>", "Teleport to an arena")
+        row("/ekoth arena <create|region|center|enable|disable> <arena>", "Quick arena changes")
+        row("/ekoth readiness", "Check the setup before TEST")
+        row("/ekoth reload [force]", "Reload the configuration")
+    }
+
+    private fun gui(sender: CommandSender, mode: TeamMode = TeamMode.SOLO) {
         if (sender !is Player) {
             sender.sendMessage(lang.msg("command.error.not_a_player"))
             return
         }
-        val allArenaIds = arenas().keys.toList()
+        val allArenaIds = arenas().keys.sorted()
         val size = ((allArenaIds.size + 1 + 8) / 9).coerceIn(1, 6) * 9
         val modeSlot = size - 1
         val arenaIds = allArenaIds.take(modeSlot)
-        val holder = KothGuiHolder(arenaIds, modeSlot)
+        val holder = KothGuiHolder(arenaIds, modeSlot, mode)
         val inventory = Bukkit.createInventory(holder, size, lang.msg("command.gui.title"))
         holder.backingInventory = inventory
-        arenaIds.forEachIndexed { slot, id ->
-            val activeEvent = kothService.eventForArena(id)
-            val active = activeEvent != null
-            val capper = activeEvent?.let(kothService::capperName) ?: "None"
-            val time = activeEvent
-                ?.let { formatTime(it.endsAt.epochSecond - System.currentTimeMillis() / 1000) }
-                ?: "Scheduled"
-            val item = ItemStack(if (active) Material.GLOWSTONE_DUST else Material.REDSTONE_TORCH)
-            item.itemMeta = item.itemMeta?.apply {
-                displayName(lang.arenaMsg(if (active) "command.gui.item_name_active" else "command.gui.item_name_inactive", "id" to (arenas()[id]?.name ?: id).arenaComponent()))
-                lore(
-                    listOf(
-                        lang.msg(if (active) "command.gui.lore_active_yes" else "command.gui.lore_active_no", "status" to active.toString()),
-                        lang.msg(if (active) "command.gui.lore_capturing_yes" else "command.gui.lore_capturing_no", "capper" to capper),
-                        lang.msg(if (active) "command.gui.lore_time_left_yes" else "command.gui.lore_time_left_no", "time" to time),
-                    ),
-                )
-            }
-            inventory.setItem(slot, item)
-        }
+        val canStart = canStartFromMenu(sender)
+        arenaIds.forEachIndexed { slot, id -> inventory.setItem(slot, arenaItem(id, canStart)) }
         inventory.setItem(modeSlot, teamModeItem(holder.teamMode))
+        MenuStyle.fill(inventory)
         sender.openInventory(inventory)
     }
 
-    private fun teamModeItem(mode: TeamMode): ItemStack = ItemStack(Material.PLAYER_HEAD).apply {
-        itemMeta = itemMeta?.apply {
-            displayName(lang.msg("command.gui.mode_name", "mode" to mode.name.lowercase()))
-            lore(listOf(lang.msg("command.gui.mode_lore")))
-        }
+    private fun canStartFromMenu(player: Player): Boolean = cfgLoader().manualStart.enabled &&
+        (player.hasPermission("enthusiakoth.start.basic") || player.hasPermission("enthusiakoth.start.advanced"))
+
+    /** Running arenas glow and show who holds them; idle ones say whether a click starts them. */
+    private fun arenaItem(id: String, canStart: Boolean): ItemStack {
+        val arena = arenas()[id]
+        val family = arena?.family ?: "capture"
+        val name = (arena?.name ?: id).arenaComponent()
+        val event = kothService.eventForArena(id)
+        val lore = if (event != null) listOf(
+            lang.msg("command.gui.lore_holding", "capper" to kothService.capperName(event)),
+            lang.msg("command.gui.lore_time_left", "time" to formatTime(event.endsAt.epochSecond - System.currentTimeMillis() / 1000)),
+            lang.msg("command.gui.hint_running"),
+        ) else listOf(
+            lang.msg("command.gui.lore_mode", "mode" to MenuStyle.label(family)),
+            lang.msg(if (canStart) "command.gui.hint_start" else "command.gui.hint_view_only"),
+        )
+        return MenuStyle.item(MenuStyle.familyIcon(family),
+            lang.arenaMsg(if (event != null) "command.gui.item_name_active" else "command.gui.item_name_inactive", "id" to name), lore, glow = event != null)
+    }
+
+    private fun teamModeItem(mode: TeamMode): ItemStack = MenuStyle.item(
+        if (mode == TeamMode.SOLO) Material.PLAYER_HEAD else Material.SHIELD,
+        lang.msg("command.gui.mode_name", "mode" to MenuStyle.label(mode.name)),
+        listOf(lang.msg("command.gui.mode_lore")),
+    )
+
+    /** Starting can cost money, so a click opens a confirmation instead of starting at once. */
+    private fun confirmStart(player: Player, arenaId: String, mode: TeamMode) {
+        val holder = KothStartConfirmHolder(arenaId, mode)
+        val name = (arenas()[arenaId]?.name ?: arenaId).arenaComponent()
+        val inventory = Bukkit.createInventory(holder, 27, lang.arenaMsg("command.gui.confirm_title", "arena" to name))
+        holder.backingInventory = inventory
+        val cost = cfgLoader().manualStart.basicCost.coerceAtLeast(0.0)
+        inventory.setItem(KothStartConfirmHolder.START_SLOT, MenuStyle.item(Material.LIME_CONCRETE,
+            lang.arenaMsg("command.gui.confirm_start", "arena" to name), listOf(
+                lang.msg("command.gui.confirm_teams", "mode" to MenuStyle.label(mode.name)),
+                if (cost > 0.0) lang.msg("command.gui.confirm_cost", "cost" to "%.2f".format(cost)) else lang.msg("command.gui.confirm_free"),
+            )))
+        inventory.setItem(KothStartConfirmHolder.BACK_SLOT, MenuStyle.item(Material.RED_CONCRETE,
+            lang.msg("command.gui.confirm_back"), listOf(lang.msg("command.gui.confirm_back_hint"))))
+        MenuStyle.fill(inventory)
+        player.openInventory(inventory)
     }
 
     private fun schedule(sender: CommandSender) {
@@ -292,7 +504,75 @@ class KothCommand(
         }
     }
 
+    /** The next weekend blitz: when it opens and which arena each round is in. */
+    private fun blitz(sender: CommandSender) {
+        val cfg = cfgLoader()
+        val rounds = scheduleService.nextBlitz()
+        if (!cfg.schedule.enabled || !cfg.schedule.blitz.enabled || rounds.isEmpty()) {
+            sender.sendMessage(lang.msg("command.blitz.none"))
+            return
+        }
+        val zone = cfg.schedule.zone
+        val now = java.time.Instant.now()
+        val first = rounds.first().instant.atZone(zone)
+        sender.sendMessage(lang.msg("command.blitz.header"))
+        sender.sendMessage(lang.msg("command.blitz.summary",
+            "day" to first.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH),
+            "time" to first.format(DateTimeFormatter.ofPattern("HH:mm")), "zone" to zone.id,
+            "rounds" to rounds.size.toString(), "length" to formatTime(cfg.schedule.blitz.roundSeconds.toLong()),
+            "capture" to formatTime(cfg.schedule.blitz.captureSeconds.toLong())))
+        rounds.forEachIndexed { index, occurrence ->
+            val state = net.badgersmc.ek.application.BlitzRound.status(now, occurrence.instant, cfg.schedule.blitz.roundSeconds,
+                kothService.isOccurrenceLive(occurrence.id)).name.lowercase()
+            sender.sendMessage(lang.arenaMsg("command.blitz.round_$state", "round" to (index + 1).toString(),
+                "arena" to (arenas()[occurrence.arenaId]?.name ?: occurrence.arenaId).arenaComponent(),
+                "time" to occurrence.instant.atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm"))))
+        }
+    }
+
+    private val leaderboardDialog by lazy {
+        LeaderboardDialog(plugin,
+            wins = { period ->
+                if (period == "lifetime") stats.allWins()
+                else net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)?.let(stats::winsIn)
+            },
+            periods = { listOfNotNull("daily", "weekly", "season".takeIf { cfgLoader().seasonStart != null }, "lifetime") },
+            name = ::formatStatUser,
+            head = ::leaderboardHead,
+            art = {
+                when (plugin.config.getString("leaderboards.dialog-art", "auto")?.lowercase()) {
+                    "on", "true" -> true
+                    "off", "false" -> false
+                    else -> Bukkit.getPluginManager().isPluginEnabled("Nexo")
+                }
+            })
+    }
+
+    /**
+     * A player's head as an inline text object. The skin comes from the server's copy of their profile when it has one
+     * (online, or cached from an earlier join); otherwise the client looks it up by name.
+     */
+    private fun leaderboardHead(key: String): Component? {
+        if (!key.startsWith("solo:")) return null
+        val id = runCatching { UUID.fromString(key.substringAfter(':')) }.getOrNull() ?: return null
+        val profile = (Bukkit.getPlayer(id) ?: Bukkit.getOfflinePlayer(id)).playerProfile
+        val head = net.kyori.adventure.text.`object`.ObjectContents.playerHead().id(id)
+        val name = profile.name ?: formatStatUser(key)
+        if (name.length in 1..16 && name.all { it.isLetterOrDigit() || it == '_' }) head.name(name)
+        profile.properties.filter { it.name == "textures" }.forEach { property ->
+            head.profileProperty(net.kyori.adventure.text.`object`.PlayerHeadObjectContents.property(property.name, property.value, property.signature))
+        }
+        return Component.`object`(head.build())
+    }
+
     private fun top(sender: CommandSender, page: Int, period: String = "lifetime") {
+        if (sender is Player) {
+            if (period != "lifetime" && net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart) == null) {
+                sender.sendMessage(lang.msg("staff.error.period")); return
+            }
+            leaderboardDialog.open(sender, LeaderboardDialog.View(period.lowercase(), LeaderboardSide.PLAYERS, page))
+            return
+        }
         val window = net.badgersmc.ek.application.LeaderboardWindow.forPeriod(period, java.time.Instant.now(), cfgLoader().timezone, cfgLoader().seasonStart)
         if (period != "lifetime" && window == null) { sender.sendMessage(lang.msg("staff.error.period")); return }
         val wins = if (window == null) stats.allWins() else stats.winsIn(window)
@@ -485,15 +765,25 @@ class KothCommand(
         target.inventory.addItem(flare).values.forEach { target.world.dropItem(target.location, it) }
     }
 
-    private fun doReload(sender: CommandSender) {
+    /** /ekoth reload [force]. A reload ends any running KOTH, so it waits for "force" before doing that. */
+    private fun doReload(sender: CommandSender, force: Boolean) {
         if (!sender.hasPermission("enthusiakoth.admin")) {
             sender.sendMessage(lang.msg("command.error.no_permission"))
             return
         }
-        reloadAction()
+        val running = kothService.allEvents()
+        if (running.isNotEmpty() && !force) {
+            val names = running.foldIndexed(Component.empty()) { index, names, event ->
+                names.append(Component.text(if (index == 0) "" else ", ")).append(event.arena.name.arenaComponent())
+            }
+            sender.sendMessage(lang.arenaMsg("command.reload.running", "arenas" to names))
+            return
+        }
+        reloadAction(running.isNotEmpty())
         if (kothService.lastCancellationRefundPending) {
             sender.sendMessage(lang.msg("command.error.refund_failed"))
         }
+        if (running.isNotEmpty()) sender.sendMessage(lang.msg("command.reload.ended", "count" to running.size.toString()))
         sender.sendMessage(lang.msg("command.error.reloaded"))
     }
 
@@ -700,18 +990,23 @@ class KothCommand(
             return
         }
         val arenaId = holder.arenaIds.getOrNull(slot) ?: return
-        val arena = arenas()[arenaId] ?: return
-        val result = startService.start(
-            StartRequest(
-                actor = startActor(player),
-                arena = arena,
-                source = StartSource.GUI,
-                tier = StartTier.BASIC,
-                teamMode = holder.teamMode,
-            ),
-        )
-        if (result is StartResult.Started) player.closeInventory()
-        sendStartResult(player, arenaId, result, true)
+        if (arenas()[arenaId] == null || kothService.eventForArena(arenaId) != null || !canStartFromMenu(player)) return
+        // Inventory replacement happens next tick, outside the click transaction.
+        plugin.server.scheduler.runTask(plugin, Runnable { if (player.isOnline) confirmStart(player, arenaId, holder.teamMode) })
+    }
+
+    fun handleConfirmClick(player: Player, slot: Int, holder: KothStartConfirmHolder) {
+        when (slot) {
+            KothStartConfirmHolder.START_SLOT -> plugin.server.scheduler.runTask(plugin, Runnable {
+                val arena = arenas()[holder.arenaId]
+                player.closeInventory()
+                if (arena == null || !player.isOnline) return@Runnable
+                val result = startService.start(StartRequest(actor = startActor(player), arena = arena, source = StartSource.GUI,
+                    tier = StartTier.BASIC, teamMode = holder.teamMode))
+                sendStartResult(player, holder.arenaId, result, true)
+            })
+            KothStartConfirmHolder.BACK_SLOT -> plugin.server.scheduler.runTask(plugin, Runnable { if (player.isOnline) gui(player, holder.teamMode) })
+        }
     }
 
     private fun formatTime(seconds: Long): String {

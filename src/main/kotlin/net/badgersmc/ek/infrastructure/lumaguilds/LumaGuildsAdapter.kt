@@ -119,6 +119,20 @@ class LumaGuildsAdapter {
         return memberIds.mapNotNull { Bukkit.getPlayer(it) }
     }
 
+    /**
+     * The guild's banner design, or null when it has none, or when this LumaGuilds build has no visual lookup.
+     * Looked up each time, so a guild that changes its banner flies the new one at its next KOTH.
+     */
+    fun guildBanner(guildId: UUID): net.badgersmc.ek.application.BannerDesign? = try {
+        Bukkit.getServicesManager().load(net.lumalyte.lg.api.GuildVisualLookup::class.java)
+            ?.getGuildVisual(guildId)?.banner
+            ?.let { banner -> net.badgersmc.ek.application.BannerDesign(banner.baseColor, banner.patterns.map {
+                net.badgersmc.ek.application.BannerDesign.Layer(it.type, it.color)
+            }) }
+    } catch (_: LinkageError) {
+        null
+    }
+
     fun getGuildSummary(guildId: UUID): GuildSummary? {
         val lk = lookup ?: return null
         return lk.getGuild(guildId)

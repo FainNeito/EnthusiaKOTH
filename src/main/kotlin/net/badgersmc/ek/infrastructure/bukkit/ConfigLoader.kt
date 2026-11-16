@@ -53,6 +53,18 @@ class ConfigLoader(private val plugin: JavaPlugin) {
                 strings(config, "notifications.capture-regions").map(String::trim).filter(String::isNotEmpty).distinct()
                 else listOf("spawn", "warzone", "market"),
             captureSounds = CaptureSoundConfigLoader.load(config),
+            arenaBuild = net.badgersmc.ek.config.ArenaBuildConfig(
+                enabled = boolean(config, "arena-build.enabled", true),
+                buildSeconds = integer(config, "arena-build.build-seconds", 4).coerceIn(1, 60),
+                teardownSeconds = integer(config, "arena-build.teardown-seconds", 3).coerceIn(1, 60),
+                previewSeconds = integer(config, "arena-build.preview-seconds", 10).coerceIn(1, 300),
+                below = integer(config, "arena-build.below", 8).coerceIn(0, 128),
+                above = integer(config, "arena-build.above", 24).coerceIn(0, 256),
+                margin = integer(config, "arena-build.margin", 16).coerceIn(0, 128),
+                maxBlocks = integer(config, "arena-build.max-blocks", 20_000).coerceIn(1, 500_000),
+                maxScanBlocks = integer(config, "arena-build.max-scan-blocks", 2_000_000).toLong().coerceIn(1, 20_000_000),
+                victoryHoldSeconds = integer(config, "arena-build.victory-hold-seconds", 8).coerceIn(0, 120),
+            ),
             fairness = net.badgersmc.ek.config.FairnessConfig(
                 contributorMinimumPercent = decimal(config, "fairness.contributor-minimum-percent", 10.0).let { if (it.isFinite()) it.coerceIn(0.0, 100.0) else 10.0 },
                 starterCooldownSeconds = integer(config, "fairness.starter-cooldown-seconds", 0).coerceAtLeast(0),
@@ -154,6 +166,18 @@ private object ScheduleConfigLoader {
         zone = zone,
         preStartWarningSeconds = integer(config, "schedule.pre-start-warning-seconds", 300).coerceAtLeast(0),
         times = strings(config, "schedule.times"),
+        blitz = net.badgersmc.ek.config.BlitzConfig(
+            enabled = boolean(config, "schedule.blitz.enabled", false),
+            days = if (config.contains("schedule.blitz.days")) strings(config, "schedule.blitz.days").mapNotNull { day ->
+                runCatching { java.time.DayOfWeek.valueOf(day.trim().uppercase()) }.getOrNull()
+            }.toSet() else setOf(java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY),
+            startTimes = if (config.contains("schedule.blitz.start-times")) strings(config, "schedule.blitz.start-times") else listOf("18:00"),
+            rounds = integer(config, "schedule.blitz.rounds", 4).coerceIn(1, 48),
+            roundSeconds = integer(config, "schedule.blitz.round-seconds", 300).coerceIn(30, 7200),
+            captureSeconds = integer(config, "schedule.blitz.capture-seconds", 60).coerceIn(5, 7200),
+            breakSeconds = integer(config, "schedule.blitz.break-seconds", 60).coerceIn(0, 3600),
+            arenas = strings(config, "schedule.blitz.arenas").map(String::trim).filter(String::isNotEmpty).distinct(),
+        ),
     )
 }
 
@@ -229,7 +253,9 @@ internal object ArenaConfigLoader {
         }.toMap()
         val values = section(config, path) ?: return emptyMap()
         return buildMap {
-            values.getKeys(false).forEach { chanceText ->
+            // A chance such as "20.0" is split at its dot into a "20" section holding "0", so read the full nested key
+            // back as the chance rather than taking only the top-level keys.
+            values.getKeys(true).filterNot(values::isConfigurationSection).forEach { chanceText ->
                 val command = values.getString(chanceText) ?: return@forEach
                 val chance = chanceText.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: return@forEach
                 put(command, chance)
@@ -332,6 +358,10 @@ private object DisplayConfigLoader {
         zoneBorder = boolean(config, "display.zone-border", true),
         bossbar = boolean(config, "display.bossbar", true), actionbar = boolean(config, "display.actionbar", true),
         hologram = boolean(config, "display.hologram", false), scoreboard = boolean(config, "display.scoreboard", false),
+        movingFloor = boolean(config, "display.moving-floor", true),
+        startTitle = boolean(config, "display.start-title", true),
+        startEffects = boolean(config, "display.start-effects", true),
+        championBanners = boolean(config, "display.champion-banners", true),
         bossbarColor = string(config, "display.bossbar-color", "RED"), bossbarOverlay = string(config, "display.bossbar-overlay", "PROGRESS"),
         bossbarTitle = string(config, "display.bossbar-title", ""),
     )
@@ -388,6 +418,23 @@ internal object CaptureSoundConfigLoader {
             lost = cue("lost", defaults.lost), win = cue("win", defaults.win),
             winAccent = cue("win-accent", defaults.winAccent), winAccent2 = cue("win-accent-2", defaults.winAccent2),
             winAccent3 = cue("win-accent-3", defaults.winAccent3),
+            // A missing list keeps the default victory sound; an empty one goes back to the four win slots.
+            victory = if (!config.contains("sounds.victory")) defaults.victory
+                else config.getMapList("sounds.victory").take(MAX_VICTORY_NOTES).mapNotNull(::victoryNote),
         )
+    }
+
+    private const val MAX_VICTORY_NOTES = 32
+
+    /** One note of sounds.victory. A note with an invalid sound or no volume is dropped. */
+    private fun victoryNote(raw: Map<*, *>): net.badgersmc.ek.config.SoundCueConfig? {
+        val name = (raw["sound"] as? String)?.trim().orEmpty()
+        if (!name.matches(Regex("[a-z0-9_.-]+:[a-z0-9_./-]+"))) return null
+        fun bounded(key: String, default: Double, min: Double, max: Double): Float =
+            ((raw[key] as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: default).coerceIn(min, max).toFloat()
+        val volume = bounded("volume", 0.5, 0.0, 1.0)
+        if (volume <= 0f) return null
+        val delay = ((raw["delay-ticks"] as? Number)?.toLong() ?: 0L).coerceIn(0L, 100L)
+        return net.badgersmc.ek.config.SoundCueConfig(name, volume, bounded("pitch", 1.0, 0.5, 2.0), delay)
     }
 }

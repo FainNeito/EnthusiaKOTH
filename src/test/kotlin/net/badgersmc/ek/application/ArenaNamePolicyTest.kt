@@ -17,8 +17,8 @@ class ArenaNamePolicyTest {
     }, { false }, { true }, { _, _ -> true })
 
     @Test fun `missing blank and unicode readable names resolve predictably`() {
-        assertEquals("capture", ArenaName.resolve("capture", null))
-        assertEquals("capture", ArenaName.resolve("capture", "  "))
+        assertEquals("Capture", ArenaName.resolve("capture", null))
+        assertEquals("Capture", ArenaName.resolve("capture", "  "))
         assertEquals("Crête & Summit", ArenaName.resolve("capture", "  Crête & Summit  "))
         assertEquals(64, ArenaName.parse("A".repeat(64))!!.length)
     }
@@ -64,7 +64,7 @@ class ArenaNamePolicyTest {
         val yaml = YamlConfiguration.loadConfiguration(file)
         assertFalse(yaml.contains("arenas.capture.display-name"))
         assertEquals("untouched", yaml.getString("arenas.capture.custom-key"))
-        assertEquals("capture", ArenaName.resolve("capture", store.read().arenas.getValue("capture").displayName))
+        assertEquals("Capture", ArenaName.resolve("capture", store.read().arenas.getValue("capture").displayName))
     }
     @Test fun `invalid configured names fail explicitly rather than allowing executable markup`() {
         val yaml = YamlConfiguration().apply { set("arenas.capture.display-name", "<click:run_command:/op>Summit") }

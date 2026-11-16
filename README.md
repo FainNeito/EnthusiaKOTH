@@ -28,7 +28,7 @@ Ordinary player-facing subcommands implemented by the plugin include:
 
 - `/ekoth gui` — open the KOTH selection/status GUI.
 - `/ekoth schedule` — show scheduled KOTH times when scheduling is enabled.
-- `/ekoth top [page]` — show KOTH wins leaderboard pages.
+- `/ekoth leaderboard [period] [page]` (alias `top`) — open the KOTH leaderboard dialog; the console gets the chat list.
 - `/ekoth stats [player]` — show KOTH win statistics.
 - `/ekoth notifications` — toggle public KOTH messages, warnings and passive displays; saved in player data. `/ekoth messages` is an alias.
 - `/ekoth start <arena> [basic|advanced] [solo|guild]` — request a manual KOTH start when the arena/start mode is available.
@@ -118,7 +118,7 @@ The bundled current implementation uses a custom named redstone-torch item by de
 
 ### Capture KOTH
 
-A standard capture-zone KOTH. Players/guilds fight for control of a fixed circular objective.
+A standard capture-zone KOTH. Players/guilds fight for control of a fixed square objective.
 
 Important configurable behavior includes:
 
@@ -167,7 +167,7 @@ Maces support a configurable mace policy rather than only a simple boolean. The 
 
 Each KOTH arena can bind directly to a named WorldGuard region with `worldguard-region`. When a binding is present, the WorldGuard region geometry is authoritative for permanent KOTH arena protection; the legacy `protected-region` cuboid remains as a backward-compatible fallback for arenas that are not yet bound.
 
-The capture objective is independent of the arena boundary. `center` selects the objective center and `radius` is a true horizontal circular radius.
+The capture objective is independent of the arena boundary. `center` selects the objective center and `radius` is how far the square objective reaches from it in each direction (radius 5 is a 10 x 10 square). A faint gold outline marks its edges while the KOTH runs.
 
 Staff can create and configure arena geometry and basic rules entirely in game:
 
@@ -229,7 +229,7 @@ The current live snapshot has KOTH reward money values at 0 and no enabled arena
 
 ## Statistics and leaderboards
 
-KOTH wins are stored in SQLite-backed statistics storage. `/ekoth top` pages through ranked wins and `/ekoth stats` exposes individual win totals. The code also contains migration support for older YAML statistics.
+KOTH wins are stored in SQLite-backed statistics storage. `/ekoth leaderboard` pages through ranked wins and `/ekoth stats` exposes individual win totals. The code also contains migration support for older YAML statistics.
 
 PlaceholderAPI integration exposes KOTH state/stat information for other server displays.
 Formatted arena labels and capture progress/countdowns are documented in [display-placeholders.md](docs/display-placeholders.md). Existing ID and event-timer placeholders retain their meanings.
@@ -289,7 +289,7 @@ Increasing it allows separate nonoverlapping public arenas; private tests remain
 exclusive. Unresolvable WorldGuard geometry blocks concurrency. With multiple
 events, `/ekoth stop <arena>` must identify the event.
 
-`/ekoth top [lifetime|daily|weekly|season] [page]` uses timestamped wins for new
+`/ekoth leaderboard [lifetime|daily|weekly|season] [page]` uses timestamped wins for new
 period views, in the configured schedule timezone. Weeks start Monday. Set
 `leaderboards.season-start` to an ISO date to enable season results. Legacy wins
 remain lifetime-only. Optional `display.hologram` and `display.sidebar` default

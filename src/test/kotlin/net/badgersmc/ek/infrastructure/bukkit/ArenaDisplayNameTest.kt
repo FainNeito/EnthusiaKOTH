@@ -19,7 +19,7 @@ class ArenaDisplayNameTest {
             val arenas = ConfigLoader(plugin).loadArenas()
             assertEquals("Crimson Summit", arenas.getValue("capture").name)
             assertEquals("Crimson Summit", arenas.getValue("score").name)
-            assertEquals("moving", arenas.getValue("moving").name)
+            assertEquals("Moving", arenas.getValue("moving").name)
             assertEquals("capture", arenas.getValue("capture").id)
             assertEquals("capture", arenas.getValue("capture").zone.id)
             assertEquals("score", arenas.getValue("score").id)

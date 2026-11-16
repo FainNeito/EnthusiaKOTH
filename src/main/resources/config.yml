@@ -59,6 +59,22 @@ sounds:
     sound: 'minecraft:block.note_block.bass'
     volume: 0.35
     pitch: 0.8
+  # The victory sound, "Triumph": a bell arpeggio climbs a C major chord into the advancement fanfare and a
+  # firework burst. Each note plays delay-ticks after the win. Hear it with /ekoth sound victory.
+  # Set "victory: []" to use the older four win slots below instead.
+  victory:
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.45, pitch: 0.707, delay-ticks: 0 }
+    - { sound: 'minecraft:block.note_block.harp', volume: 0.35, pitch: 0.707, delay-ticks: 0 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.45, pitch: 0.891, delay-ticks: 3 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.45, pitch: 1.059, delay-ticks: 6 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.5, pitch: 1.414, delay-ticks: 9 }
+    - { sound: 'minecraft:block.note_block.pling', volume: 0.4, pitch: 1.414, delay-ticks: 9 }
+    - { sound: 'minecraft:ui.toast.challenge_complete', volume: 0.6, pitch: 1.0, delay-ticks: 12 }
+    - { sound: 'minecraft:entity.firework_rocket.large_blast', volume: 0.5, pitch: 1.0, delay-ticks: 12 }
+    - { sound: 'minecraft:entity.firework_rocket.twinkle', volume: 0.45, pitch: 1.0, delay-ticks: 17 }
+    - { sound: 'minecraft:block.note_block.bell', volume: 0.5, pitch: 1.782, delay-ticks: 22 }
+    - { sound: 'minecraft:block.amethyst_block.chime', volume: 0.5, pitch: 1.0, delay-ticks: 22 }
+  # Older victory sound, used only when victory is empty.
   win:
     sound: 'minecraft:block.note_block.bell'
     volume: 0.45
@@ -104,6 +120,20 @@ schedule:
     - "00:00"
     - "08:00"
     - "16:00"
+  # Blitz: short KOTH rounds back to back, each in the next arena of the rotation.
+  # Rounds start at fixed slots (start + round x (round-seconds + break-seconds)), so a round
+  # that is captured early still waits for its slot. Only the first round gets the pre-start warning.
+  # Needs schedule.enabled. Rewards and protections are the arena's own.
+  blitz:
+    enabled: false
+    days: [SATURDAY, SUNDAY]
+    start-times: ["18:00"]
+    rounds: 4
+    round-seconds: 300
+    capture-seconds: 60
+    break-seconds: 60
+    # Arena IDs in rotation order. Empty uses every enabled arena.
+    arenas: []
 
 flares:
   enabled: true
@@ -198,6 +228,16 @@ display:
   actionbar: true
   hologram: false
   scoreboard: false
+  # Moving KOTH: light up the edge of the capture square in the floor as it moves. Client-side only;
+  # the world is never changed and the real blocks return when the KOTH ends.
+  moving-floor: true
+  # When a KOTH goes live: a title on screen, a low two-tone call with thunder, and a burst of light on the point.
+  # Only players following the event (or at the arena) see and hear it; nothing is damaged.
+  start-title: true
+  start-effects: true
+  # Banners in an arena fly the design of the guild that last won there, until another guild wins it.
+  # Solo wins, private tests and withheld wins leave the champion in place.
+  champion-banners: true
   bossbar-color: RED
   bossbar-overlay: PROGRESS
   bossbar-title: "" # Blank uses lang/en_US.yml; MiniMessage placeholders koth_name, capper, time, contested.
@@ -219,7 +259,7 @@ rules:
 
 arenas:
   capture:
-    # Optional visible name. Blank keeps the stable arena ID. Up to 64 visible characters.
+    # Optional visible name. Blank shows the arena ID with a capital first letter ("Capture"). Up to 64 visible characters.
     # Colors &c / &#FFAA00, legacy decorations and emojis are supported; e.g. "&#FFAA00&lSummit 🏆".
     display-name: ""
     enabled: true
@@ -299,9 +339,30 @@ rewards:
 events:
   max-concurrent: 1
 
+# Arenas that build themselves when a KOTH starts. Record with /ekoth build <arena> base, build the
+# full form, then /ekoth build <arena> save. The recorded blocks rise layer by layer when an event
+# starts there and come down in reverse when it ends. The blocks are real; a journal under
+# arena-builds/active/ puts the base form back on the next start if the server stops mid-event.
+arena-build:
+  enabled: true
+  build-seconds: 4
+  teardown-seconds: 3
+  preview-seconds: 10
+  # Recorded region: the arena's protection region (or its zone plus margin), from below to above
+  # the capture point.
+  below: 8
+  above: 24
+  margin: 16
+  max-blocks: 20000
+  max-scan-blocks: 2000000
+  # After a KOTH is won, the built arena stands this long under the victors' banners before it comes down.
+  victory-hold-seconds: 8
+
 # Inclusive local date; leave blank until a season has been selected.
 leaderboards:
   season-start: ""
+  # Enthusia-Pack leaderboard art in the /ekoth leaderboard dialog: auto (when Nexo is installed), on or off.
+  dialog-art: auto
 
 # Crown progress starts at cutover (an ISO-8601 UTC instant). Set positive
 # targets and a revision before enabling. A final also requires player consent.

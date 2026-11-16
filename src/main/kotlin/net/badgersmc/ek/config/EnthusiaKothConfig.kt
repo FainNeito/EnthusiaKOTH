@@ -26,6 +26,24 @@ data class EnthusiaKothConfig(
     val seasonStart: String? = null,
     val captureNotificationRegions: List<String> = listOf("spawn", "warzone", "market"),
     val captureSounds: CaptureSoundsConfig = CaptureSoundsConfig(),
+    val arenaBuild: ArenaBuildConfig = ArenaBuildConfig(),
+)
+
+/** Arenas that build themselves from their base form when a KOTH starts (see /ekoth build). */
+data class ArenaBuildConfig(
+    val enabled: Boolean = true,
+    val buildSeconds: Int = 4,
+    val teardownSeconds: Int = 3,
+    val previewSeconds: Int = 10,
+    /** How far below and above the capture point the recorded region reaches. */
+    val below: Int = 8,
+    val above: Int = 24,
+    /** Margin around the capture zone when the arena has no protection region. */
+    val margin: Int = 16,
+    val maxBlocks: Int = 20_000,
+    val maxScanBlocks: Long = 2_000_000,
+    /** Seconds a built arena stays up after a KOTH is won there, before it comes down. */
+    val victoryHoldSeconds: Int = 8,
 )
 
 data class SoundCueConfig(val sound: String, val volume: Float, val pitch: Float, val delayTicks: Long = 0)
@@ -41,6 +59,28 @@ data class CaptureSoundsConfig(
     val winAccent: SoundCueConfig = SoundCueConfig("minecraft:entity.player.levelup", 0.55f, 1f, 3),
     val winAccent2: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bell", 0.38f, 1f, 8),
     val winAccent3: SoundCueConfig = SoundCueConfig("minecraft:block.note_block.bell", 0.42f, 1.25f, 13),
+    /** Every note of the victory sound. When empty, the four older win slots above are played instead. */
+    val victory: List<SoundCueConfig> = VICTORY_TRIUMPH,
+) {
+    fun victoryNotes(): List<SoundCueConfig> = victory.ifEmpty { listOf(win, winAccent, winAccent2, winAccent3) }
+}
+
+/**
+ * The victory sound, "Triumph": a bell arpeggio climbs a C major chord into the advancement fanfare and a firework
+ * burst, then rings out on a high bell and chime. Note-block pitches: C4 0.707, E4 0.891, G4 1.059, C5 1.414, E5 1.782.
+ */
+val VICTORY_TRIUMPH: List<SoundCueConfig> = listOf(
+    SoundCueConfig("minecraft:block.note_block.bell", 0.45f, 0.707f, 0),
+    SoundCueConfig("minecraft:block.note_block.harp", 0.35f, 0.707f, 0),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.45f, 0.891f, 3),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.45f, 1.059f, 6),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.5f, 1.414f, 9),
+    SoundCueConfig("minecraft:block.note_block.pling", 0.4f, 1.414f, 9),
+    SoundCueConfig("minecraft:ui.toast.challenge_complete", 0.6f, 1.0f, 12),
+    SoundCueConfig("minecraft:entity.firework_rocket.large_blast", 0.5f, 1.0f, 12),
+    SoundCueConfig("minecraft:entity.firework_rocket.twinkle", 0.45f, 1.0f, 17),
+    SoundCueConfig("minecraft:block.note_block.bell", 0.5f, 1.782f, 22),
+    SoundCueConfig("minecraft:block.amethyst_block.chime", 0.5f, 1.0f, 22),
 )
 
 data class FairnessConfig(
@@ -51,7 +91,25 @@ data class FairnessConfig(
 )
 
 data class ManualStartConfig(val enabled: Boolean = true, val basicCost: Double = 0.0, val advancedCost: Double = 0.0, val delaySeconds: Int = 0)
-data class ScheduleConfig(val enabled: Boolean = false, val zone: ZoneId = ZoneId.of("America/New_York"), val preStartWarningSeconds: Int = 300, val times: List<String> = listOf("00:00", "08:00", "16:00"))
+data class ScheduleConfig(val enabled: Boolean = false, val zone: ZoneId = ZoneId.of("America/New_York"), val preStartWarningSeconds: Int = 300, val times: List<String> = listOf("00:00", "08:00", "16:00"), val blitz: BlitzConfig = BlitzConfig())
+
+/**
+ * A blitz chains short KOTH rounds back to back, each in a different arena, starting at fixed times on chosen days.
+ * Round slots are fixed in advance (start + round index x (round + break)), so every round is a durable scheduled occurrence.
+ */
+data class BlitzConfig(
+    val enabled: Boolean = false,
+    val days: Set<java.time.DayOfWeek> = setOf(java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY),
+    val startTimes: List<String> = listOf("18:00"),
+    val rounds: Int = 4,
+    val roundSeconds: Int = 300,
+    val captureSeconds: Int = 60,
+    val breakSeconds: Int = 60,
+    /** Arena IDs in rotation order; empty uses every enabled arena. */
+    val arenas: List<String> = emptyList(),
+) {
+    val slotSeconds: Long get() = roundSeconds.toLong() + breakSeconds.toLong()
+}
 data class FlareConfig(val enabled: Boolean = true, val item: FlareItemConfig = FlareItemConfig())
 data class FlareItemConfig(val material: String = "REDSTONE_TORCH", val name: String = "&c{KOTH} Koth Flare", val lore: List<String> = listOf("&7Right-Click to start a &c{KOTH} &7koth!"))
 data class ProgressBarConfig(val enabled: Boolean = true, val length: Int = 10, val character: String = "|")
@@ -95,7 +153,7 @@ data class DiscordConfig(
     val embeds: Map<DiscordMessageType, DiscordEmbedTemplate> = DiscordEmbedDefaults.templates,
     val startRoleId: String = "",
 )
-data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
+data class DisplayConfig(val zoneBorder: Boolean = true, val bossbar: Boolean = true, val actionbar: Boolean = true, val hologram: Boolean = false, val scoreboard: Boolean = false, val movingFloor: Boolean = true, val startTitle: Boolean = true, val startEffects: Boolean = true, val championBanners: Boolean = true, val bossbarColor: String = "RED", val bossbarOverlay: String = "PROGRESS", val bossbarTitle: String = "")
 data class FamilyRulesConfig(val rules: Map<String, RuleSet> = emptyMap())
 data class PrivateTestingConfig(val lobbySeconds: Int = 0, val quickMatchDurationSeconds: Int = 120, val quickCaptureSeconds: Int = 15, val showObjectiveParticles: Boolean = true)
 data class LockConfig(val state: LockState = LockState.UNLOCKED)
