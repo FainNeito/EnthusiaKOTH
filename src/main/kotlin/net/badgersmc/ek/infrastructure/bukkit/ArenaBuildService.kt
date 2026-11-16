@@ -4,6 +4,8 @@ import net.badgersmc.ek.api.KothLifecycle
 import net.badgersmc.ek.api.KothLifecycleEvent
 import net.badgersmc.ek.application.ArenaBuild
 import net.badgersmc.ek.application.ArenaBuildStore
+import net.badgersmc.ek.application.ArenaLayouts
+import net.badgersmc.ek.application.LayoutRotation
 import net.badgersmc.ek.application.BaseSnapshot
 import net.badgersmc.ek.application.BuildBlock
 import net.badgersmc.ek.config.ArenaBuildConfig
@@ -74,7 +76,12 @@ class ArenaBuildService(
             return
         }
         when (event.lifecycle) {
-            KothLifecycle.STARTED -> runCatching { build(arena) }.onFailure { plugin.logger.severe("Arena '$arena' could not build itself: ${it.message}") }
+            KothLifecycle.STARTED -> {
+                // An arena on a random rotation picks its layout for this KOTH first.
+                runCatching { if (arena !in active) store.advanceForKoth(arena) }
+                    .onFailure { plugin.logger.warning("Arena '$arena' could not pick its next layout: ${it.message}") }
+                runCatching { build(arena) }.onFailure { plugin.logger.severe("Arena '$arena' could not build itself: ${it.message}") }
+            }
             KothLifecycle.COMPLETED, KothLifecycle.CANCELLED -> {
                 // A reload or shutdown can't wait for an animation, so the base form goes back at once.
                 val instant = !plugin.isEnabled || event.snapshot.reason in setOf("RELOAD", "PLUGIN_DISABLE")
@@ -94,14 +101,17 @@ class ArenaBuildService(
         }
     }
 
-    /** Starts the build animation for [arenaId], if it has a recorded build. Returns how many blocks it will place. */
-    fun build(arenaId: String): Int {
+    /**
+     * Starts the build animation for [arenaId]: its active layout, or [layout] when given (a preview). Returns how many
+     * blocks it will place.
+     */
+    fun build(arenaId: String, layout: String? = null): Int {
         val cfg = settings()
         // A KOTH starting while the last one's victory hold stands keeps the arena up as it is.
         holding.remove(arenaId)?.cancel()
         if (!cfg.enabled || arenaId in active) return 0
         finishTeardown(arenaId)
-        val build = store.loadBuild(arenaId)?.takeIf { it.blocks.isNotEmpty() } ?: return 0
+        val build = (if (layout != null) store.loadLayout(arenaId, layout) else store.loadBuild(arenaId))?.takeIf { it.blocks.isNotEmpty() } ?: return 0
         val world = Bukkit.getWorld(build.world) ?: return 0
         val arena = arenas()[arenaId]
         val centerX = arena?.zone?.let { (it.minX + it.maxX) / 2 } ?: build.blocks.map { it.x }.average()
@@ -191,7 +201,10 @@ class ArenaBuildService(
 
     // Recording ---------------------------------------------------------------------------------------------------
 
-    enum class Result { DONE, NO_ARENA, NO_WORLD, BUSY, NO_BASE, NO_BUILD, NOTHING_CHANGED, TOO_LARGE, TOO_MANY, HAS_CONTENTS }
+    enum class Result {
+        DONE, NO_ARENA, NO_WORLD, BUSY, NO_BASE, NO_BUILD, NOTHING_CHANGED, TOO_LARGE, TOO_MANY, HAS_CONTENTS,
+        BAD_NAME, NO_LAYOUT, LAYOUT_EXISTS, ACTIVE_LAYOUT, NO_WORLDEDIT, NO_SCHEMATIC, BAD_SCHEMATIC, OUT_OF_BOUNDS,
+    }
 
     /** Saves the arena's region as it stands now as its base form. */
     fun recordBase(arenaId: String): Pair<Result, Int> {
@@ -213,23 +226,21 @@ class ArenaBuildService(
         return Result.DONE to volume.toInt()
     }
 
-    /** Records whatever differs from the base form as the arena's build, then puts the base form back. */
-    fun recordBuild(arenaId: String): Pair<Result, Int> {
+    /**
+     * Records whatever differs from the base form, then puts the base form back. It is saved over the active layout,
+     * or as the new layout [name] when given.
+     */
+    fun recordBuild(arenaId: String, name: String? = null): Pair<Result, Int> {
         if (arenaId !in arenas()) return Result.NO_ARENA to 0
+        if (name != null && !ArenaLayouts.validName(name)) return Result.BAD_NAME to 0
         if (arenaBusy(arenaId)) return Result.BUSY to 0
         val base = store.loadBase(arenaId) ?: return Result.NO_BASE to 0
         val world = Bukkit.getWorld(base.world) ?: return Result.NO_WORLD to 0
         val build = base.diff(arenaId) { x, y, z -> world.getBlockAt(x, y, z).blockData.asString }
-        if (build.blocks.isEmpty()) return Result.NOTHING_CHANGED to 0
-        if (build.blocks.size > settings().maxBlocks) return Result.TOO_MANY to build.blocks.size
-        // Refuse rather than record a build that would wipe a chest's items or a sign's text every time it comes down.
-        val withContents = ArenaBuild.blocksWithContents(build.blocks) { state ->
-            runCatching { data(state).createBlockState() is org.bukkit.block.TileState }.getOrDefault(false)
-        }
-        if (withContents.isNotEmpty()) return Result.HAS_CONTENTS to withContents.size
+        problem(build)?.let { return it }
         active.remove(arenaId)?.task?.cancel()
         editing.remove(arenaId)
-        store.saveBuild(build)
+        if (name != null) store.saveLayout(build, name) else store.saveBuild(build)
         restoreNow(build)
         store.endJournal(arenaId)
         return Result.DONE to build.blocks.size
@@ -246,11 +257,12 @@ class ArenaBuildService(
         return Result.DONE to build.blocks.size
     }
 
-    /** Builds the arena, then takes it down again after the preview time. */
-    fun preview(arenaId: String): Pair<Result, Int> {
+    /** Builds the arena (its active layout, or [layout]), then takes it down again after the preview time. */
+    fun preview(arenaId: String, layout: String? = null): Pair<Result, Int> {
         if (arenaBusy(arenaId) || arenaId in active || arenaId in editing) return Result.BUSY to 0
+        if (layout != null && !store.hasLayout(arenaId, layout)) return Result.NO_LAYOUT to 0
         if (!store.hasBuild(arenaId)) return Result.NO_BUILD to 0
-        val placed = build(arenaId)
+        val placed = build(arenaId, layout)
         if (placed == 0) return Result.NO_BUILD to 0
         plugin.server.scheduler.runTaskLater(plugin, Runnable { if (!arenaBusy(arenaId)) teardown(arenaId) },
             (settings().buildSeconds + settings().previewSeconds) * 20L)
@@ -265,6 +277,97 @@ class ArenaBuildService(
 
     fun status(arenaId: String): Triple<Boolean, Int?, Boolean> =
         Triple(store.hasBase(arenaId), store.loadBuild(arenaId)?.blocks?.size, isBuilt(arenaId))
+
+    /** A build that can't be saved: nothing in it, too many blocks, or one that would wipe a chest or sign. */
+    private fun problem(build: ArenaBuild): Pair<Result, Int>? {
+        if (build.blocks.isEmpty()) return Result.NOTHING_CHANGED to 0
+        if (build.blocks.size > settings().maxBlocks) return Result.TOO_MANY to build.blocks.size
+        // Refuse rather than record a build that would wipe a chest's items or a sign's text every time it comes down.
+        val withContents = ArenaBuild.blocksWithContents(build.blocks) { state ->
+            runCatching { data(state).createBlockState() is org.bukkit.block.TileState }.getOrDefault(false)
+        }
+        return if (withContents.isNotEmpty()) Result.HAS_CONTENTS to withContents.size else null
+    }
+
+    // Layouts -----------------------------------------------------------------------------------------------------
+
+    data class LayoutInfo(val name: String, val blocks: Int, val active: Boolean)
+
+    fun layouts(arenaId: String): List<LayoutInfo> {
+        val current = store.activeLayout(arenaId)
+        return store.layouts(arenaId).map { LayoutInfo(it, store.loadLayout(arenaId, it)?.blocks?.size ?: 0, it == current) }
+    }
+
+    fun layoutNames(arenaId: String): List<String> = store.layouts(arenaId)
+    fun activeLayout(arenaId: String): String? = store.activeLayout(arenaId)
+    fun rotation(arenaId: String): LayoutRotation = store.rotation(arenaId)
+
+    /** While an arena is built, being edited or has a KOTH running or queued, its layouts can't be switched or renamed. */
+    private fun layoutsLocked(arenaId: String) = arenaBusy(arenaId) || arenaId in active || arenaId in editing
+
+    /** Makes [name] the layout the arena builds from its next KOTH, and puts the arena on a fixed rotation. */
+    fun useLayout(arenaId: String, name: String): Result {
+        if (arenaId !in arenas()) return Result.NO_ARENA
+        if (!store.hasLayout(arenaId, name)) return Result.NO_LAYOUT
+        if (arenaId in active || arenaId in editing) return Result.BUSY
+        store.setActive(arenaId, name)
+        store.setRotation(arenaId, LayoutRotation.FIXED)
+        return Result.DONE
+    }
+
+    fun setRotation(arenaId: String, rotation: LayoutRotation): Result {
+        if (arenaId !in arenas()) return Result.NO_ARENA
+        if (store.layouts(arenaId).isEmpty()) return Result.NO_BUILD
+        store.setRotation(arenaId, rotation)
+        return Result.DONE
+    }
+
+    fun renameLayout(arenaId: String, from: String, to: String): Result {
+        if (!store.hasLayout(arenaId, from)) return Result.NO_LAYOUT
+        if (!ArenaLayouts.validName(to)) return Result.BAD_NAME
+        if (store.hasLayout(arenaId, to)) return Result.LAYOUT_EXISTS
+        if (layoutsLocked(arenaId)) return Result.BUSY
+        store.renameLayout(arenaId, from, to)
+        return Result.DONE
+    }
+
+    fun deleteLayout(arenaId: String, name: String): Result {
+        if (!store.hasLayout(arenaId, name)) return Result.NO_LAYOUT
+        if (store.activeLayout(arenaId) == name) return Result.ACTIVE_LAYOUT
+        if (layoutsLocked(arenaId)) return Result.BUSY
+        store.deleteLayout(arenaId, name)
+        return Result.DONE
+    }
+
+    data class ImportOutcome(val result: Result, val count: Int = 0, val detail: String = "")
+
+    /**
+     * Imports a WorldEdit schematic as the layout [name]. The spot the builder stood on when they copied it lands on the
+     * arena's capture point, and only the blocks that differ from the base form are kept. Nothing in the world changes.
+     */
+    fun importLayout(arenaId: String, name: String, schematic: String): ImportOutcome {
+        val arena = arenas()[arenaId] ?: return ImportOutcome(Result.NO_ARENA)
+        if (!ArenaLayouts.validName(name)) return ImportOutcome(Result.BAD_NAME)
+        if (store.hasLayout(arenaId, name)) return ImportOutcome(Result.LAYOUT_EXISTS)
+        val base = store.loadBase(arenaId) ?: return ImportOutcome(Result.NO_BASE)
+        val blocks = when (val read = SchematicReader.read(schematic, settings().maxScanBlocks)) {
+            is SchematicReader.Read.Blocks -> read.blocks
+            SchematicReader.Read.NoWorldEdit -> return ImportOutcome(Result.NO_WORLDEDIT)
+            SchematicReader.Read.NotFound -> return ImportOutcome(Result.NO_SCHEMATIC)
+            is SchematicReader.Read.TooLarge -> return ImportOutcome(Result.TOO_LARGE, read.volume.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            is SchematicReader.Read.Unreadable -> return ImportOutcome(Result.BAD_SCHEMATIC, detail = read.reason)
+        }
+        // Drop states this server can't place, rather than storing a layout that would fail half way through building.
+        val unknown = blocks.map { it.state }.distinct().filter { runCatching { data(it) }.isFailure }
+        if (unknown.isNotEmpty()) return ImportOutcome(Result.BAD_SCHEMATIC, detail = "unknown blocks: " + unknown.take(3).joinToString())
+        val zone = arena.zone
+        val anchor = Triple(floor((zone.minX + zone.maxX) / 2).toInt(), floor(zone.objectiveY).toInt(), floor((zone.minZ + zone.maxZ) / 2).toInt())
+        val (build, outside) = ArenaLayouts.overlay(base, arenaId, anchor, blocks)
+        if (build == null) return ImportOutcome(Result.OUT_OF_BOUNDS, outside)
+        problem(build)?.let { (result, count) -> return ImportOutcome(result, count) }
+        store.saveLayout(build, name)
+        return ImportOutcome(Result.DONE, build.blocks.size)
+    }
 
     // Helpers -----------------------------------------------------------------------------------------------------
 

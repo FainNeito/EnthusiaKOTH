@@ -3,6 +3,7 @@ package net.badgersmc.ek.application
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.time.LocalDate
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -51,6 +52,8 @@ data class BaseSnapshot(
 
     fun at(x: Int, y: Int, z: Int): String = palette[blocks[index(x, y, z)]]
 
+    fun contains(x: Int, y: Int, z: Int): Boolean = x in minX..maxX && y in minY..maxY && z in minZ..maxZ
+
     fun index(x: Int, y: Int, z: Int): Int = ((y - minY) * sizeZ + (z - minZ)) * sizeX + (x - minX)
 
     /** The blocks that differ in [current], which reports the block data now standing at a position. */
@@ -72,19 +75,97 @@ data class BaseSnapshot(
 }
 
 /**
- * Files under `arena-builds/`: `<arena>.base.dat` (the base snapshot), `<arena>.build.dat` (the recorded build) and
- * `active/<arena>.dat`, a journal written before an arena builds itself and removed once it is back in its base form.
- * A journal found at startup means the server stopped mid-event, and its base blocks are put back.
+ * Files under `arena-builds/`:
+ * - `<arena>.base.dat`, the base snapshot.
+ * - `layouts/<arena>/<layout>.dat`, each named design the arena can build, and `layouts/<arena>/state.properties`,
+ *   which layout is active and how the arena rotates between them.
+ * - `active/<arena>.dat`, a journal written before an arena builds itself and removed once it is back in its base form.
+ *   A journal found at startup means the server stopped mid-event, and its base blocks are put back.
+ *
+ * A build recorded before layouts existed, `<arena>.build.dat`, becomes the arena's `default` layout.
  */
-class ArenaBuildStore(private val folder: File) {
+class ArenaBuildStore(private val folder: File, private val today: () -> LocalDate = { LocalDate.now() }) {
     private val active = File(folder, "active")
 
     private fun baseFile(id: String) = File(folder, "$id.base.dat")
-    private fun buildFile(id: String) = File(folder, "$id.build.dat")
+    private fun legacyBuildFile(id: String) = File(folder, "$id.build.dat")
     private fun journalFile(id: String) = File(active, "$id.dat")
+    private fun layoutDir(id: String) = File(File(folder, "layouts"), id)
+    private fun layoutFile(id: String, name: String) = File(layoutDir(id), "$name.dat")
+    private fun stateFile(id: String) = File(layoutDir(id), "state.properties")
+
+    init {
+        // Each single build from before layouts becomes that arena's default layout, active and on a fixed rotation.
+        folder.listFiles { file -> file.name.endsWith(".build.dat") }.orEmpty().forEach { file ->
+            val id = file.name.removeSuffix(".build.dat")
+            if (layouts(id).isEmpty()) {
+                layoutDir(id).mkdirs()
+                java.nio.file.Files.move(file.toPath(), layoutFile(id, ArenaLayouts.DEFAULT).toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                if (storedActive(id) == null) setActive(id, ArenaLayouts.DEFAULT)
+            }
+        }
+    }
 
     fun hasBase(id: String) = baseFile(id).isFile
-    fun hasBuild(id: String) = buildFile(id).isFile
+    fun hasBuild(id: String) = activeLayout(id) != null
+
+    // Layouts --------------------------------------------------------------------------------------------------------
+
+    fun layouts(id: String): List<String> = layoutDir(id).listFiles { file -> file.name.endsWith(".dat") }.orEmpty()
+        .map { it.name.removeSuffix(".dat") }.filter(ArenaLayouts::validName).sorted()
+
+    fun hasLayout(id: String, name: String) = ArenaLayouts.validName(name) && layoutFile(id, name).isFile
+
+    fun loadLayout(id: String, name: String): ArenaBuild? = if (hasLayout(id, name)) readBuild(layoutFile(id, name)) else null
+
+    /** Saves [build] as the layout [name]. The first layout an arena gets becomes its active one. */
+    fun saveLayout(build: ArenaBuild, name: String) {
+        require(ArenaLayouts.validName(name)) { "invalid layout name '$name'" }
+        writeBuild(layoutFile(build.arenaId, name), build)
+        if (storedActive(build.arenaId)?.takeIf { hasLayout(build.arenaId, it) } == null) setActive(build.arenaId, name)
+    }
+
+    fun renameLayout(id: String, from: String, to: String) {
+        require(hasLayout(id, from) && ArenaLayouts.validName(to) && !hasLayout(id, to)) { "cannot rename '$from' to '$to'" }
+        java.nio.file.Files.move(layoutFile(id, from).toPath(), layoutFile(id, to).toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        if (storedActive(id) == from) setActive(id, to)
+    }
+
+    fun deleteLayout(id: String, name: String) { if (hasLayout(id, name)) layoutFile(id, name).delete() }
+
+    fun rotation(id: String): LayoutRotation = LayoutRotation.parse(state(id).getProperty("rotation")) ?: LayoutRotation.FIXED
+    fun setRotation(id: String, rotation: LayoutRotation) = updateState(id) { it.setProperty("rotation", rotation.id) }
+
+    fun storedActive(id: String): String? = state(id).getProperty("active")?.takeIf(ArenaLayouts::validName)
+    fun setActive(id: String, name: String) = updateState(id) { it.setProperty("active", name) }
+
+    /** The layout the arena builds now: this week's on a weekly rotation, otherwise the stored choice. */
+    fun activeLayout(id: String): String? {
+        val names = layouts(id)
+        if (names.isEmpty()) return null
+        if (rotation(id) == LayoutRotation.WEEKLY) return ArenaLayouts.weekly(names, today())
+        return storedActive(id)?.takeIf { it in names } ?: names.first()
+    }
+
+    /** Called as a KOTH starts there: an arena on a random rotation picks its next layout. */
+    fun advanceForKoth(id: String, random: kotlin.random.Random = kotlin.random.Random.Default) {
+        if (rotation(id) != LayoutRotation.RANDOM) return
+        ArenaLayouts.random(layouts(id), storedActive(id), random)?.let { setActive(id, it) }
+    }
+
+    private fun state(id: String): java.util.Properties = java.util.Properties().also { props ->
+        stateFile(id).takeIf { it.isFile }?.reader(Charsets.UTF_8)?.use(props::load)
+    }
+
+    private fun updateState(id: String, change: (java.util.Properties) -> Unit) {
+        val props = state(id).also(change)
+        val file = stateFile(id)
+        file.parentFile.mkdirs()
+        val temp = File(file.parentFile, file.name + ".tmp")
+        temp.writer(Charsets.UTF_8).use { props.store(it, "KOTH layouts of arena '$id'") }
+        java.nio.file.Files.move(temp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+    }
 
     fun saveBase(id: String, snapshot: BaseSnapshot) = write(baseFile(id)) { out ->
         out.writeUTF(snapshot.world)
@@ -101,14 +182,17 @@ class ArenaBuildStore(private val folder: File) {
         BaseSnapshot(world, bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5], palette, blocks)
     }
 
-    fun saveBuild(build: ArenaBuild) = writeBuild(buildFile(build.arenaId), build)
-    fun loadBuild(id: String): ArenaBuild? = readBuild(buildFile(id))
+    /** Saves [build] over the arena's active layout, or as its default layout when it has none yet. */
+    fun saveBuild(build: ArenaBuild) = saveLayout(build, activeLayout(build.arenaId) ?: ArenaLayouts.DEFAULT)
+    /** The active layout's build. */
+    fun loadBuild(id: String): ArenaBuild? = activeLayout(id)?.let { loadLayout(id, it) }
 
     fun startJournal(build: ArenaBuild) = writeBuild(journalFile(build.arenaId), build)
     fun endJournal(id: String) { journalFile(id).delete() }
     fun journals(): List<ArenaBuild> = active.listFiles { file -> file.name.endsWith(".dat") }.orEmpty().sortedBy { it.name }.mapNotNull(::readBuild)
 
-    fun clear(id: String) { baseFile(id).delete(); buildFile(id).delete() }
+    /** Forgets the arena's base form and every one of its layouts. */
+    fun clear(id: String) { baseFile(id).delete(); legacyBuildFile(id).delete(); layoutDir(id).deleteRecursively() }
 
     private fun writeBuild(file: File, build: ArenaBuild) = write(file) { out ->
         out.writeUTF(build.arenaId); out.writeUTF(build.world)

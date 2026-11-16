@@ -48,6 +48,8 @@ class KothGuiHolder(
 }
 
 /** The confirmation step between clicking an arena and paying to start it. */
+private val LAYOUT_ACTIONS = listOf("list", "use", "save", "import", "preview", "rename", "delete", "rotation")
+
 class KothStartConfirmHolder(val arenaId: String, val teamMode: TeamMode) : InventoryHolder {
     lateinit var backingInventory: Inventory
     /** Set by the first Start click, so a double click can never ask to start (and pay) twice. */
@@ -112,7 +114,7 @@ class KothCommand(
                 val (base, blocks, built) = service.status(arena)
                 sender.sendMessage(lang.msg("arena-build.status", "arena" to arena,
                     "base" to if (base) "saved" else "not saved",
-                    "build" to (blocks?.let { "%,d blocks".format(it) } ?: "not recorded"),
+                    "build" to (blocks?.let { "%,d blocks".format(it) + (service.activeLayout(arena)?.let { layout -> " ($layout)" } ?: "") } ?: "not recorded"),
                     "state" to if (built) "built form" else "base form"))
             }
             else -> sender.sendMessage(lang.msg("arena-build.usage"))
@@ -143,6 +145,74 @@ class KothCommand(
                 KothSoundPlayer.play(plugin, listOf(sender), notes)
             }
             if (index == 0) play.run() else plugin.server.scheduler.runTaskLater(plugin, play, index * 100L)
+        }
+    }
+
+    /** /ekoth layout <action> <arena> ..., or null when the line is not a layout command. */
+    internal fun layoutTabOptions(sender: CommandSender, args: Array<out String>): List<String>? {
+        if (args.getOrNull(0)?.lowercase() !in setOf("layout", "layouts") || args.size < 2) return null
+        if (!sender.hasPermission("enthusiakoth.admin")) return emptyList()
+        val action = args[1].lowercase()
+        val arena = args.getOrNull(2)?.let { requested -> arenas().keys.firstOrNull { it.equals(requested, true) } }
+        val names = arena?.let { arenaBuild()?.layoutNames(it) }.orEmpty()
+        val options = when (args.size) {
+            2 -> LAYOUT_ACTIONS
+            3 -> arenas().keys.sorted()
+            4 -> when (action) {
+                "use", "preview", "rename", "delete" -> names
+                "rotation" -> net.badgersmc.ek.application.LayoutRotation.entries.map { it.id }
+                "save", "import" -> listOf("<name>")
+                else -> emptyList()
+            }
+            5 -> when (action) { "import" -> SchematicReader.names(); "rename" -> listOf("<new-name>"); else -> emptyList() }
+            else -> emptyList()
+        }
+        return options.filter { it.startsWith(args.last(), true) }
+    }
+
+    /** /ekoth layout: the named designs an arena can build, imported from schematics or recorded in place. */
+    private fun arenaLayout(sender: CommandSender, args: Array<out String>) {
+        if (!sender.hasPermission("enthusiakoth.admin")) { sender.sendMessage(lang.msg("command.error.no_permission")); return }
+        val service = arenaBuild() ?: return
+        val action = args.getOrNull(1)?.lowercase()
+        val arena = args.getOrNull(2)?.let { requested -> arenas().keys.firstOrNull { it.equals(requested, true) } }
+        if (action !in LAYOUT_ACTIONS || arena == null) { sender.sendMessage(lang.msg("arena-layout.usage")); return }
+        val name = args.getOrNull(3)?.lowercase()
+        fun say(key: String, count: Int = 0, layout: String? = name, schematic: String = "", reason: String = "") = sender.sendMessage(lang.msg(key,
+            "arena" to arena, "count" to "%,d".format(count), "limit" to "%,d".format(cfgLoader().arenaBuild.maxBlocks),
+            "name" to (layout ?: ""), "schematic" to schematic, "reason" to reason))
+        fun reply(result: ArenaBuildService.Result, done: String, count: Int = 0, layout: String? = name, schematic: String = "", reason: String = "") =
+            say(if (result == ArenaBuildService.Result.DONE) done else "arena-build.error.${result.name.lowercase().replace('_', '-')}",
+                count, layout, schematic, reason)
+        if (action != "list" && action != "preview" && name == null) { sender.sendMessage(lang.msg("arena-layout.usage")); return }
+        when (action) {
+            "list" -> {
+                val layouts = service.layouts(arena)
+                if (layouts.isEmpty()) { say("arena-layout.none"); return }
+                say("arena-layout.list-header", layouts.size, reason = lang.raw("arena-layout.rotation-name-${service.rotation(arena).id}"))
+                layouts.forEach { say(if (it.active) "arena-layout.list-entry-active" else "arena-layout.list-entry", it.blocks, it.name) }
+            }
+            "use" -> {
+                val was = service.rotation(arena)
+                reply(service.useLayout(arena, name!!), "arena-layout.used")
+                if (was != net.badgersmc.ek.application.LayoutRotation.FIXED && service.activeLayout(arena) == name) say("arena-layout.now-fixed")
+            }
+            "save" -> service.recordBuild(arena, name).let { (result, count) -> reply(result, "arena-layout.saved", count) }
+            "import" -> {
+                val schematic = args.getOrNull(4) ?: run { sender.sendMessage(lang.msg("arena-layout.usage")); return }
+                val outcome = service.importLayout(arena, name!!, schematic)
+                reply(outcome.result, "arena-layout.imported", outcome.count, schematic = schematic, reason = outcome.detail)
+            }
+            "preview" -> service.preview(arena, name).let { (result, count) -> reply(result, "arena-build.previewing", count) }
+            "rename" -> {
+                val to = args.getOrNull(4)?.lowercase() ?: run { sender.sendMessage(lang.msg("arena-layout.usage")); return }
+                reply(service.renameLayout(arena, name!!, to), "arena-layout.renamed", layout = to, reason = name)
+            }
+            "delete" -> reply(service.deleteLayout(arena, name!!), "arena-layout.deleted")
+            "rotation" -> {
+                val rotation = net.badgersmc.ek.application.LayoutRotation.parse(name) ?: run { sender.sendMessage(lang.msg("arena-layout.usage")); return }
+                reply(service.setRotation(arena, rotation), "arena-layout.rotation-${rotation.id}")
+            }
         }
     }
 
@@ -247,6 +317,7 @@ class KothCommand(
             "blitz" -> blitz(sender)
             "hologram", "holo" -> hologram(sender, args)
             "build" -> arenaBuild(sender, args)
+            "layout", "layouts" -> arenaLayout(sender, args)
             "sound", "sounds" -> previewSound(sender, args.getOrNull(1))
             "leaderboard", "lb", "top" -> top(sender, args.getOrNull(2)?.toIntOrNull() ?: args.getOrNull(1)?.toIntOrNull() ?: 1, args.getOrNull(1)?.takeIf { it.toIntOrNull() == null } ?: "lifetime")
             "stats" -> stats(sender, args.getOrNull(1))
@@ -276,6 +347,7 @@ class KothCommand(
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
         hologramTabOptions(sender, args)?.let { return it.toMutableList() }
         buildTabOptions(sender, args)?.let { return it.toMutableList() }
+        layoutTabOptions(sender, args)?.let { return it.toMutableList() }
         val admin = sender.hasPermission("enthusiakoth.admin")
         val arenaIds = arenas().keys.sorted()
         val players = { Bukkit.getOnlinePlayers().map { it.name }.sorted() }
@@ -288,7 +360,7 @@ class KothCommand(
                 if (canStartFromCommand(sender)) add("start")
                 if (canStartPrivate(sender) || canJoinPrivate(sender)) add("private")
                 if (admin) addAll(listOf("setup", "manage", "schedules", "rewards", "displays", "stop", "status", "lock", "holds", "reviewmatch",
-                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "build", "sound", "reply", "reload"))
+                    "reports", "reconcile", "history", "readiness", "giveflare", "info", "tp", "arena", "wand", "hologram", "build", "layout", "sound", "reply", "reload"))
             }
             2 -> when (sub) {
                 "start" -> if (canStartFromCommand(sender)) arenaIds else emptyList()
@@ -373,6 +445,7 @@ class KothCommand(
         row("/ekoth stop [arena]", "End a running KOTH")
         row("/ekoth hologram <create|move|remove|list>", "Place live KOTH holograms")
         row("/ekoth build <arena> <base|save|edit|preview|status|clear>", "Arenas that build themselves when a KOTH starts")
+        row("/ekoth layout <list|use|save|import|preview|rename|delete|rotation> <arena>", "Named designs an arena can build")
         row("/ekoth sound <start|capture|lost|victory|all>", "Hear a KOTH sound as players do")
         row("/ekoth holds", "Matches waiting for review")
         if (!detailed) { row("/ekoth help all", "Every staff command"); return }
