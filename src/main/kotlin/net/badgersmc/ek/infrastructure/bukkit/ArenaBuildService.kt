@@ -233,6 +233,7 @@ class ArenaBuildService(
     fun recordBuild(arenaId: String, name: String? = null): Pair<Result, Int> {
         if (arenaId !in arenas()) return Result.NO_ARENA to 0
         if (name != null && !ArenaLayouts.validName(name)) return Result.BAD_NAME to 0
+        if (name != null && store.hasLayout(arenaId, name)) return Result.LAYOUT_EXISTS to 0
         if (arenaBusy(arenaId)) return Result.BUSY to 0
         val base = store.loadBase(arenaId) ?: return Result.NO_BASE to 0
         val world = Bukkit.getWorld(base.world) ?: return Result.NO_WORLD to 0
