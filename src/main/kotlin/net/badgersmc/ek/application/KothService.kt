@@ -761,7 +761,8 @@ class KothService(
         protectedMatches[event.id]?.let { recipientBudgets[event.id] = it.config.maximumRecipientCommands }
         val arena = event.arena
         val name = sanitizeName(teamName(winner))
-        cfgLoader().rewards[(arena.rewardFamily ?: arena.family).lowercase()]?.let { reward ->
+        // Keep-inventory arenas pay from the lower keep-inventory family unless they name their own reward-family.
+        cfgLoader().rewards[(arena.rewardFamily ?: if (arena.keepInventory) "keep-inventory" else arena.family).lowercase()]?.let { reward ->
             if (winner.mode == TeamMode.GUILD && reward.guildVaultMoney > 0.0) {
                 val deposited = runCatching { guilds.depositToVault(winner.id, reward.guildVaultMoney, "KOTH win reward") }
                     .onFailure { logger("Guild reward deposit threw for ${winner.id} amount ${reward.guildVaultMoney}", it) }
