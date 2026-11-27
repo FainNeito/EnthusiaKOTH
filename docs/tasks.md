@@ -39,7 +39,7 @@ Reconciled 2026-10-09 against fetched canonical main `2ad0b693caaaf2ce5011579152
 - [ ] Accept arena identities/geometry and attainable challenge requirements; draft relics require four distinct arenas.
 - [ ] Calibrate opposition, age/playtime, repeated opponents, scoring floor and optional roster/start gates on TEST. Protection/progression remain disabled until then.
 - [ ] Select event currency/item budgets and balanced package definitions; verify actual guild XP command/amount.
-- [ ] Register/check tags, prepare genuine FainNeito signed/tracked sword and helmet LoreItems templates, and accept Java/Bedrock helmet visuals.
+- [ ] Register/check tags, prepare the genuine helmet LoreItems template, and accept Java/Bedrock helmet visuals.
 - [ ] Recheck canonical source, network pins, clean artifact versions/hashes and runtime APIs before activation.
 
 ## Deferred TEST and player acceptance

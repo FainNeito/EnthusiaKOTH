@@ -36,15 +36,6 @@ challenges:
     days: 14
     seconds: 10800
     tag: ''
-  sovereign_blade:
-    wins: 100
-    opponents: 25
-    arenas: 4
-    days: 30
-    seconds: 43200
-    tag: ''
-    lore-definition: ''
-    exclusive: true
   sovereign_crown:
     wins: 150
     opponents: 35
