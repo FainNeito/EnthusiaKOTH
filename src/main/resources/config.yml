@@ -284,8 +284,7 @@ arenas:
     contest-when-multiple-cappers: true
     flares-must-be-placed-on-cap: true
     schedule: []
-    rewards:
-      - "bank 500"
+    rewards: []
     chanced-rewards:
       "20.0": "bank 50"
   moving:
@@ -325,16 +324,21 @@ arenas:
       2: 1.5
       3: 2.0
 
+# Raw gold per win. Guild wins deposit into the guild bank; solo wins go to the player's balance.
+# Keep-inventory arenas use keep-inventory unless they set their own reward-family.
 rewards:
   capture:
     solo-vault-money: 0.0
-    guild-vault-money: 0.0
+    guild-vault-money: 500.0
+  keep-inventory:
+    solo-vault-money: 0.0
+    guild-vault-money: 250.0
   moving:
     solo-vault-money: 0.0
-    guild-vault-money: 0.0
+    guild-vault-money: 750.0
   conquest:
     solo-vault-money: 0.0
-    guild-vault-money: 0.0
+    guild-vault-money: 1000.0
 
 # Concurrent public events require nonoverlapping native arenas; private tests remain exclusive.
 events:
