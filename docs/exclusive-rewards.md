@@ -7,7 +7,7 @@ unaffected. This guard does not cancel deliveries already accepted by LoreItems,
 reconcile existing items, or prevent administrators from creating other items.
 
 Each immutable challenge ID is the lifetime reward identity. Never rename
-`sovereign_blade` or `sovereign_crown` to recycle its reward. Legacy ownership is a unique
+`sovereign_crown` to recycle its reward. Legacy ownership is a unique
 database row, independent of seasons, reload, account inventory or item loss.
 Back up the KOTH database; deleting/restoring it can destroy or rewind ownership.
 No GUI, advancement grant or season reset transfers ownership. First qualifying
@@ -18,18 +18,6 @@ metrics must qualify, and the scoring/account/opposition policy must qualify eac
 match. Known allies collapse into one side across events. Unlisted cooperating
 guilds cannot be proven independent from guild relations alone: reports prompt
 staff inspection, not automatic punishment or a promise that collusion is impossible.
-
-## Sword template
-
-Create the actual netherite sword with compatible maximum survival enchantments:
-Sharpness V, Sweeping Edge III, Looting III, Fire Aspect II, Knockback II,
-Unbreaking III and Mending. TEST decides the final combat balance and lore.
-Suggested lore: "Forged for the sovereign of Enthusia's contested hills."
-FainNeito must genuinely sign the held item using EnthusiaSignature's signing
-confirmation flow and attach its `player_kills` tracker. A display-name signature
-is insufficient. Preserve Signature PDC and managed tracker lore when saving the
-held item as a LoreItems definition. Tracker kills are cosmetic statistics and
-never authorize challenge completion; its cooldown is not durable anti-farming proof.
 
 ## Helmet template
 

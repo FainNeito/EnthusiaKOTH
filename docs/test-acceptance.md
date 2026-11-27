@@ -54,22 +54,20 @@ installed or enabled by this document.
 
 The existing five-metric challenges are drafts, still disabled: Contender
 5 wins/3 opposing sides/2 arenas/3 days/1,800 scoring seconds; Veteran
-25/10/3/14/10,800; Sovereign Blade 100/25/4/30/43,200; Sovereign Crown
+25/10/3/14/10,800; Sovereign Crown
 150/35/4/45/64,800. All five criteria and accepted-match eligibility must hold.
 Calibrate against real contested TEST matches before choosing production values.
 Use disposable TEST definitions and separate TEST ownership for reward trials.
 
-Earned tag candidates are `koth_contender`, `koth_veteran`, `koth_sovereign_blade`
+Earned tag candidates are `koth_contender`, `koth_veteran`
 and `koth_sovereign_crown`; register/verify actual EnthusiaTags definitions before
 assigning keys. These names are proposals, not installed or granted tags.
 Choose one balanced money/item budget for each event; alternate package item
 definitions must undergo value review. Guild XP remains empty until an actual
 supported command and its observed amount are verified on isolated TEST data.
 
-Prepare the compatible maximum-enchantment sword and helmet described in
-`exclusive-rewards.md`. FainNeito must hold the sword, genuinely sign and confirm
-it, and attach the player-kill tracker before its held snapshot becomes a LoreItems
-definition. Cosmetic kill counts never authorize advancements. The physical
+Prepare the compatible maximum-enchantment helmet described in
+`exclusive-rewards.md`. The physical
 helmet model/texture and Java/Bedrock acceptance require the actual resource pack.
 Do not substitute fake signer metadata or claim artwork is installed from a draft.
 
@@ -88,7 +86,7 @@ Do not substitute fake signer metadata or claim artwork is installed from a draf
 | Allied aliases at UTC rollover and queued/unredeemed package claims | Player/side caps reserve once by completion day; no multiplied event pool; tags/relics remain separate |
 | Renamed/same-center/displaced arena copy | Stored aliases preserve history; same center converges; staff must accept meaningful distinct displaced hills before enabling variety challenges |
 
-Reward setup stays inactive: choose budgets after recorded balance tests, register collision-checked tag IDs, create/confirm the real signed/tracked sword and real textured helmet, then record provider keys/hashes. Four accepted distinct arenas are needed for current relic drafts. No live acceptance is asserted by this checklist.
+Reward setup stays inactive: choose budgets after recorded balance tests, register collision-checked tag IDs, create/confirm the real textured helmet, then record provider keys/hashes. Four accepted distinct arenas are needed for current relic drafts. No live acceptance is asserted by this checklist.
 
 Local source evidence: 296 passing KOTH cases plus one explicit provider-only skip;
 16 actual-provider cases pass against the refreshed LumaGuilds artifact. Guilds

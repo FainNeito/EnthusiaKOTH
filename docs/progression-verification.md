@@ -3,7 +3,7 @@
 Approved: match audit UI, shared event reward pool, durable claims, eligibility
 explanations, readiness checks, suspicious-pattern reports, membership/alliance
 history, reward packages/guild recognition, and an EnthusiaAdvancements KOTH tree.
-Sword and helmet ownership is one recipient EVER per reward, not per season.
+Helmet ownership is one recipient EVER per reward, not per season.
 All progression and reward defaults remain disabled pending TEST calibration.
 
 Base inspected: canonical main 1a3c75f; this isolated branch extends anti-abuse

@@ -16,7 +16,6 @@ Spec: existing PROG-001..008 and accepted 10% contributor/lifetime policy. Prove
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | contender / Contender | 5 | 3 | 2 | 3 | 1,800s (30m) | koth_contender | none |
 | veteran / Warzone Veteran | 25 | 10 | 3 | 14 | 10,800s (3h) | koth_veteran | none |
-| sovereign_blade / Sovereign Blade | 100 | 25 | 4 | 30 | 43,200s (12h) | koth_sovereign_blade | koth_sovereign_blade |
 | sovereign_crown / Sovereign Crown | 150 | 35 | 4 | 45 | 64,800s (18h) | koth_sovereign_crown | koth_sovereign_crown |
 
 All five metrics apply per player. Days are distinct UTC dates with accepted eligible wins, not consecutive days or the scheduling timezone. Opponents are conservatively merged side identities, not unique humans. Arenas are distinct stored IDs: do not rename/recreate areas to inflate variety. Relic drafts need four accepted arenas. Display parents do not add prerequisites to KOTH's five-metric rules. Full renderer descriptions must change with thresholds; the pilot derives descriptions from KOTH. Install only one renderer profile.
@@ -29,9 +28,7 @@ Protection carries inactive draft values of 30 opposition seconds, 7 account-age
 
 The tag/definition names above are proposals, left blank in runtime YAML. Inspect actual Tags/LoreItems registries for collisions and supported metadata before assigning keys. EA owns display only; its eKOTH rewards remain suppressed. No provider command or signer UUID is invented here.
 
-Each qualifier can earn each challenge's tag once, including Blade/Crown tags. Only one person EVER receives each physical relic. Blank exclusive templates prevent that challenge award/reservation. Populate only after template acceptance. Lifetime identity is the immutable challenge ID, not definition name. Never rename IDs, delete ownership rows or import/restore TEST data to issue another relic. First qualifying transaction reserves ownership; scoring time then UUID orders contributors within a match. Item loss, seasons and reload do not reset ownership.
-
-Sword draft: netherite; Sharpness V, Sweeping Edge III, Looting III, Fire Aspect II, Knockback II, Unbreaking III, Mending. Lore: "Forged for the sovereign of Enthusia's contested hills." FainNeito must genuinely sign/confirm the held item and attach Signature's player_kills tracker before saving through LoreItems. Preserve real Signature metadata/managed lore. Kills never grant advancement progress. Exact enchantments/balance remain TEST decisions.
+Each qualifier can earn each challenge's tag once, including the Crown tag. Only one person EVER receives each physical relic. Blank exclusive templates prevent that challenge award/reservation. Populate only after template acceptance. Lifetime identity is the immutable challenge ID, not definition name. Never rename IDs, delete ownership rows or import/restore TEST data to issue another relic. First qualifying transaction reserves ownership; scoring time then UUID orders contributors within a match. Item loss, seasons and reload do not reset ownership.
 
 Helmet draft: netherite; Protection IV, Respiration III, Aqua Affinity, Unbreaking III, Mending. Thorns III awaits balance acceptance. Lore: "One crown. One sovereign." Use a real supported model/texture and inspect Java/Bedrock before saving the held definition. No texture/model ID is invented or installed. See [exclusive-rewards.md](exclusive-rewards.md).
 
