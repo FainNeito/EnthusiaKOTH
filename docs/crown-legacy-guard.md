@@ -10,7 +10,8 @@
   already accepted provider deliveries or inspect existing physical items.
 - This change does not award, exchange, transfer or recover the Crown of Sorrow.
   Those operations require a separate verified custody implementation. It does
-  not imply physical uniqueness.
+  not imply physical uniqueness. That implementation, which keeps this hold in
+  place, is tracked separately in `crown-quest-event-design.md`.
 
 Tests exercise the pending-claim boundary and new challenge-award behavior.
 The repository has no project-local EARS or SPEAR state helpers; this file records
